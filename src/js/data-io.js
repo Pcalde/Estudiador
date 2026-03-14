@@ -7,19 +7,6 @@
 
 const DataIO = (() => {
 
-    // ── Dependencias inyectadas por app.js ────────────────────────
-    let _cb = {
-        guardarEnLocal: () => {}, actualizarMenuLateral: () => {}, cargarAsignatura: () => {},
-        cancelarEdicion: () => {}, aplicarFiltros: () => {}, updateDashboard: () => {},
-        sincronizar: () => {}, getFechaHoy: () => new Date().toISOString().slice(0, 10),
-        ordenarTarjeta: (t) => t
-    };
-
-    function init(callbacks) {
-        _cb = { ..._cb, ...callbacks };
-    }
-
-    // ── Helper interno ────────────────────────────────────────────
     function _descargar(uri, nombreArchivo) {
         const a = document.createElement('a');
         a.href = uri;
@@ -30,7 +17,7 @@ const DataIO = (() => {
     }
 
     // ════════════════════════════════════════════════════════════
-    // 1. IMPORTACIÓN LaTeX
+    // 1. IMPORTACIÓN LaTeX (Corregida: Respeta títulos manuales)
     // ════════════════════════════════════════════════════════════
     function procesarImportacionLatex() {
         const asigActual = State.get('nombreAsignaturaActual');
@@ -38,222 +25,173 @@ const DataIO = (() => {
 
         const rawInput = document.getElementById('import-area-latex').value;
         const temaDefault = parseInt(document.getElementById('latex-tema-input').value) || 1;
-        const newCards = Parser.parseLatexToCards(rawInput, temaDefault);
-
+        
+        const newCards = (typeof Parser !== 'undefined') ? Parser.parseLatexToCards(rawInput, temaDefault) : [];
         if (newCards.length === 0) { alert("No se detectaron comandos válidos."); return; }
 
-        const titulosGenericos = ['definición','teorema','proposición','lema','corolario','axioma','observación','nota','ejemplo','demostración','propiedad'];
-        let nuevas = 0, actualizadas = 0;
         let biblioteca = State.get('biblioteca') || {};
+        if (!biblioteca[asigActual]) biblioteca[asigActual] = [];
+
+        // Obtener fecha hoy de forma segura
+        const hoy = (typeof window.getFechaHoy === 'function') ? window.getFechaHoy() : new Date().toISOString().slice(0, 10);
+
+        // Tipos base que devuelve el parser
+        const titulosGenericos = ['Definición', 'Teorema', 'Proposición', 'Lema', 'Corolario', 'Nota', 'Ejemplo', 'Concepto', 'Axioma', 'Observación', 'Demostración'];
+        let aProcesarPorIA = 0;
 
         newCards.forEach(c => {
-            const tituloLimpio = c.Titulo.toLowerCase().trim();
-            const esGenerico = tituloLimpio.endsWith('(auto)') || titulosGenericos.includes(tituloLimpio);
-            const existente = biblioteca[asigActual].find(ext => ext.Titulo.toLowerCase().trim() === tituloLimpio);
+            // CORRECCIÓN CRÍTICA: El parser le añade " (Auto)" a las que no tienen corchetes.
+            // Se lo quitamos temporalmente para compararlo con nuestra lista estricta.
+            const tituloBase = c.Titulo.replace(' (Auto)', '').trim();
 
-            if (existente && !esGenerico) {
-                existente.Contenido = c.Contenido;
-                existente.Tema = c.Tema;
-                existente.Apartado = c.Apartado;
-                actualizadas++;
-            } else {
-                biblioteca[asigActual].push(c);
-                nuevas++;
+            // Si coincide con la lista, significa que el usuario dejó el título en blanco
+            if (titulosGenericos.includes(tituloBase)) {
+                c._needsAutoTitle = true; 
+                c.Titulo = "Generando título... (IA)"; 
+                aProcesarPorIA++;
             }
+            // Si no coincide (ej: "Abiertos en \reales"), se mantiene el título intacto.
+            
+            c.Dificultad = 2; 
+            c.ProximoRepaso = hoy;
         });
 
+        biblioteca[asigActual].push(...newCards);
         State.set('biblioteca', biblioteca);
-        _cb.guardarEnLocal();
-        _cb.actualizarMenuLateral(biblioteca, asigActual);
-        _cb.cargarAsignatura(asigActual);
+
+        EventBus.emit('DATA_REQUIRES_SAVE');
+        EventBus.emit('STATE_CHANGED', { keys: ['colaEstudio', 'biblioteca'] });
         
-        alert(`Importación completada:\n\n✨ ${nuevas} nuevas.\n♻️ ${actualizadas} actualizadas.`);
         document.getElementById('import-area-latex').value = "";
-        _cb.cancelarEdicion();
-    }
+        
+        // Feedback preciso sobre qué se mandó a la IA y qué no
+        if (aProcesarPorIA > 0) {
+            alert(`${newCards.length} tarjetas importadas. La IA procesará ${aProcesarPorIA} títulos vacíos.`);
+        } else {
+            alert(`${newCards.length} tarjetas importadas con sus títulos originales respetados.`);
+        }
+        
+        if (typeof window.cancelarEdicion === 'function') window.cancelarEdicion();
+        if (typeof window.aplicarFiltros === 'function') window.aplicarFiltros();
 
-    // ════════════════════════════════════════════════════════════
-    // 2. IMPORTACIÓN JSON
-    // ════════════════════════════════════════════════════════════
-    function procesarImportacion() {
-        const asigActual = State.get('nombreAsignaturaActual');
-        if (!asigActual) { alert("Error: No hay asignatura seleccionada."); return; }
-
-        const raw = document.getElementById('import-area').value;
-        if (!raw || raw.trim() === "") { alert("El campo de texto está vacío."); return; }
-
-        try {
-            const arr = JSON.parse(raw);
-            if (!Array.isArray(arr)) throw new Error("Debe ser una lista [].");
-
-            let importados = 0, omitidos = 0;
-            let biblioteca = State.get('biblioteca') || {};
-
-            arr.forEach(item => {
-                if (item.Titulo || item.Contenido) {
-                    biblioteca[asigActual].push({
-                        "Titulo": item.Titulo || "Sin Título",
-                        "Contenido": Parser.sanearLatex(item.Contenido || "..."),
-                        "Tema": parseInt(item.Tema) || 1,
-                        "Apartado": item.Apartado || "Definición",
-                        "Dificultad": null,
-                        "EtapaRepaso": item.EtapaRepaso !== undefined ? item.EtapaRepaso : 0,
-                        "UltimoRepaso": item.UltimoRepaso || null,
-                        "ProximoRepaso": item.ProximoRepaso || _cb.getFechaHoy()
-                    });
-                    importados++;
-                } else {
-                    omitidos++;
-                }
-            });
-
-            if (importados > 0) {
-                State.set('biblioteca', biblioteca);
-                _cb.guardarEnLocal();
-                alert(`ÉXITO: ${importados} tarjetas añadidas.${omitidos > 0 ? `\nOmitidas: ${omitidos}` : ''}`);
-                document.getElementById('import-area').value = "";
-                _cb.cancelarEdicion();
-                _cb.aplicarFiltros();
-                _cb.updateDashboard();
-            }
-        } catch (e) {
-            alert("ERROR DE SINTAXIS:\n" + e.message);
+        // Solo despertamos al Worker si realmente hay trabajo
+        if (aProcesarPorIA > 0 && typeof AI !== 'undefined' && AI.procesarTitulosEnLote) {
+            AI.procesarTitulosEnLote(asigActual);
         }
     }
 
-    // ════════════════════════════════════════════════════════════
-    // 3. EDICIÓN JSON DIRECTA
-    // ════════════════════════════════════════════════════════════
-    function guardarEdicionJSON() {
-        const asigActual = State.get('nombreAsignaturaActual');
-        const raw = document.getElementById('json-editor-area').value;
-        try {
-            let parsed = JSON.parse(raw);
-            if (!Array.isArray(parsed)) throw new Error("Debe ser una lista []");
-            
-            parsed = parsed.map(_cb.ordenarTarjeta);
-            let biblioteca = State.get('biblioteca') || {};
-            biblioteca[asigActual] = parsed;
-            
-            State.set('biblioteca', biblioteca);
-            _cb.guardarEnLocal();
-            _cb.sincronizar();
-            alert("Cambios guardados.");
-            _cb.cargarAsignatura(asigActual);
-        } catch (e) {
-            alert("Error sintaxis: " + e.message);
-        }
-    }
-
-    function descargarAsignaturaActual() {
-        const asigActual = State.get('nombreAsignaturaActual');
-        if (!asigActual) return;
-        const biblioteca = State.get('biblioteca') || {};
-        const uri = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(biblioteca[asigActual], null, 4));
-        _descargar(uri, asigActual + ".json");
-    }
-
-    // ════════════════════════════════════════════════════════════
-    // 4. BACKUP Y RESTAURACIÓN INTEGRAL
-    // ════════════════════════════════════════════════════════════
-    async function exportarBackup() {
-        const backupData = {
-            version: "1.16.4",
-            timestamp: new Date().toISOString(),
-            data: {
-                'estudiador_db_v2':        JSON.stringify(State.get('biblioteca') || {}),
-                'estudiador_horario':      JSON.stringify(State.get('horarioGlobal') || {}),
-                'estudiador_fechas_clave': JSON.stringify(State.get('fechasClave') || []),
-                'estudiador_colores':      localStorage.getItem('estudiador_colores'),
-                'estudiador_proyectos':    localStorage.getItem('estudiador_proyectos'),
-                'pomo_settings':           localStorage.getItem('pomo_settings'),
-                'pomo_tasks':              localStorage.getItem('pomo_tasks'),
-                'pomo_log_today':          localStorage.getItem('pomo_log_today'),
-                'estudiador_widget_config': localStorage.getItem('estudiador_widget_config')
-            }
-        };
-        const uri = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 4));
-        _descargar(uri, `Backup_Estudiador_${new Date().toISOString().slice(0, 10)}.json`);
-    }
-
-    function importarBackup(inputElement) {
-        const file = inputElement.files[0];
-        if (!file) return;
-        if (!confirm("¡ATENCIÓN! Esto sobreescribirá todos tus datos actuales.\n¿Estás seguro?")) {
-            inputElement.value = ""; return;
-        }
-
-        const reader = new FileReader();
-        reader.onload = function (e) {
-            try {
-                const backup = JSON.parse(e.target.result);
-                if (!backup.data) throw new Error("Falta el bloque 'data'");
-                Object.keys(backup.data).forEach(key => {
-                    if (backup.data[key] !== null) localStorage.setItem(key, backup.data[key]);
-                });
-                alert("Restauración completada. La página se recargará.");
-                location.reload();
-            } catch (err) { alert("Error al restaurar: " + err.message); }
-        };
-        reader.readAsText(file);
-    }
-
-    // ════════════════════════════════════════════════════════════
-    // 5. UTILIDADES (FSRS & NUEVA ASIGNATURA)
-    // ════════════════════════════════════════════════════════════
-    function exportarDatosOptimizacionFSRS() {
-        let csvContent = "card_id,review_time,review_rating,review_state,review_duration\n";
-        let count = 0;
-        const biblioteca = State.get('biblioteca') || {};
-
-        Object.keys(biblioteca).forEach(asig => {
-            if (!Array.isArray(biblioteca[asig])) return;
-            biblioteca[asig].forEach(tarjeta => {
-                if (!tarjeta.id || !Array.isArray(tarjeta.review_log)) return;
-                tarjeta.review_log.forEach(log => {
-                    csvContent += `${tarjeta.id},${log.ts},${log.g},${log.st},0.0\n`;
-                    count++;
-                });
-            });
-        });
-
-        if (count === 0) { alert("Aún no hay datos de repaso acumulados."); return; }
-        const uri = "data:text/csv;charset=utf-8," + encodeURIComponent(csvContent);
-        _descargar(uri, `FSRS_Revlog_Estudiador_${_cb.getFechaHoy()}.csv`);
-    }
-
+    // 2. GESTIÓN DE ASIGNATURAS (Sin _cb)
     function gestionarNuevaAsignatura() {
-        const input = prompt("NUEVA ASIGNATURA:\n- Escribe el nombre para crearla vacía.\n- O deja VACÍO para importar un JSON.");
+        const input = prompt("Nombre de la nueva asignatura (o deja vacío para subir archivo):");
         if (input === null) return; 
 
         if (input.trim() !== "") {
             const nombre = input.trim();
             let biblioteca = State.get('biblioteca') || {};
-            if(biblioteca[nombre]) { alert("Ya existe una asignatura con ese nombre."); return; }
+            if(biblioteca[nombre]) { alert("Ya existe esta asignatura."); return; }
             
             biblioteca[nombre] = []; 
             State.set('biblioteca', biblioteca);
-            _cb.guardarEnLocal();
-            _cb.actualizarMenuLateral(biblioteca, nombre);
-            _cb.cargarAsignatura(nombre);
+            
+            EventBus.emit('DATA_REQUIRES_SAVE');
+            EventBus.emit('UI_ASIGNATURA_CARGADA', { nombre });
         } else {
-            document.getElementById('file-input-unified').click();
+            const fileInput = document.getElementById('file-input-unified');
+            if (fileInput) fileInput.click();
         }
     }
 
+    // 2. IMPORTACIÓN JSON
+    function procesarImportacion() {
+        const raw = document.getElementById('import-area').value;
+        try {
+            const data = JSON.parse(raw);
+            if (!Array.isArray(data)) throw new Error("El JSON debe ser una lista [].");
+
+            const asigActual = State.get('nombreAsignaturaActual');
+            if (!asigActual) throw new Error("Selecciona una asignatura primero.");
+
+            let biblioteca = State.get('biblioteca') || {};
+            biblioteca[asigActual] = [...(biblioteca[asigActual] || []), ...data];
+
+            State.set('biblioteca', biblioteca);
+            EventBus.emit('DATA_REQUIRES_SAVE');
+            EventBus.emit('STATE_CHANGED', { keys: ['colaEstudio', 'biblioteca'] });
+
+            alert("Importación JSON exitosa.");
+            if (typeof window.cancelarEdicion === 'function') window.cancelarEdicion();
+            if (typeof window.aplicarFiltros === 'function') window.aplicarFiltros();
+        } catch (e) {
+            alert("Error en JSON: " + e.message);
+        }
+    }
+
+    // 3. GESTIÓN DE ASIGNATURAS
+    function guardarEdicionJSON(rawJsonString) {
+        const asigActual = State.get('nombreAsignaturaActual');
+        try {
+            let parsed = JSON.parse(rawJsonString);
+            if (!Array.isArray(parsed)) throw new Error("Debe ser una lista []");
+            
+            let biblioteca = State.get('biblioteca') || {};
+            biblioteca[asigActual] = parsed;
+            
+            State.set('biblioteca', biblioteca);
+            EventBus.emit('DATA_REQUIRES_SAVE');
+            EventBus.emit('UI_ASIGNATURA_CARGADA', { nombre: asigActual });
+            
+            return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
+    function descargarAsignaturaActual() {
+        const asig = State.get('nombreAsignaturaActual');
+        const bib = State.get('biblioteca') || {};
+        if (!asig || !bib[asig]) return;
+        const blob = new Blob([JSON.stringify(bib[asig], null, 2)], { type: 'application/json' });
+        _descargar(URL.createObjectURL(blob), `${asig}_backup.json`);
+    }
+
+    function exportarBackup() {
+        const bib = State.get('biblioteca') || {};
+        const blob = new Blob([JSON.stringify(bib, null, 2)], { type: 'application/json' });
+        _descargar(URL.createObjectURL(blob), `Backup_${new Date().getTime()}.json`);
+    }
+
+    function importarBackup(el) {
+        const file = el.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = JSON.parse(e.target.result);
+                State.set('biblioteca', data);
+                EventBus.emit('DATA_REQUIRES_SAVE');
+                alert("Backup restaurado. Recargando...");
+                location.reload();
+            } catch (err) { alert("Archivo inválido."); }
+        };
+        reader.readAsText(file);
+    }
+
     return {
-        init, procesarImportacionLatex, procesarImportacion, guardarEdicionJSON,
-        descargarAsignaturaActual, exportarBackup, importarBackup, 
-        exportarDatosOptimizacionFSRS, gestionarNuevaAsignatura
+        procesarImportacionLatex, procesarImportacion, guardarEdicionJSON,
+        descargarAsignaturaActual, exportarBackup, importarBackup, gestionarNuevaAsignatura
     };
 })();
 
-// Proxies para el DOM
+// Proxies Globales para compatibilidad con app.js
 window.procesarImportacionLatex    = () => DataIO.procesarImportacionLatex();
 window.procesarImportacion         = () => DataIO.procesarImportacion();
-window.guardarEdicionJSON          = () => DataIO.guardarEdicionJSON();
 window.descargarAsignaturaActual   = () => DataIO.descargarAsignaturaActual();
 window.exportarBackup              = () => DataIO.exportarBackup();
-window.importarBackup              = el  => DataIO.importarBackup(el);
-window.exportarDatosOptimizacionFSRS = () => DataIO.exportarDatosOptimizacionFSRS();
+window.importarBackup              = el => DataIO.importarBackup(el);
 window.gestionarNuevaAsignatura    = () => DataIO.gestionarNuevaAsignatura();
+window.guardarEdicionJSON = () => {
+    const rawText = document.getElementById('json-editor-area').value;
+    const result = DataIO.guardarEdicionJSON(rawText);
+    if (result.success) alert("Cambios guardados.");
+    else alert("Error: " + result.error);
+};

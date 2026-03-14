@@ -129,6 +129,125 @@
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
     }
+    // Sincronización con Firebase
+    // Persistencia Asíncrona Masiva
+    EventBus.on('DATA_REQUIRES_SAVE', async () => {
+        const biblioteca = State.get('biblioteca');
+        const asigActual = State.get('nombreAsignaturaActual');
+
+        try {
+            // 1. Guardar la mole de datos en IndexedDB sin congelar la UI
+            await DB.setVar('biblioteca', biblioteca);
+            
+            // 2. Guardar variables ligeras de configuración en localStorage
+            if (asigActual) {
+                localStorage.setItem('estudiador_asig_actual', asigActual);
+            }
+            
+            // (Opcional) Aseguramos que la vieja caché no vuelva a aparecer
+            localStorage.removeItem('estudiador_biblioteca'); 
+
+        } catch (error) {
+            if (typeof Logger !== 'undefined') Logger.error("Error guardando en IndexedDB:", error);
+        }
+    });
+    // Receptor para carga de asignaturas
+    EventBus.on('UI_ASIGNATURA_CARGADA', (payload) => {
+        if (typeof cargarAsignatura === 'function') {
+            cargarAsignatura(payload.nombre);
+        }
+    });
+
+    const btnAjustes = document.getElementById('btn-abrirajustes');
+    if (btnAjustes) {
+        // Limpiamos listeners previos clonando el botón (técnica de saneamiento DOM)
+        const nuevoBtn = btnAjustes.cloneNode(true);
+        btnAjustes.parentNode.replaceChild(nuevoBtn, btnAjustes);
+        nuevoBtn.addEventListener('click', window.abrirAjustes);
+    }
+    // ── Reactor de Estado (Intersección Dominio -> UI) ────────────────
+    
+    // Mapa de dependencias: ¿Qué función de UI debe ejecutarse cuando muta una clave?
+    const _stateReactions = {
+        'colaEstudio': () => {
+            const cola = State.get('colaEstudio') || [];
+            const counter = document.getElementById('contador-filtro');
+            if (counter) counter.textContent = `${cola.length} tarjetas`;
+            
+            const tarjeta = State.get('conceptoActual');
+            // Si la cola está vacía, forzamos la vista vacía. Si no, repintamos la actual.
+            if (!tarjeta || cola.length === 0) {
+                if (typeof UI !== 'undefined' && UI.renderTarjetaVacia) UI.renderTarjetaVacia();
+            } else {
+                if (typeof UI !== 'undefined' && UI.renderizarConceptoActual) UI.renderizarConceptoActual(tarjeta, State.get('modoLectura'));
+            }
+        },
+        
+        'conceptoActual': () => {
+            const tarjeta = State.get('conceptoActual');
+            // Si el motor decreta que no hay tarjeta (null), renderizamos vacío
+            if (!tarjeta) {
+                if (typeof UI !== 'undefined' && UI.renderTarjetaVacia) UI.renderTarjetaVacia();
+                return;
+            }
+            const modoLec = State.get('modoLectura');
+            if (typeof UI !== 'undefined' && UI.renderizarConceptoActual) {
+                UI.renderizarConceptoActual(tarjeta, modoLec);
+            }
+        },
+
+        'modoLectura': () => {
+            const tarjeta = State.get('conceptoActual');
+            // Al cambiar el modo lectura, refrescamos la tarjeta para mostrar/ocultar contenido
+            if (tarjeta) UI.renderizarConceptoActual(tarjeta, State.get('modoLectura'));
+        },
+
+        'modoSecuencial': () => {
+            const isSeq = State.get('modoSecuencial');
+            const btnPrev = document.getElementById('btn-prev');
+            const btnNextText = document.getElementById('btn-next-text');
+            
+            // Blindaje: Solo actuar si los elementos existen en el DOM
+            if (isSeq) {
+                if (btnPrev) btnPrev.classList.remove('hidden');
+                if (btnNextText) btnNextText.innerText = "Siguiente"; 
+            } else {
+                if (btnPrev) btnPrev.classList.add('hidden');
+                if (btnNextText) btnNextText.innerText = "Siguiente (Random)";
+            }
+            
+            // Nota: Se ha eliminado 'next-shortcut' porque no existe en el HTML
+        },
+
+        'taskList': () => {
+            if (typeof window.renderTasks === 'function') window.renderTasks();
+        }
+    };
+
+    // Procesador central de mutaciones
+    function procesarMutacionesEstado(keys) {
+        let requireDashboardRefresh = false;
+
+        keys.forEach(key => {
+            // 1. Ejecutar reacciones específicas de componentes aislados
+            if (_stateReactions[key]) _stateReactions[key]();
+
+            // 2. Detectar si el cambio justifica un repintado pesado del Dashboard
+            const triggersDashboard = ['biblioteca', 'nombreAsignaturaActual', 'sessionData', 'pomoHistory'];
+            if (triggersDashboard.includes(key)) {
+                requireDashboardRefresh = true;
+            }
+        });
+
+        // 3. Repintar el Dashboard una sola vez por lote (Batch)
+        if (requireDashboardRefresh && typeof Telemetry !== 'undefined') {
+            Telemetry.updateDashboard();
+        }
+    }
+
+    // Conectar el Estado con el Reactor a través del Bus
+    EventBus.on('STATE_CHANGED', (payload) => procesarMutacionesEstado(payload.keys));
+    EventBus.on('STATE_BATCH_CHANGED', (payload) => procesarMutacionesEstado(payload.keys));
 
 
 
@@ -168,6 +287,9 @@
             taskList = tasks;
             if (typeof renderTasks === 'function') renderTasks();
         }
+        // Inicializar Modelo IA
+        const savedModel = localStorage.getItem('estudiador_ia_model');
+        if (savedModel) State.set('iaModel', savedModel);
     }
 
     window.onload = function() {
@@ -240,25 +362,6 @@
         }));
         
         cargarApariencia(); // Reaplicar inmediatamente
-    }
-    function guardarEnLocal() {
-        normalizarBibliotecaFechas();
-        // 1. Re-indexación absoluta de toda la base de datos
-        for (const asignatura in biblioteca) {
-            if (Array.isArray(biblioteca[asignatura])) {
-                biblioteca[asignatura].forEach((tarjeta, idx) => {
-                    tarjeta.IndiceGlobal = idx; // Se estampa la posición real en memoria
-                });
-            }
-        }
-        
-        // 2. Persistencia en LocalStorage
-        try {
-            persistirDatosLocales('biblioteca_local', biblioteca);
-        } catch (e) {
-            Logger.error("Error crítico al guardar en localStorage:", e);
-            alert("Error de almacenamiento. Posible cuota excedida.");
-        }
     }
     function guardarProyectos() { localStorage.setItem('estudiador_proyectos', JSON.stringify(projects)); }
     function borrarTodoLocal() { if(confirm("¿Reset total?")) { localStorage.clear(); location.reload(); } }
@@ -489,30 +592,65 @@
         conceptoActual = colaEstudio[indiceNavegacion];
         cargarDatosEditorAmigable();
     }
-    function guardarNuevoConcepto() {
-        const t = document.getElementById('edit-titulo').value; 
-        const c = document.getElementById('edit-contenido').value;
-        if(!t||!c) return;
+    async function guardarNuevoConcepto() {
+        const inputTitulo = document.getElementById('edit-titulo');
+        const inputContenido = document.getElementById('edit-contenido');
         
-        biblioteca[nombreAsignaturaActual].push({
+        let t = inputTitulo.value.trim(); 
+        const c = inputContenido.value.trim();
+        
+        // El contenido es obligatorio
+        if (!c) {
+            alert("El contenido no puede estar vacío.");
+            return;
+        }
+        
+        // Si el título está vacío, activamos el Worker de IA
+        if (!t) {
+            const btn = document.getElementById('btn-guardarnuevoconcepto');
+            const originalText = btn.innerHTML;
+            
+            // Feedback visual de procesamiento
+            btn.innerHTML = '<i class="fa-solid fa-microchip fa-fade"></i> Pensando...';
+            btn.style.pointerEvents = 'none'; // Prevenir doble clic
+            
+            try {
+                t = await AI.generarTituloAutomatico(c);
+            } catch (e) {
+                t = "Concepto Genérico (Auto)";
+            } finally {
+                // Restaurar botón
+                btn.innerHTML = originalText;
+                btn.style.pointerEvents = 'auto';
+            }
+        }
+        
+        // Procedemos con la mutación de estado estándar
+        const asigActual = State.get('nombreAsignaturaActual');
+        const biblioteca = State.get('biblioteca');
+        
+        biblioteca[asigActual].push({
             "Titulo": t,
-            "Contenido": c,
-            "Tema": parseInt(document.getElementById('edit-tema').value)||1,
-            "Apartado": document.getElementById('edit-apartado').value,
+            // Saneamiento LaTeX antes de guardar en memoria
+            "Contenido": typeof Parser !== 'undefined' ? Parser.sanearLatex(c) : c,
+            "Tema": parseInt(document.getElementById('edit-tema').value) || 1,
+            "Apartado": document.getElementById('edit-apartado').value || "Concepto",
             "EtapaRepaso": 0,
-            "Dificultad": 2, // OBLIGATORIO: 2 para ser considerada "Nueva"
-            "UltimoRepaso": null, // OBLIGATORIO: null para ser considerada "Nueva"
+            "Dificultad": 2, // 2 = 'Bien' por defecto para nuevas
+            "UltimoRepaso": null, 
             "ProximoRepaso": window.getFechaHoy() 
         });
         
-        guardarEnLocal(); 
-        alert("Guardado"); 
-        cancelarEdicion(); 
-        window.aplicarFiltros(); 
-        window.updateDashboard(); 
+        State.set('biblioteca', biblioteca);
+        EventBus.emit('DATA_REQUIRES_SAVE'); // Dispara guardado asíncrono
+        EventBus.emit('STATE_CHANGED', { keys: ['colaEstudio', 'biblioteca'] }); // Refresca UI
         
-        document.getElementById('edit-titulo').value=""; 
-        document.getElementById('edit-contenido').value="";
+        // Limpiar formulario y cerrar
+        inputTitulo.value = ""; 
+        inputContenido.value = "";
+        alert("Tarjeta guardada: " + t); 
+        cancelarEdicion(); 
+        if (typeof window.aplicarFiltros === 'function') window.aplicarFiltros(); 
     }
 
 
@@ -639,10 +777,22 @@ function renderFechasList() { UI.renderFechasList(fechasClave); }
     // --- SETTINGS ---
     function abrirAjustes() {
         const isLocal = !!localStorage.getItem('estudiador_groq_key');
-        // 1. Abrir Modal básico
-        UI.abrirAjustes(State.get('groqApiKey'), isLocal, State.get('groqProxyUrl'), localStorage.getItem('firebase_config') || "");
+        
+        // 1. Abrir Modal pasando el modelo actual desde el State
+        UI.abrirAjustes(
+            State.get('groqApiKey'), 
+            isLocal, 
+            State.get('groqProxyUrl'), 
+            localStorage.getItem('firebase_config') || "",
+            State.get('iaModel') 
+        );
+        
         // 2. Inyectar estado en los submódulos de ajustes
-        UI.renderHorarioGrid(State.get('horarioGlobal') || {}, State.get('biblioteca') || {}, window.diaSeleccionadoIndex || -1);
+        // Restauramos la lectura de las variables globales directas para evitar colapsos
+        const horario = typeof horarioGlobal !== 'undefined' ? horarioGlobal : {};
+        const diaIdx = typeof diaSeleccionadoIndex !== 'undefined' ? diaSeleccionadoIndex : -1;
+        
+        UI.renderHorarioGrid(horario, State.get('biblioteca') || {}, diaIdx);
         UI.renderColorSettings(State.get('biblioteca') || {});
     }
     // --- SETTINGS (Modularizado) ---
@@ -1097,6 +1247,37 @@ function renderFechasList() { UI.renderFechasList(fechasClave); }
             sidebar.classList.add('mobile-open');
         }
     }
+    // --- ENRUTAMIENTO MÓVIL (BOTTOM NAVIGATION) ---
+    function manejarNavegacionMovil(target, btnElement) {
+        // 1. Actualización de estado visual en la barra
+        document.querySelectorAll('.mobile-nav-btn').forEach(btn => btn.classList.remove('active'));
+        if (btnElement) btnElement.classList.add('active');
+
+        // 2. Control de capas (Z-Index routing)
+        const sidebar = document.getElementById('sidebar');
+        const dashboard = document.getElementById('dashboard-col');
+
+        switch(target) {
+            case 'study':
+                sidebar.classList.remove('mobile-open');
+                dashboard.classList.remove('mobile-active');
+                break;
+            case 'sidebar':
+                dashboard.classList.remove('mobile-active');
+                sidebar.classList.add('mobile-open');
+                break;
+            case 'dashboard':
+                sidebar.classList.remove('mobile-open');
+                dashboard.classList.add('mobile-active');
+                // Forzamos el repintado de gráficas al entrar a la vista
+                if (typeof window.updateDashboard === 'function') window.updateDashboard();
+                break;
+            case 'settings':
+                // Ajustes usa el sistema modal ya existente
+                if (typeof abrirAjustes === 'function') abrirAjustes();
+                break;
+        }
+    }
 
     function toggleMobileStats() {
         const dashboard = document.getElementById('dashboard-col');
@@ -1146,49 +1327,6 @@ function renderFechasList() { UI.renderFechasList(fechasClave); }
         }
     }
 
-    /**
-     * @function inicializarAlmacenamientoAsincrono
-     * @description Hidrata el estado global desde IndexedDB. Si detecta la base de datos legacy
-     * en localStorage, realiza una migración "On-the-fly", transfiere los datos a IndexedDB y purga el localStorage.
-     * @returns {Promise<void>} Promesa que se resuelve cuando el estado (State) tiene los datos listos.
-     */
-    async function inicializarAlmacenamientoAsincrono() {
-        if (typeof DB === 'undefined') return;
-
-        let fechasLegacy = localStorage.getItem('estudiador_fechas_clave');
-        if (fechasLegacy) {
-            await DB.setVar('fechasClave', JSON.parse(fechasLegacy));
-            localStorage.removeItem('estudiador_fechas_clave');
-        }
-        const fechasDB = await DB.getVar('fechasClave');
-        if (fechasDB) {
-            if (typeof State !== 'undefined') State.set('fechasClave', fechasDB);
-            else window.fechasClave = fechasDB;
-        }
-
-        let horarioLegacy = localStorage.getItem('estudiador_horario');
-        if (horarioLegacy) {
-            await DB.setVar('horario', JSON.parse(horarioLegacy));
-            localStorage.removeItem('estudiador_horario');
-        }
-        const horarioDB = await DB.getVar('horario');
-        if (horarioDB) {
-            // FIX: La variable global que leen los widgets es horarioGlobal, no horario.
-            if (typeof State !== 'undefined') State.set('horarioGlobal', horarioDB);
-            else window.horarioGlobal = horarioDB;
-        }
-
-        let dbLegacy = localStorage.getItem('estudiador_db_v2');
-        if (dbLegacy) {
-            await DB.setVar('biblioteca_local', JSON.parse(dbLegacy));
-            localStorage.removeItem('estudiador_db_v2');
-        }
-        const biblioDB = await DB.getVar('biblioteca_local');
-        if (biblioDB) {
-            if (typeof State !== 'undefined') State.set('biblioteca', biblioDB);
-            else window.biblioteca = biblioDB;
-        }
-    }
 
     // Atajos de teclado para el examen — SOLO activos cuando _examenActivo=true
     document.addEventListener('keydown', (ev) => {
@@ -1212,6 +1350,72 @@ function renderFechasList() { UI.renderFechasList(fechasClave); }
         }
     });
 
+    // ── Bootloader Asíncrono Unificado ──────────────────────────────
+    async function arrancarAplicacion() {
+        try {
+            if (typeof Logger !== 'undefined') Logger.info("Iniciando motor de almacenamiento unificado...");
+
+            let biblioDB = await DB.getVar('biblioteca');
+            
+            // 1. Rastreo y migración de datos perdidos (Colisión V1 vs V2)
+            if (!biblioDB || Object.keys(biblioDB).length === 0) {
+                const legacyV2 = localStorage.getItem('estudiador_db_v2');
+                const legacyV1 = localStorage.getItem('estudiador_biblioteca');
+                const localDB = await DB.getVar('biblioteca_local'); // Restos del bootloader antiguo
+                
+                if (legacyV2) {
+                    biblioDB = JSON.parse(legacyV2);
+                    localStorage.removeItem('estudiador_db_v2');
+                } else if (legacyV1) {
+                    biblioDB = JSON.parse(legacyV1);
+                    localStorage.removeItem('estudiador_biblioteca');
+                } else if (localDB) {
+                    biblioDB = localDB; 
+                } else {
+                    biblioDB = {};
+                }
+                
+                // Si encontramos datos, los guardamos en su lugar correcto
+                if (Object.keys(biblioDB).length > 0) {
+                    await DB.setVar('biblioteca', biblioDB);
+                }
+            }
+
+            // 2. Inyectar en el Estado Central
+            State.set('biblioteca', biblioDB);
+
+            // 3. Migrar e inyectar configuraciones secundarias
+            let fechasLegacy = localStorage.getItem('estudiador_fechas_clave');
+            if (fechasLegacy) {
+                await DB.setVar('fechasClave', JSON.parse(fechasLegacy));
+                localStorage.removeItem('estudiador_fechas_clave');
+            }
+            State.set('fechasClave', await DB.getVar('fechasClave') || []);
+
+            let horarioLegacy = localStorage.getItem('estudiador_horario');
+            if (horarioLegacy) {
+                await DB.setVar('horarioGlobal', JSON.parse(horarioLegacy));
+                localStorage.removeItem('estudiador_horario');
+            }
+            State.set('horarioGlobal', await DB.getVar('horarioGlobal') || {});
+
+            // 4. Restaurar contexto visual (Asignatura Activa)
+            const ultimaAsig = localStorage.getItem('estudiador_asig_actual');
+            if (ultimaAsig && biblioDB[ultimaAsig]) {
+                State.set('nombreAsignaturaActual', ultimaAsig);
+                EventBus.emit('UI_ASIGNATURA_CARGADA', { nombre: ultimaAsig });
+            } else {
+                if (typeof UI !== 'undefined' && UI.renderTarjetaVacia) UI.renderTarjetaVacia();
+            }
+
+            if (typeof Logger !== 'undefined') Logger.info("Estado inicial hidratado correctamente.");
+
+        } catch (error) {
+            if (typeof Logger !== 'undefined') Logger.error("Fallo crítico en hidratación DB:", error);
+            alert("Error al cargar la base de datos.");
+        }
+    }
+
 
     /**
      * @function InicializadorPrincipal
@@ -1222,10 +1426,8 @@ function renderFechasList() { UI.renderFechasList(fechasClave); }
      * @sideEffects Inicializa variables globales y acopla listeners al DOM.
      */
     document.addEventListener('DOMContentLoaded', async () => {
-        // 1. BLOQUEO: Esperamos a que la base de datos local cargue
-        if (typeof inicializarAlmacenamientoAsincrono === 'function') {
-            await inicializarAlmacenamientoAsincrono();
-        }
+        // 1. BLOQUEO: Esperamos a que la base de datos local unificada cargue
+        await arrancarAplicacion();
 
         // 2. SANITIZACIÓN DE DATOS EN MEMORIA
         if (typeof normalizarPomoFechas === 'function') normalizarPomoFechas();
@@ -1234,32 +1436,11 @@ function renderFechasList() { UI.renderFechasList(fechasClave); }
 
         // 3. CARGA DE ESTADO LIGERO (LocalStorage)
         initAppState();
-        // INICIALIZACIÓN MÓDULO I/O
-        if (typeof DataIO !== 'undefined') {
-            DataIO.init({
-                guardarEnLocal, 
-                cancelarEdicion, 
-                aplicarFiltros: window.aplicarFiltros, 
-                updateDashboard: window.updateDashboard, 
-                cargarAsignatura, 
-                actualizarMenuLateral, 
-                sincronizar: window.sincronizar,
-                getFechaHoy: window.getFechaHoy, 
-                ordenarTarjeta: window.ordenarTarjeta
-            });
-        }
-        if (typeof StudyEngine !== 'undefined') {
-            StudyEngine.init({ 
-                guardarEnLocal, 
-                updateDashboard: window.updateDashboard 
-            });
-        }
         const elPrivacy = document.getElementById('set-privacy-stats');
         if (elPrivacy) {
             elPrivacy.checked = localStorage.getItem('estudiador_privacy_stats') === 'true';
             if (typeof togglePrivacidadUI === 'function') togglePrivacidadUI(); // Fuerza el dibujo inicial
         }
-        
 
         // 4. INICIALIZACIÓN DE INTERFAZ Y SESIÓN
         if (typeof setPomoMode === "function") setPomoMode('work');
@@ -1306,6 +1487,7 @@ function renderFechasList() { UI.renderFechasList(fechasClave); }
                     alert(` ${importados} asignaturas importadas correctamente.`);
                 }
                 e.target.value = ""; 
+                
             });
         }
 
@@ -1494,6 +1676,31 @@ document.addEventListener('click', function(e) {
         case 'restoreWidget':
             if (typeof WidgetManager !== 'undefined') WidgetManager.toggleHide(el.dataset.widgetId);
             break;
+        case 'nav-mobile':             
+            manejarNavegacionMovil(el.dataset.target, el); 
+            break;
+        case 'abrir-ajustes':
+            // 1. Despejamos la pantalla móvil (cierra Sidebar y Dashboard)
+            if (typeof manejarNavegacionMovil === 'function') manejarNavegacionMovil('study');
+            
+            // 2. Ejecutamos el controlador global (NO llamar a UI directamente)
+            if (typeof abrirAjustes === 'function') abrirAjustes();
+            break;
+
+        case 'toggle-pomodoro': // O el data-action que use tu botón de pomodoro
+            // 1. Forzamos la vista a la tarjeta de estudio (donde vive el Pomodoro)
+            if (typeof manejarNavegacionMovil === 'function') {
+                manejarNavegacionMovil('study', document.querySelector('[data-target="study"]'));
+            }
+            
+            // 2. Expandimos el Pomodoro
+            const pomoCard = document.getElementById('pomodoro-card');
+            if (pomoCard) {
+                pomoCard.classList.remove('collapsed');
+                // Auto-scroll suave hacia el pomodoro
+                pomoCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+            break;
     }
 });
 
@@ -1533,9 +1740,9 @@ document.addEventListener("DOMContentLoaded", () => {
   on("#input-pdf-slot", "change", (e) => cargarPDFEnSlot(e.target));
   on("#btn-cancelaredicion", "click", cancelarEdicion);
   on("#btn-guardarnuevoconcepto", "click", guardarNuevoConcepto);
-  on("#btn-descargarasignaturaactual", "click", descargarAsignaturaActual);
+  on("#btn-descargarasignaturaactual", "click", () => window.descargarAsignaturaActual());
   on("#btn-cancelaredicion-2", "click", cancelarEdicion);
-  on("#btn-guardaredicionjson", "click", guardarEdicionJSON);
+  on("#btn-guardaredicionjson", "click", () => window.guardarEdicionJSON());
   on("#btn-volver-visual", "click", abrirEditorAmigable);    
   on("#tab-import-json", "click", () => setImportMode('json'));
   on("#tab-import-latex", "click", () => setImportMode('latex'));
@@ -1567,7 +1774,7 @@ document.addEventListener("DOMContentLoaded", () => {
   on("#btn-login-google", "click", window.procesarLoginGoogle);
   on("#btn-sync-nube", "click", forzarRespaldoNube);
   on("#btn-forzarbajada", "click", forzarBajada);
-  on("#btn-exportarbackup", "click", exportarBackup);
+  on("#btn-exportarbackup", "click", () => window.exportarBackup());
   on("#btn-document", "click", () => document.getElementById('backup-input-unico').click());
   on("#backup-input-unico", "change", (e) => importarBackup(e.target));
   on("#btn-borrartodolocal", "click", borrarTodoLocal);
@@ -1646,4 +1853,46 @@ document.addEventListener("DOMContentLoaded", () => {
   on("#btn-limpiarfiltros", "click", limpiarFiltros);
   on("#btn-cerrarmodalfiltros-2", "click", cerrarModalFiltros);
   on("#set-privacy-stats", "change", togglePrivacidadUI);
+  // Iniciamos el arranque asíncrono una vez el DOM está listo
+  arrancarAplicacion();
 });
+
+// ════════════════════════════════════════════════════════════════
+// CONTROLADOR GLOBAL DE AJUSTES (Orquestador)
+// ════════════════════════════════════════════════════════════════
+window.abrirAjustes = function() {
+    try {
+        if (typeof Logger !== 'undefined') Logger.info("Abriendo panel de ajustes...");
+
+        // 1. Despejar navegación móvil si existe
+        if (typeof window.manejarNavegacionMovil === 'function') {
+            window.manejarNavegacionMovil('study');
+        }
+
+        // 2. Recopilar datos del State de forma segura
+        const isLocal = !!localStorage.getItem('estudiador_groq_key');
+        const apiKey = State.get('groqApiKey') || "";
+        const proxyUrl = State.get('groqProxyUrl') || "";
+        const fbConfig = localStorage.getItem('firebase_config') || "";
+        const iaModel = State.get('iaModel') || "llama-3.3-70b-versatile";
+
+        // 3. Invocar a la Capa Visual (UI)
+        if (typeof UI === 'undefined' || !UI.abrirAjustes) {
+            throw new Error("El módulo UI no está cargado o no tiene la función abrirAjustes.");
+        }
+        UI.abrirAjustes(apiKey, isLocal, proxyUrl, fbConfig, iaModel);
+
+        // 4. Inyectar datos en submódulos (Horarios y Colores)
+        // Usamos window.* para evitar ReferenceErrors si las variables no existen
+        const horario = typeof window.horarioGlobal !== 'undefined' ? window.horarioGlobal : {};
+        const diaIdx = typeof window.diaSeleccionadoIndex !== 'undefined' ? window.diaSeleccionadoIndex : -1;
+        const biblioteca = State.get('biblioteca') || {};
+
+        if (typeof UI.renderHorarioGrid === 'function') UI.renderHorarioGrid(horario, biblioteca, diaIdx);
+        if (typeof UI.renderColorSettings === 'function') UI.renderColorSettings(biblioteca);
+
+    } catch (error) {
+        console.error("[ERROR CRÍTICO EN AJUSTES]:", error);
+        alert("Fallo al abrir ajustes. Revisa la consola.");
+    }
+};

@@ -206,7 +206,28 @@ const Parser = (() => {
                     catch (e) { contenidoLimpio = block.content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); }
 
                     const tipo = CMD_MAP_JS[command];
-                    titulo = !titulo ? `${tipo} (Auto)` : cleanLatexToHtml(titulo);
+
+                    // --- LÓGICA DE TITULACIÓN SELECTIVA ---
+                    if (!titulo) {
+                        // ÚNICAMENTE si el comando es \defi, buscamos la primera negrita
+                        if (command === 'defi') {
+                            const boldMatch = contenidoLimpio.match(/<strong[^>]*>(.*?)<\/strong>/i);
+                            if (boldMatch && boldMatch[1] && boldMatch[1].trim().length > 0) {
+                                // Extraer texto limpio de la negrita y capitalizar
+                                let extracted = boldMatch[1].replace(/<[^>]+>/g, '').trim();
+                                titulo = extracted.charAt(0).toUpperCase() + extracted.slice(1);
+                            } else {
+                                titulo = `${tipo} (Auto)`; // Irá a la IA
+                            }
+                        } else {
+                            // Para Teoremas, Proposiciones, etc. sin [...], directo a la IA
+                            titulo = `${tipo} (Auto)`;
+                        }
+                    } else {
+                        // Si el usuario puso [...], usamos ese título directamente
+                        titulo = cleanLatexToHtml(titulo);
+                    }
+                    // ---------------------------------------
 
                     const newCard = {
                         Titulo: titulo, Contenido: contenidoLimpio, Tema: temaDefault, Dificultad: 2,

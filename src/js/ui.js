@@ -68,25 +68,26 @@ function cerrarFechasModal() {
     renderUpcomingEvents();
 }
 
-    function abrirAjustes(apiKey, groqKeyIsLocal, proxyUrl, firebaseConfigStr) {
-        document.getElementById('settings-modal').classList.remove('hidden');
+    function abrirAjustes(apiKey, isLocal, proxyUrl, fbConfig, currentModel) { // <--- Nuevo parámetro
+        ocultarTodo();
+        const modal = document.getElementById('ajustes-modal');
+        if (!modal) return;
+        
+        modal.classList.remove('hidden');
 
-        // Reseteamos estados visuales
-        document.getElementById('day-editor-panel').classList.add('hidden');
-        document.getElementById('set-groq-key').value = apiKey || "";
-        const groqSessionOnlyInput = document.getElementById('set-groq-session-only');
-        if (groqSessionOnlyInput) {
-            groqSessionOnlyInput.checked = !groqKeyIsLocal;
+        if (document.getElementById('set-groq-key')) document.getElementById('set-groq-key').value = apiKey || "";
+        if (document.getElementById('set-groq-session-only')) document.getElementById('set-groq-session-only').checked = !isLocal;
+        if (document.getElementById('set-groq-proxy-url')) document.getElementById('set-groq-proxy-url').value = proxyUrl || "";
+        if (document.getElementById('set-firebase-config')) document.getElementById('set-firebase-config').value = fbConfig || "";
+
+        // AÑADIR ESTO: Inicializar el selector de modelos
+        const selModel = document.getElementById('selector-modelo-ia');
+        if (selModel) {
+            selModel.value = currentModel || 'llama-3.3-70b-versatile';
         }
-        const groqProxyInput = document.getElementById('set-groq-proxy-url');
-        if (groqProxyInput) groqProxyInput.value = proxyUrl || "";
-
-        const firebaseInput = document.getElementById('set-firebase-config');
-        if (firebaseInput) firebaseInput.value = firebaseConfigStr;
-
     }
 
-    function cerrarAjustes(){document.getElementById('settings-modal').classList.add('hidden');}
+    function cerrarAjustes(){document.getElementById('ajustes-modal').classList.add('hidden');}
 
     function agregarMensajeChat(role, text) {
         const container = document.getElementById('chat-messages');

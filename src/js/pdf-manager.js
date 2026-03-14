@@ -24,21 +24,48 @@ const PDFManager = (() => {
     }
 
     // 2. RENDERIZADO DE CHIPS (SLOTS)
+    /**
+     * Renderizado seguro de slots de recursos.
+     * Elimina vulnerabilidades XSS y minimiza reflows mediante DocumentFragment.
+     */
     function render() {
         const asigActual = State.get('nombreAsignaturaActual');
-        let recursos = State.get('recursosPorAsignatura') || {};
+        const recursos = State.get('recursosPorAsignatura') || {};
         const slots = State.get('slotsMemoria') || {};
+        const listaActual = recursos[asigActual] || [];
+        
+        const contenedor = document.getElementById('lista-recursos-slots');
+        if (!contenedor) return;
+        
+        // Limpiar contenedor de forma eficiente
+        contenedor.innerHTML = '';
+        const fragment = document.createDocumentFragment();
 
-        if (Object.keys(recursos).length === 0) {
-            const raw = localStorage.getItem('estudiador_recursos');
-            if (raw) recursos = JSON.parse(raw);
-        }
-        if (asigActual && !recursos[asigActual]) {
-            recursos[asigActual] = [];
-        }
+        listaActual.forEach((rec, index) => {
+            const isLoaded = !!slots[rec.id];
+            
+            // Creación de elementos mediante API segura
+            const div = document.createElement('div');
+            div.className = `slot-chip ${isLoaded ? 'loaded' : 'empty'}`;
+            div.onclick = () => clickEnSlot(index);
+            
+            const span = document.createElement('span');
+            // textContent neutraliza cualquier intento de inyección HTML
+            span.textContent = `${isLoaded ? '📖' : '📥'} ${rec.nombre}`;
+            
+            const btn = document.createElement('button');
+            btn.className = "slot-del-btn";
+            btn.dataset.action = "borrarSlot";
+            btn.dataset.idx = index;
+            btn.title = "Olvidar referencia";
+            btn.textContent = "✕";
 
-        State.set('recursosPorAsignatura', recursos);
-        UI.renderRecursos(asigActual, recursos, slots);
+            div.appendChild(span);
+            div.appendChild(btn);
+            fragment.appendChild(div);
+        });
+        
+        contenedor.appendChild(fragment);
     }
 
     // 3. CREACIÓN Y BORRADO (Metadatos)

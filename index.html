@@ -810,10 +810,13 @@
             <div id="auth-login-form">
                 <input type="email" id="login-email" placeholder="Correo electrónico" style="width: 100%; padding: 10px; margin-bottom: 10px; background: #1a1a1a; border: 1px solid #333; color: #eee; border-radius: 4px; outline: none; box-sizing: border-box;">
                 <input type="password" id="login-password" placeholder="Contraseña (mín. 6 caracteres)" style="width: 100%; padding: 10px; margin-bottom: 15px; background: #1a1a1a; border: 1px solid #333; color: #eee; border-radius: 4px; outline: none; box-sizing: border-box;">
-                <div style="display: flex; gap: 10px;">
+                <div style="display: flex; gap: 10px; margin-bottom: 10px;">
                     <button id="btn-login" class="btn-modern btn-reveal" style="flex: 1; padding: 10px; background: rgba(33, 150, 243, 0.1); color: var(--status-blue, #2196F3); border: 1px solid var(--status-blue, #2196F3); border-radius: 4px; font-weight: bold; cursor: pointer;">Acceder</button>
                     <button id="btn-register" class="btn-modern btn-reveal" style="flex: 1; padding: 10px; background: transparent; color: #888; border: 1px solid #555; border-radius: 4px; cursor: pointer;">Registrar</button>
                 </div>
+                <button id="btn-login-google" class="btn-modern" style="width: 100%; padding: 10px; background: #fff; color: #121212; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+                    <i class="fa-brands fa-google"></i> Acceder con Google
+                </button>
             </div>
             <div id="auth-logged-in" class="hidden" style="margin-top: 10px;">
                 <button id="btn-abrirmodalamigos" class="btn-modern btn-reveal" style="width: 100%; padding: 10px; margin-bottom: 8px; background: rgba(76,175,80,0.1); color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">

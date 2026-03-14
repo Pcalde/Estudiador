@@ -369,6 +369,61 @@
             }
         }
 
+        async function procesarLoginGoogle() {
+            if (!await asegurarFirebaseInit()) return;
+            
+            // Instanciar el proveedor de Google
+            const provider = new firebase.auth.GoogleAuthProvider();
+            const btn = document.getElementById('btn-login-google'); // Si creas un botón con este ID
+            if (btn) btn.innerText = "Conectando...";
+            
+            try {
+                // Ejecutar flujo OAuth por ventana emergente
+                const result = await auth.signInWithPopup(provider);
+                const user = result.user;
+                
+                // Comprobar si es la primera vez que este usuario entra (Creación de cuenta)
+                if (result.additionalUserInfo && result.additionalUserInfo.isNewUser) {
+                    Logger.info("Nuevo usuario detectado vía Google Auth. Inicializando base de datos...");
+                    
+                    await db.collection('users').doc(user.uid).set({
+                        biblioteca: {},
+                        projects: [],
+                        fechasClave: [],
+                        horarioGlobal: {},
+                        userColors: {},
+                        pomoSettings: typeof pomoSettings !== 'undefined' ? pomoSettings : {},
+                        taskList: [],
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    
+                    await db.collection('usersPublic').doc(user.uid).set({
+                        email: user.email,
+                        stats: {
+                            totalTarjetas: 0,
+                            pendientesHoy: 0,
+                            dominadas: 0,
+                            asignaturas: []
+                        },
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    
+                    // Indizar el correo para el sistema de amigos
+                    await db.collection('emailIndex').doc(user.email).set({ uid: user.uid });
+                    
+                    alert("Cuenta creada con Google. Realizando primera subida local...");
+                    await guardarDatosUsuario();
+                }
+            } catch (error) {
+                Logger.error("Error en Google Auth:", error);
+                if (error.code !== 'auth/popup-closed-by-user') {
+                    alert("Error de acceso con Google: " + error.message);
+                }
+            } finally {
+                if (btn) btn.innerHTML = '<i class="fa-brands fa-google"></i> Acceder con Google';
+            }
+        }
+
         function cerrarSesion() {
             if(confirm("¿Seguro que deseas cerrar sesión? Dejarás de sincronizar con la nube.")) {
                 auth.signOut().then(() => {
@@ -781,3 +836,5 @@ async function importarAsignaturaCompartida(docId) {
             if (typeof Logger !== 'undefined') Logger.error("Fallo crítico en sincronizarTelemetriaFSRS:", error);
         }
     }
+    
+window.procesarLoginGoogle = procesarLoginGoogle;

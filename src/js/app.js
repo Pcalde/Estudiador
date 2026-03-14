@@ -1564,6 +1564,7 @@ document.addEventListener("DOMContentLoaded", () => {
   on("#btn-register", "click", procesarRegistro);
   on("#btn-abrirmodalamigos", "click", abrirModalAmigos);
   on("#btn-cerrarsesion", "click", cerrarSesion);
+  on("#btn-login-google", "click", window.procesarLoginGoogle);
   on("#btn-sync-nube", "click", forzarRespaldoNube);
   on("#btn-forzarbajada", "click", forzarBajada);
   on("#btn-exportarbackup", "click", exportarBackup);

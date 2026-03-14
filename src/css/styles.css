@@ -4,12 +4,30 @@
             --accent: #4CAF50;
             --pomo-work: #d95550; --pomo-short: #4c9195; --pomo-long: #457ca3;
             
-            /* NUEVOS COLORES SEMÁNTICOS */
-            --status-blue: #256ca5;   /* Pasado completado */
-            --status-red: #bb0e02;    /* Pasado pendiente (PRIORIDAD) */
-            --status-yellow: #cdcd00; /* Futuro */
-            --status-green: #4CAF50;  /* Hoy activo */}
-        body { font-family: 'Segoe UI', sans-serif; background: var(--bg-color); color: var(--text-main); margin: 0; display: flex; height: 100vh; overflow: hidden; }
+            /* COLORES SEMÁNTICOS */
+            --status-blue: #256ca5;
+            --status-red: #bb0e02;
+            --status-yellow: #cdcd00;
+            --status-green: #4CAF50;
+            
+            /* VARIABLES MÓVILES (Safe Areas) */
+            --safe-top: env(safe-area-inset-top, 0px);
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
+            --nav-height: 65px;
+        }
+
+        body { 
+            font-family: 'Segoe UI', sans-serif; 
+            background: var(--bg-color); 
+            color: var(--text-main); 
+            margin: 0; 
+            display: flex; 
+            height: 100vh;
+            height: 100dvh; /* Altura dinámica real en móvil (ignora barra de URL) */
+            overflow: hidden; 
+            overscroll-behavior-y: none; /* Bloquea el pull-to-refresh nativo */
+            -webkit-tap-highlight-color: transparent; /* Elimina el destello azul al tocar en Android */
+        }
 
         /* SIDEBAR & COLLAPSE */
         #sidebar { 
@@ -96,178 +114,180 @@
             gap: 30px; 
             padding-bottom: 50px;
         }
+        /* --- PROTECCIÓN PARA GESTOS Y ACCESIBILIDAD TÁCTIL --- */
+        #study-card {
+            /* Permite scroll vertical interno, pero bloquea el swipe horizontal nativo del navegador */
+            touch-action: pan-y; 
+            user-select: none; /* Previene la selección accidental de texto al deslizar */
+        }
+
+        /* Forzar objetivos táctiles mínimos de 48px para accesibilidad móvil */
+        .btn-dif, .btn-modern, .bottom-nav-btn {
+            min-height: 48px;
+        }
+
+        /* Evitar que los inputs hagan zoom en iOS si el font-size es menor a 16px */
+        input, textarea, select {
+            font-size: 16px !important;
+        }
 
         /* Responsive: Una columna en pantallas pequeñas */
         /* --- RESPONSIVE & MOBILE PORTABILITY V2.0 --- */
-@media (max-width: 950px) {
-    /* 1. CONTENEDOR PRINCIPAL */
-    .container { 
-        display: block; /* Rompemos el Grid */
-        padding-bottom: 80px; /* Espacio para la barra inferior si la hubiera */
-    }
-    
-    #main-content {
-        width: 100%;
-        padding: 15px;
-    }
+        /* --- RESPONSIVE & NATIVE MOBILE LAYOUT V3.0 --- */
+        @media (max-width: 950px) {
+            .container { 
+                display: block; 
+                padding-bottom: calc(var(--nav-height) + var(--safe-bottom) + 20px); 
+            }
+            
+            #main-content {
+                width: 100%;
+                padding: max(15px, var(--safe-top)) 15px 15px 15px;
+            }
 
-    /* 2. SIDEBAR IZQUIERDO (MENíš ASIGNATURAS) */
-    #sidebar {
-        position: fixed;
-        top: 0;
-        left: 0;
-        /* Altura: Total pantalla MENOS barra de navegación (60px) */
-        height: calc(100vh - 60px); 
-        width: 85%;
-        max-width: 320px;
-        z-index: 5000;
-        background: var(--bg-color); /* Fondo sólido */
-        border-right: 1px solid var(--border);
-        
-        /* Flexbox para distribución proporcional */
-        display: flex;
-        flex-direction: column;
-        
-        transform: translateX(-100%);
-        transition: transform 0.25s cubic-bezier(0.2, 0, 0, 1);
-    }
+            /* Ocultar controles exclusivos de escritorio */
+            #sidebar-toggle, .mobile-close-stats { display: none !important; }
 
-    #sidebar.mobile-open {
-        transform: translateX(0);
-        box-shadow: 10px 0 30px rgba(0,0,0,0.5);
-    }
+            /* SIDEBAR MÓVIL: Panel Off-Canvas deslizable */
+            #sidebar {
+                display: flex !important;
+                position: fixed;
+                top: 0;
+                left: 0;
+                height: 100dvh;
+                width: 85vw;
+                max-width: 320px;
+                z-index: 5002; /* Se apila por encima del dashboard */
+                transform: translateX(-100%); /* Oculto fuera de pantalla por defecto */
+                transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                padding-bottom: calc(var(--nav-height) + var(--safe-bottom) + 20px);
+                box-shadow: none;
+            }
 
-    /* El contenedor de la lista se expande para llenar el hueco */
-    #lista-asignaturas {
-        flex-grow: 1; 
-        overflow-y: auto; /* Scroll interno solo si la lista es enorme */
-    }
+            /* Estado invocado por el controlador de JS */
+            #sidebar.mobile-open {
+                transform: translateX(0);
+                box-shadow: 5px 0 25px rgba(0,0,0,0.6);
+            }
 
-    /* Ajuste de elementos del menú para ser más "táctiles" */
-    .subject-item {
-        padding: 15px 20px; /* Más área de toque */
-        border-bottom: 1px solid #222;
-    }
-    /* --- CONTENCIÓN DE ECUACIONES (MATHJAX) --- */
-    /* Esto permite scroll horizontal SOLO en la fórmula larga */
-    /* --- SCROLL HORIZONTAL PARA ECUACIONES LARGAS --- */
-    #concepto-contenido {
-        width: 100%;
-        max-width: 100%;
-        overflow-x: auto; /* Fallback de seguridad para el contenedor principal */
-    }
+            /* DASHBOARD (Panel a pantalla completa para stats) */
+            #dashboard-col {
+                display: block !important;
+                position: fixed;
+                top: 0;
+                left: 0;
+                height: 100dvh;
+                width: 100vw;
+                background: var(--bg-color);
+                z-index: 5001;
+                overflow-y: auto;
+                padding: max(20px, var(--safe-top)) 20px calc(var(--nav-height) + var(--safe-bottom) + 20px) 20px;
+                transform: translateY(100%);
+                transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+            #dashboard-col.mobile-active { transform: translateY(0); }
+            /* ==========================================
+            CORRECCIONES DE PRIORIDAD MÓVIL Y PDF
+            ========================================== */
+            
+            /* 1. Forzar Modales por encima de TODO (Barra inferior es 6000) */
+            #ajustes-modal, #pomodoro-modal, .modal, .modal-overlay {
+                z-index: 9999 !important;
+            }
 
-    mjx-container[display="true"] {
-        max-width: 100% !important;
-        overflow-x: auto !important;
-        overflow-y: hidden !important;
-        padding-bottom: 8px !important; /* Espacio para que la barra no tape los subíndices */
-        box-sizing: border-box;
-    }
+            /* 2. Transformar Visor PDF en Modal de Pantalla Completa */
+            #modulo-pdf {
+                position: fixed !important;
+                bottom: 0;
+                left: 0;
+                width: 100vw;
+                height: calc(100dvh - var(--safe-top));
+                z-index: 8000 !important; /* Por encima del navbar, debajo de modales puros */
+                border-radius: 16px 16px 0 0;
+                margin: 0;
+                transform: translateY(100%); /* Oculto fuera de la pantalla por defecto */
+                transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+                box-shadow: 0 -10px 40px rgba(0,0,0,0.8);
+            }
 
-    /* Estilo de la barra de scroll para el Modo Oscuro */
-    mjx-container[display="true"]::-webkit-scrollbar {
-        height: 6px;
-    }
-    mjx-container[display="true"]::-webkit-scrollbar-track {
-        background: #1e1e1e;
-        border-radius: 4px;
-    }
-    mjx-container[display="true"]::-webkit-scrollbar-thumb {
-        background: #555;
-        border-radius: 4px;
-    }
-    mjx-container[display="true"]::-webkit-scrollbar-thumb:hover {
-        background: var(--accent);
-    }
-    /* Ocultar barra de scroll fea pero mantener funcionalidad */
-    mjx-container::-webkit-scrollbar {
-        height: 4px;
-        background: #1e1e1e;
-    }
-    mjx-container::-webkit-scrollbar-thumb {
-        background: #444;
-        border-radius: 2px;
-    }
+            /* Cuando el PDF no está colapsado, sube a la pantalla */
+            #modulo-pdf:not(.pdf-collapsed) {
+                transform: translateY(0);
+            }
 
-    /* Ocultar el toggle de escritorio en móvil, usaremos la Mobile Bar */
-    #sidebar-toggle { display: none !important; }
+            /* Ajuste interno del visor para ocupar toda la pantalla móvil */
+            #visor-pdf-container {
+                height: 100% !important; 
+                flex-grow: 1;
+            }
 
-    /* 3. SIDEBAR DERECHO (DASHBOARD) */
-    #dashboard-col {
-        display: block !important; /* Forzamos visualización */
-        position: fixed;
-        top: 0;
-        right: 0;
-        height: 100vh;
-        width: 100%; /* Pantalla completa para stats */
-        background: var(--bg-color);
-        z-index: 5001; /* Por encima del menú */
-        overflow-y: auto;
-        padding: 20px;
-        box-sizing: border-box;
-        transform: translateY(100%); /* Oculto abajo */
-        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    }
+            /* BARRA DE NAVEGACIÓN INFERIOR (Estilo App Nativa) */
+            #mobile-nav-bar {
+                display: flex !important;
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                width: 100%;
+                height: calc(var(--nav-height) + var(--safe-bottom));
+                background: rgba(30, 30, 30, 0.95);
+                backdrop-filter: blur(10px);
+                -webkit-backdrop-filter: blur(10px);
+                border-top: 1px solid #333;
+                z-index: 6000;
+                justify-content: space-evenly;
+                align-items: flex-start; /* Alinea los botones al tope para respetar el safe-bottom */
+                padding-bottom: var(--safe-bottom);
+                box-shadow: 0 -4px 20px rgba(0,0,0,0.5);
+            }
 
-    #dashboard-col.mobile-active {
-        transform: translateY(0); /* Subir panel */
-    }
+            .mobile-nav-btn {
+                background: transparent;
+                border: none;
+                color: #777;
+                font-size: 1.6em;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                width: 100%;
+                height: var(--nav-height);
+                cursor: pointer;
+                transition: color 0.2s;
+            }
 
-    /* 4. BARRA DE NAVEGACIÓN MÓVIL (NUEVA) */
-    #mobile-nav-bar {
-        display: flex !important; /* Visible solo en móvil */
-    }
-}
+            .mobile-nav-btn.active { color: var(--accent); }
+            .mobile-nav-btn span { 
+                font-size: 0.35em; 
+                text-transform: uppercase; 
+                letter-spacing: 0.5px; 
+                margin-top: 4px; 
+                font-weight: 600;
+            }
 
-/* Estilos base de la barra móvil (Oculta en escritorio) */
-#mobile-nav-bar {
-    display: none;
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: 60px;
-    background: #1e1e1e;
-    border-top: 1px solid #333;
-    z-index: 6000;
-    justify-content: space-around;
-    align-items: center;
-    box-shadow: 0 -2px 10px rgba(0,0,0,0.3);
-}
+            /* MathJax Contención Móvil (Forzar scroll independiente sin romper layout) */
+            mjx-container[display="true"] {
+                max-width: 100% !important;
+                overflow-x: auto !important;
+                overflow-y: hidden !important;
+                -webkit-overflow-scrolling: touch; /* Momentum scroll nativo en iOS */
+                padding: 10px 0 !important;
+            }
 
-.mobile-nav-btn {
-    background: none;
-    border: none;
-    color: #888;
-    font-size: 1.5em;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    cursor: pointer;
-    width: 100%;
-    height: 100%;
-    justify-content: center;
-}
+            /* Botones de Calificación FSRS en Móvil: Maximizar área de toque */
+            .controls {
+                flex-direction: column;
+                gap: 8px;
+                margin-top: 20px;
+            }
+            .btn-dif { margin: 0; width: 100%; }
+        }
 
-.mobile-nav-btn.active { color: var(--accent); }
-.mobile-nav-btn span { font-size: 0.3em; text-transform: uppercase; letter-spacing: 1px; }
+        /* Asegurar que la barra móvil no exista en escritorio */
+        @media (min-width: 951px) {
+            #mobile-nav-bar { display: none !important; }
+        }
 
-/* Botón de cierre para el Dashboard en móvil */
-.mobile-close-stats {
-    display: none; /* Oculto en escritorio */
-    width: 100%;
-    padding: 15px;
-    background: #333;
-    color: white;
-    border: none;
-    margin-bottom: 20px;
-    border-radius: 8px;
-    font-weight: bold;
-    text-align: center;
-}
-@media (max-width: 950px) { .mobile-close-stats { display: block; } }
+
         /* Estilos para el Importador Tabulado */
         #panel-import-json, #panel-import-latex { animation: fadeIn 0.3s; }
 
@@ -1097,7 +1117,7 @@
 
         /* MODAL */
         /* MODAL AJUSTES */
-        #settings-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; display: flex; justify-content: center; align-items: center; }
+        #ajustes-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; display: flex; justify-content: center; align-items: center; }
         .modal-content { background: var(--card-bg); padding: 30px; border-radius: 8px; width: 90%; max-width: 500px; border: 1px solid #444; max-height: 80vh; overflow-y: auto; }
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #444; padding-bottom: 10px; }
         .setting-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }

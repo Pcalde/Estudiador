@@ -1,0 +1,1427 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Estudiador Pro v 1.17.6</title>
+    <script>
+    MathJax = {
+    loader: { load: ['[tex]/amscd'] }, // <--- CARGAMOS EL MÓDULO AMSCD y xypic
+    tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']],
+        processEscapes: true,
+        packages: {'[+]': ['amscd']}, // <--- LO REGISTRAMOS
+        macros: {
+        // Tamaño
+        tiny: ["{\\style{font-size:0.5em}{#1}}", 1],
+        small: ["{\\style{font-size:0.8em}{#1}}", 1],
+        // Lógica
+        sii: "\\Longleftrightarrow",
+        si:  "\\Longrightarrow",
+        // Conjuntos numéricos
+        naturales: "\\mathbb{N}",
+        enteros:   "\\mathbb{Z}",
+        racionales:"\\mathbb{Q}",
+        reales:    "\\mathbb{R}",
+        complejos: "\\mathbb{C}",
+        rn:  "\\mathbb{R}^n",
+        rem: "\\mathbb{R}^m",
+        // Análisis
+        Acirc:    "\\overset{\\circ}{A}",
+        bola:     "\\mathcal{B}(x,\\delta)",
+        sucesion: "\\{a_n\\}_{\\mathbb{N}}",
+        suma:     "\\sum a_n",
+        sucfun:   "\\{f_n\\}",
+        serfun:   "\\sum_{n\\geq 1} f_n(x)",
+        riemann:  "\\mathcal{R}[a,b]",
+        unif:     "f_n \\to f_{[\\mathrm{Unif}]}",
+        matriz:   "\\mathcal{M}_{m\\times n}(\\mathbb{R})",
+        hess:     "\\operatorname{Hess}",
+        jac:      "\\operatorname{Jac}",
+        cinf:     "\\mathcal{C}^{\\infty}",
+        upRiemannint: ["\\overline{\\int_{#1}^{#2}}", 2],
+        loRiemannint: ["\\underline{\\int_{#1}^{#2}}", 2],
+        // Álgebra
+        subgrupo:    "\\subset_{\\mathrm{Grp}}",
+        subconjunto: "\\subset_{\\mathrm{Set}}",
+        anillo:  "\\mathbb{A}",
+        cuerpo:  "\\mathbb{K}",
+        grupo:   "\\mathbb{G}",
+        ideal:   "\\mathcal{I}",
+        primo:   "\\mathfrak{p}",
+        maximal: "\\mathfrak{m}",
+        faktor:  ["#1 \\big/ #2", 2],
+        // Topología
+        tdisc: "(X,\\tau_{\\mathrm{dis}})",
+        tusual: "(\\mathbb{R},\\tau_{\\mathrm{us}})",
+        cl:  "\\operatorname{cl}",
+        t:   "\\tau",
+        ent: "\\mathcal{E}",
+        et:  "(X,\\tau)",
+        // Sistemas dinámicos
+        xeq: "\\overline{x}",
+        // Sustituciones estándar
+        phi:     "\\varphi",
+        epsilon: "\\varepsilon",
+        // Categorías
+        categ:      "\\mathcal{C}",
+        cmorfismos: "\\operatorname{Hom}_{\\mathcal{C}}",
+        morfismos:  "\\operatorname{Hom}",
+        isom:       "\\xrightarrow{\\sim}",
+        realesext:  "\\overline{\\mathbb{R}}",
+        Set: "\\mathbf{Set}",
+        Grp: "\\mathbf{Grp}",
+        Ab:  "\\mathbf{Ab}",
+        CRing: "\\mathbf{CRing}",
+        ModR: "R\\text{-}\\mathbf{Mod}",
+        VectK: "\\mathbf{Vect}_K",
+        Top: "\\mathbf{Top}",
+        Cat: "\\mathbf{Cat}"
+        }
+    },
+    svg: { fontCache: 'global' },
+    startup: { ready: () => MathJax.startup.defaultReady() }
+    };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+        <!-- Firebase App (SDK) -->
+    <script defer src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+
+    <link rel="preload" href="https://use.fontawesome.com/releases/v6.7.2/css/all.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://use.fontawesome.com/releases/v6.5.1/css/all.css"></noscript>
+
+    <link rel="stylesheet" href="src/css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+ 
+</head>
+
+<body>
+
+
+
+<div id="sidebar">
+    <div id="sidebar-toggle">◀</div>
+    
+    <div style="margin-bottom: 10px; display:flex; justify-content:space-between; align-items:center;">
+        <h2 style="font-size: 1.1em; color: rgb(251, 196, 0); margin:0; letter-spacing:-0.5px;"><i class="fa-solid fa-horse-head"></i> ESTUDIADOR <span style="font-size:0.6em; opacity:0.5">1.17.6</span></h2>
+        <button id="btn-abrirajustes" 
+        style="background:none; border:none; color:#666; cursor:pointer; font-size:1.2em; transition:color 0.3s, transform 0.3s;" 
+        title="Ajustes">
+    <i class="fa-solid fa-gear"></i>
+</button>
+    </div>
+
+    <div class="sidebar-header-row">
+        <span class="sidebar-label">ASIGNATURAS</span>
+        <button id="btn-gestionarnuevaasignatura" class="btn-header-add" title="Nueva Asignatura / Importar JSON">+</button>
+    </div>
+    <ul id="lista-asignaturas" class="section-list">
+        <li style="padding:10px; color: #555; font-style: italic; font-size: 0.8em;">Vacío.</li>
+    </ul>
+
+    <div class="sidebar-header-row">
+        <span class="sidebar-label">PROYECTOS</span>
+        <button id="btn-crearproyecto" class="btn-header-add" title="Nueva Asignatura / Importar JSON">+</button>
+    </div>
+    <ul id="lista-proyectos" class="section-list" style="max-height: 150px; min-height: 30px;">
+        <li style="padding:10px; color: #555; font-style: italic; font-size: 0.8em;">Sin proyectos.</li>
+    </ul>
+
+    <div class="sidebar-footer" style="display: flex; gap: 10px; padding: 5px; width: 100%; box-sizing: border-box;">
+    <button id="btn-modoimportar" class="btn-modern btn-reveal" title="Verter contenido (JSON o LaTeX)" style="flex-grow: 1;">
+        <div class="btn-content">
+            <i class="fa-regular fa-paste"></i>
+            <span class="btn-text" style="font-size: 1em;">Pegar apuntes</span>
+        </div>
+    </button>
+
+    <button id="btn-abrirexamen" class="btn-modern btn-reveal" title="Modo Examen" 
+            style="min-width: 0; width: 45px; height: 45px; padding: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+        <i class="fa-solid fa-skull-crossbones"></i>
+    </button>
+
+    <button id="btn-togglepizarra" class="btn-modern btn-reveal" title="Activar Pizarra" 
+            style="min-width: 0; width: 45px; height: 45px; padding: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+        <i class="fa-solid fa-chalkboard-user"></i>
+    </button>
+    </div>
+    <input type="file" id="file-input-unified" multiple accept=".json" style="display: none;">
+</div>
+
+<div id="main-content">
+    <div class="container">
+        
+        <div class="left-col" style="display:flex; flex-direction:column; gap:20px;">
+            
+            <div id="welcome-screen" style="text-align: center; color: #666; margin-top: 50px;">
+                <h2>Bienvenid@</h2>
+                <p>Selecciona una asignatura en el menú izquierdo, o creala con los botones de abajo a la izquierda.</p>
+                <p>Cuando seleccione una asignatura, se desplegarán sus estadísticas.</p>
+                <p>Puede modificar el aspecto de algunos botones, la acción de pulsar, el color de sus asignaturas y los cronómetros del Pomodoro.</p>
+                <p>En la esquina superior derecha aparecerá el reloj del pomodoro, y en el relojito de arena podrá ver más opciones de este.</p>
+                <p>IMPORTANTE: Hay que hacer regularmente copia de seguridad para evitar que el navegador borre toda nuestra sesión.</p>
+                <p>Si no se guarda, se perderá todo irremediablemente.</p>
+            </div>
+            
+
+            <div id="study-card" class="card hidden">
+                <div class="card-header">
+                    <span id="meta-tema" style="font-size: 0.8em; color: #888;">Tema -</span>
+                    <span id="meta-fecha" style="font-size: 0.8em; font-weight: bold; color: #ffab40;">HOY</span>
+                    <button id="btn-modoedicionjson" title= "Modificar tarjeta actual/JSON asignatura" style="background:none; border:1px solid #444; color: #aaa; cursor:pointer; font-size:0.7em; padding:2px 6px; border-radius:4px;"><i class="fa-solid fa-wand-magic-sparkles"></i> Mod</button>
+                </div>
+                <h2 id="concepto-titulo">Titulo</h2>
+                <div id="area-revelar" style="margin-top: 30px; display:flex; justify-content:center;">
+                    <button id="btn-main-revelar" title="Atajo: Enter;" class="btn-modern btn-reveal">
+                        <div class="btn-content">
+                            <span class="btn-text">Ver Respuesta</span>
+                            <span class="btn-text"><i class="fa-solid fa-eye"></i></span>
+                        </div>
+                    </button>
+                </div>
+                
+                <div id="concepto-contenido" class="hidden" style="margin: 20px 0;"></div>
+                
+                <div id="controles-respuesta" class="controls hidden" style="flex-wrap: wrap; justify-content: center;">
+                    <div style="display: flex; width: 100%;">
+                        <button id="btn-procesarrepaso" title="Atajo: Tecla 1;" class="btn-dif btn-dif-1">1<br><span style="font-size:0.7em">Fácil</span></button>
+                        <button id="btn-procesarrepaso-2" title="Atajo: Tecla 2;" class="btn-dif btn-dif-2">2<br><span style="font-size:0.7em">Bien</span></button>
+                        <button id="btn-procesarrepaso-3" title="Atajo: Tecla 3;" class="btn-dif btn-dif-3">3<br><span style="font-size:0.7em">Difícil</span></button>
+                        <button id="btn-procesarrepaso-4" title="Atajo: Tecla 4;" class="btn-dif btn-dif-4">4<br><span style="font-size:0.7em">Mal</span></button>
+                    </div>
+                    
+                </div>
+                <div class="study-footer">
+                    <div style="display:flex; gap:10px; align-items:center;">
+                        <button id="btn-prev" class="btn-modern btn-reveal hidden" title="Atajo: Flecha &#8592;" style="min-width:60px; padding:8px;">
+                            <div class="btn-content">
+                                <span class="btn-text">Anterior</span>
+                                <span class="btn-shortcut"><i class="fa-solid fa-circle-arrow-left"></i></span>
+                            </div>
+                        </button>
+                        
+                        <button id="btn-siguientetarjeta" title="Atajo: Flecha &#8594;" class="btn-modern btn-next">
+                            <div class="btn-content">
+                                <span class="btn-text" id="btn-next-text">Siguiente</span>
+                                <span class="btn-text"><i class="fa-solid fa-circle-arrow-right"></i></span> 
+                            </div>
+                        </button>
+                        <button id="btn-ocultar" title="Atajo: Enter" class="btn-modern btn-reveal hidden" 
+                                style="min-height: 45px; padding: 8px 15px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border);">
+                            <div class="btn-content" style="flex-direction: row; justify-content: center; align-items: center; gap: 8px;">
+                                <span class="btn-text" style="font-size: 0.9em; color: #999; font-weight: 500; letter-spacing: 0.5px;">Ocultar</span>
+                                 <span class="btn-text" style="font-size: 0.9em; color: #999; font-weight: 500; letter-spacing: 0.5px;"><i class="fa-solid fa-eye-slash"></i></span>
+                            </div>
+                        </button>
+                        
+                    </div>
+
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <button id="btn-filtros-dropdown" style="background:transparent; border:1px solid #555; border-radius:12px; color:#aaa; font-size:0.75em; padding:2px 8px; cursor:pointer; display:flex; align-items:center; gap:4px; transition:all 0.2s;">
+                            <i id="filtros-icon" class="fa-solid fa-filter" style="font-size:0.9em; color:#e53935; transition:color 0.2s;"></i>
+                            Filtros
+                        </button>
+                        <label title="Atajo: Tecla S" style="margin:0; cursor:pointer; font-size:0.75em; color:#aaa; display:flex; align-items:center;">
+                            <input type="checkbox" id="check-secuencial" style="margin-right:4px;"> 
+                            Sec. <span style="font-size:0.8em; opacity:0.5; margin-left:4px;">(S)</span>
+                        </label>
+                        
+                        <label title="Atajo: Tecla L" style="margin:0; font-size:0.75em; display:flex; align-items:center; cursor:pointer; color:#aaa;">
+                            <input type="checkbox" id="check-lectura" style="margin-right:4px;"> 
+                            Lectura <span style="font-size:0.8em; opacity:0.5; margin-left:4px;">(L)</span>
+                        </label>
+                        <span id="contador-filtro" style="font-size:0.7em; color:#666; font-family:monospace; white-space:nowrap;"></span>
+                    </div>
+                </div>
+            </div>
+            <div id="modulo-pdf" class="pdf-collapsed">
+                <button id="pdf-toggle-mini" title="Mostrar visor PDF">Lector de PDF</button>
+                
+                <div id="pdf-inner-wrapper">
+                    <div id="pdf-inner-content">
+                        <div id="pdf-header-bar">
+                            <div style="display:flex; align-items:center; gap: 10px; font-weight: bold; color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.5);">
+                                <span id="pdf-arrow-icon">&#9660;</span>
+                                <span id="pdf-status-text" style="font-size:0.75em; opacity:0.8;">Desplegar</span>
+                                <span>BIBLIOTECA DE ARCHIVOS</span>
+                            </div>
+                        </div>
+
+                        <div id="pdf-body-content">
+                            <div class="recursos-container">
+                                <span style="font-size: 0.75em; color: #555; text-transform: uppercase; letter-spacing: 1px; margin-right: 10px;">LIBROS:</span>
+                                
+                                <div id="lista-recursos-slots" style="display: flex; gap: 8px; flex-wrap: wrap;"></div>
+
+                                <button id="btn-crearslotrecurso" class="btn-mini_2" style="margin-left: auto; border: 1px dashed #444; color: #666;" title="Añadir nuevo hueco de libro">+ Añadir documento</button>
+                            </div>
+
+                            <div id="visor-pdf-container">
+                                <div id="pdf-placeholder">
+                                    
+                                    <div style="font-size: 3em; margin-bottom: 10px; opacity: 0.3;"><i class="fa-solid fa-book-atlas"></i></div>
+                                    <p style="font-size: 0.9em;">Selecciona un archivo (pdf) de la barra superior<br>para cargarlo en esta sesión.</p>
+                                </div>
+                                <iframe id="pdf-frame"></iframe>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <input type="file" id="input-pdf-slot" accept=".pdf" style="display: none;">
+            </div>
+
+
+            <div id="editor-card" class="card hidden">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; border-bottom: 1px solid #333; padding-bottom: 15px;">
+                    <div>
+                        <h3 style="margin: 0; font-size: 1.3em; color: var(--accent);">Editar Tarjeta</h3>
+                        <div id="edit-idx-label" style="font-size: 0.85em; color: #888; margin-top: 4px;"></div>
+                    </div>
+                    <button id="btn-ir-json" style="background: rgba(37,108,165,0.15); color: #4da6e8; border: 1px solid #256ca5; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.85em; font-weight: bold; transition: all 0.2s;">
+                        <i class="fa-solid fa-code"></i> Modo JSON
+                    </button>
+                </div>
+
+                <label style="color: #aaa; font-size: 0.85em; margin-bottom: 6px; display: block;">Título <strong style="color:var(--status-yellow); font-weight:normal;">(Nombres únicos para evitar solapamientos)</strong></label>
+                <input type="text" id="edit-titulo" placeholder="Ej: Teorema de Bolzano-Weierstrass" style="margin-bottom: 18px; width: 100%; background: #151515; border: 1px solid #333; color: #eee; padding: 10px 12px; border-radius: 6px; box-sizing: border-box;">
+                
+                <label style="color: #aaa; font-size: 0.85em; margin-bottom: 6px; display: block;">Contenido (Reverso) - Admite LaTeX completo</label>
+                <textarea id="edit-contenido" placeholder="Sea $f$ una función..." style="height: 220px; width: 100%; font-family: monospace; font-size: 0.95em; background: #111; border: 1px solid #333; border-radius: 8px; padding: 12px; color: #ddd; resize: vertical; box-sizing: border-box; line-height: 1.5;"></textarea>
+                
+                <div style="display:flex; gap:15px; margin-top: 15px;">
+                    <div style="flex:1;">
+                        <label style="color: #aaa; font-size: 0.85em; margin-bottom: 6px; display: block;">Tema</label>
+                        <input type="number" id="edit-tema" value="1" style="width: 100%; background: #151515; border: 1px solid #333; color: #eee; padding: 8px; border-radius: 6px; box-sizing: border-box;">
+                    </div>
+                    <div style="flex:1;">
+                        <label style="color: #aaa; font-size: 0.85em; margin-bottom: 6px; display: block;">Tipo</label>
+                        <select id="edit-apartado" style="width: 100%; background: #151515; border: 1px solid #333; color: #eee; padding: 8px; border-radius: 6px; box-sizing: border-box;">
+                            <option value="Definición">Definición</option>
+                            <option value="Teorema">Teorema</option>
+                            <option value="Proposición">Proposición</option>
+                            <option value="Lema">Lema</option>
+                            <option value="Corolario">Corolario</option>
+                            <option value="Axioma">Axioma</option>
+                            <option value="Propiedad">Propiedad</option>
+                            <option value="Observación">Observación</option>
+                            <option value="Nota">Nota</option>
+                            <option value="Ejemplo">Ejemplo</option>
+                            <option value="Demostración">Demostración</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="margin-top:25px; display:flex; justify-content:space-between; align-items:center; border-top: 1px solid #333; padding-top: 15px;">
+                    <div style="display:flex; gap: 10px;">
+                        <button id="btn-edit-prev" class="btn-modern btn-reveal" style="padding: 8px 14px; border-radius: 6px; min-height: auto;" title="Atajo: Alt + Flecha Izq / A">
+                            <div class="btn-content" style="display:flex; align-items:center; gap:6px; flex-direction:row;">
+                                <i class="fa-solid fa-arrow-left" style="font-size: 0.85em;"></i>
+                                <span style="font-size: 0.9em; font-weight: 500;">Ant</span>
+                            </div>
+                        </button>
+                        
+                        <button id="btn-edit-next" class="btn-modern btn-reveal" style="padding: 8px 14px; border-radius: 6px; min-height: auto;" title="Atajo: Alt + Flecha Der / D">
+                            <div class="btn-content" style="display:flex; align-items:center; gap:6px; flex-direction:row;">
+                                <span style="font-size: 0.9em; font-weight: 500;">Sig</span>
+                                <i class="fa-solid fa-arrow-right" style="font-size: 0.85em;"></i>
+                            </div>
+                        </button>
+                    </div>
+                    <div style="display:flex; gap: 8px;">
+                        <button id="btn-cancelaredicion-1" 
+                                style="background: transparent; border: 1px solid #444; color: #888; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.9em; transition: all 0.2s;"
+                                onmouseover="this.style.borderColor='#888'; this.style.color='#eee';"
+                                onmouseout="this.style.borderColor='#444'; this.style.color='#888';">
+                            Volver
+                        </button>
+
+                        <button id="btn-guardar-edicion-amigable" 
+                                class="btn-modern btn-save" 
+                                style="padding: 8px 16px; border-radius: 6px; min-height: auto; font-size: 0.9em; display: flex; align-items: center; gap: 6px;">
+                            <i class="fa-solid fa-floppy-disk"></i> Guardar
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="json-editor-card" class="card hidden">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; border-bottom: 1px solid #333; padding-bottom: 15px;">
+                    <div>
+                        <h3 style="margin: 0; font-size: 1.3em; color: #4da6e8;">Editor JSON Crudo</h3>
+                        <p style="font-size:0.85em; color:#888; margin: 4px 0 0 0;">Modifica la estructura base de esta asignatura bajo tu propio riesgo</p>
+                    </div>
+                    <button id="btn-volver-visual" style="background: rgba(76,175,80,0.15); color: #4CAF50; border: 1px solid #4CAF50; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.85em; font-weight: bold; transition: all 0.2s;">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> Modo Visual
+                    </button>
+                </div>
+                
+                <textarea id="json-editor-area" style="height:450px; width:100%; font-family: 'Courier New', Courier, monospace; font-size: 0.9em; background: #0a0a0a; border: 1px solid #2a2a2a; border-radius: 8px; padding: 12px; color: #a9b7c6; resize: vertical; box-sizing: border-box;"></textarea>
+                
+                <div style="margin-top:20px; display:flex; justify-content:space-between; align-items:center; border-top: 1px solid #333; padding-top: 15px;">
+                    <button id="btn-descargarasignaturaactual" style="background:transparent; border:1px solid #444; color:#aaa; padding:8px 15px; border-radius:6px; cursor:pointer; font-size:0.9em; display:flex; align-items:center; gap:8px; transition: 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
+                        <i class="fa-solid fa-download"></i> Copia local
+                    </button>
+
+                    <div style="display:flex; gap: 8px;">
+                        <button id="btn-cancelaredicion-2" class="btn-cancel" style="border-radius: 6px;">Cancelar</button>
+                        <button id="btn-guardaredicionjson" class="btn-save" style="border-radius: 6px;"><i class="fa-solid fa-floppy-disk"></i> Guardar JSON</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="import-card" class="card hidden">
+                <h3>Importar Contenido</h3>
+                
+                <div style="display:flex; gap:10px; margin-bottom:15px; border-bottom:1px solid #333; padding-bottom:10px;">
+                    <button id="tab-import-json" style="background:none; border:none; color:var(--accent); font-weight:bold; cursor:pointer; border-bottom: 2px solid var(--accent);">JSON</button>
+                    <button id="tab-import-latex" style="background:none; border:none; color:#666; cursor:pointer;">LaTeX</button>
+                </div>
+
+                <div id="panel-import-json">
+                    <p style="font-size:0.8em; color:#888; margin-top:0;">Pega aquí el array de objetos JSON `[...]`.</p>
+                    <textarea id="import-area" placeholder='[{"Titulo": "...", "Contenido": "..."}]' style="height:200px; font-family:monospace;"></textarea>
+                    <div style="margin-top:15px; text-align:right;">
+                        <button id="btn-cancelaredicion-3" class="btn-cancel">Cancelar</button>
+                        <button id="btn-procesarimportacion" class="btn-save-latex">Importar JSON</button>
+                    </div>
+                </div>
+
+                <div id="panel-import-latex" class="hidden">
+                    <p style="font-size:0.8em; color:#888; margin-top:0;">
+                        El parser creará tarjetas de <code>\defi</code>, <code>\prop</code>, <code>\teorema</code>, <code>\lema</code>, <code>\coro</code>, <code>\ejemplo</code> y demostraciones
+                        <br>Detecta automáticamente <code>\begin{demostración}</code> y la anexa al concepto anterior.
+                        <br> Tú tira el código y que sea lo que Dios quiera.
+                    </p>
+                    <div style="display:flex; gap:10px; margin-bottom:10px;">
+                        <input type="number" id="latex-tema-input" placeholder="Nº Tema" value="1" style="width:50px;">
+                        <span style="font-size:0.8em; color:#666; align-self:center;">Tema (asignado a todas las tarjetas)</span>
+                    </div>
+                    <textarea id="import-area-latex" placeholder="\defi[Título]{Contenido...}" style="height:200px; font-family:monospace; color:#a9b7c6; background:#0f0e0e;"></textarea>
+                    <div style="margin-top:15px; text-align:right;">
+                        <button id="btn-cancelaredicion-4" class="btn-cancel">Cancelar</button>
+                        <button id="btn-procesarimportacionlatex" class="btn-save-latex">Traducir LaTex</button>
+                    </div>
+                </div>
+            </div>
+
+
+        </div>
+
+        <div id="dashboard-col" class="right-col hidden">
+            <div class="stat-widget" id="mini-pomo-widget" data-widget-id="widget-pomo" style="border-top: 3px solid var(--pomo-work); position:relative; padding-bottom:5px;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:5px;">
+                    <div style="display:flex; flex-direction:column;">
+                        <span id="mini-mode-label" style="font-weight:bold; color:var(--pomo-work); font-size:0.9em; text-transform:uppercase;">WORK</span>
+                        <span id="mini-cycle-info" style="font-size:0.7em; color:#666;">Largo en: 4</span>
+                    </div>
+                    <button id="btn-abrirmodalpomodoro" 
+                            style="background:none; border:none; cursor:pointer; font-size:1.4em; padding:0; line-height:1; opacity:0.7; transition:transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); color: var(--pomo-work);" 
+                            title="Abrir Temporizador">
+                        <i class="fa-solid fa-hourglass-end" style="transition: color 0.3s ease;"></i>
+                    </button>
+                </div>
+
+                <div style="display:flex; align-items:center; justify-content:center; gap:12px; margin: 10px 0;">
+                    <button id="mini-btn-toggle" class="btn-circle-mini" title="Pausar/Reanudar (Espacio)"><i class="fa-solid fa-play"></i></button>
+                    
+                    <div id="mini-timer-display" style="font-family:'Courier New', monospace; font-size:2.2em; font-weight:bold; color:white; letter-spacing:-1px; min-width:90px; text-align:center;">
+                        00:00
+                    </div>
+
+                    <button id="btn-finishpomodoro" class="btn-circle-mini" title="Saltar intervalo"><i class="fa-solid fa-forward"></i></button>
+                </div>
+
+                <div style="margin-top:5px;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-end; font-size:0.75em; margin-bottom:4px; padding:0 4px; font-weight:bold;">
+                        <span id="mini-pomo-count" title="Pomodoros restantes" style="color: #888;">--🍅</span>
+                        <span id="mini-finish-time" title="Hora estimada de fin" style="color: rgb(87, 144, 115);">--:--</span>
+                    </div>
+                    
+                    <div style="border-top:1px solid #333; padding-top:5px;">
+                        <select id="mini-task-select" style="width:100%; background:#1a1a1a; border:none; font-size:0.67em; color:#aaa; padding:5px; outline:none; border-radius:4px;">
+                            <option value="-1">-- Seleccionar tarea --</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="stat-widget" data-widget-id="widget-progreso" style="text-align:center;">
+                <div class="stat-title">Progreso diario</div>
+                
+                <div class="ring-container">
+                    <div id="daily-donut" class="multi-color-donut"></div>
+                    
+                    <div class="ring-text">
+                        <span id="daily-progress-text" class="ring-percent">0%</span>
+                        <span class="ring-label">DEL DÍA</span>
+                    </div>
+                </div>
+
+                <div style="font-size:0.8em; color:#bbb; margin-top:15px; display:flex; justify-content:space-around;">
+                    <div style="text-align:center;">
+                        <div id="pomo-done-today" style="font-size:1.2em; font-weight:bold; color:white;">0</div>
+                        <div style="font-size:0.7em; color:#666;">HECHOS</div>
+                    </div>
+                    <div style="width:1px; background:#444;"></div>
+                    <div style="text-align:center;">
+                        <div id="pomo-goal-today" style="font-size:1.2em; font-weight:bold; color:#888;">6</div>
+                        <div style="font-size:0.7em; color:#666;">META</div>
+                    </div>
+                </div>
+                
+                <div id="today-breakdown" style="margin-top:10px; font-size:0.7em; color:#666; text-align:left; padding-left:10px;">
+                    </div>
+            </div>
+            <div class="stat-widget" data-widget-id="widget-constancia">
+                <div class="stat-title">Constancia</div>
+                <div style="display:flex; justify-content:space-between; text-align:center; padding: 10px 0;">
+                    
+                    <div style="flex:1;">
+                        <div id="stat-streak" style="font-size:2em; font-weight:bold; color:#FFC107;">0</div>
+                        <div style="font-size:0.7em; color:#888; text-transform:uppercase;">Días Racha</div>
+                    </div>
+                    
+                    <div style="width:1px; background:#444;"></div>
+                    
+                    <div style="flex:1;">
+                        <div id="stat-total-days" style="font-size:2em; font-weight:bold; color:#2196F3;">0</div>
+                        <div style="font-size:0.7em; color:#888; text-transform:uppercase;">Días Totales</div>
+                    </div>
+
+                    <div style="width:1px; background:#444;"></div>
+
+                    <div style="flex:1;">
+                        <div id="stat-avg" style="font-size:2em; font-weight:bold; color:#4CAF50;">0</div>
+                        <div style="font-size:0.7em; color:#888; text-transform:uppercase;">Tarjetas/Día</div>
+                    </div>
+                </div>
+                
+                <div id="streak-msg" style="text-align:center; margin-top:10px; font-size:0.75em; font-style:italic; color:#666;">
+                    Calculando...
+                </div>
+            </div>
+            <div class="stat-widget" data-widget-id="widget-distribucion">
+                <div class="stat-title">Distribución Tarjetas Asignatura</div>
+                
+                <div id="dist-bars"></div>
+                
+                <div style="margin-top:10px; font-size:0.75em; color:#666; display:flex; justify-content:space-between; align-items:center;">
+                    <span title="Tarjetas pendientes para hoy">
+                        Hoy: <strong id="today-cards-count" style="color:var(--status-yellow);">0</strong>
+                    </span>
+                    <span>
+                        Total: <strong id="total-cards-count" style="color:#e0e0e0;">0</strong>
+                    </span>
+                </div>
+            </div>
+            <div class="stat-widget" data-widget-id="widget-semanal">
+                <div class="stat-title" style="display:flex; justify-content:space-between; align-items:center;">
+                    <span>Rendimiento Semanal</span>
+                    <div class="weekly-toggle">
+                        <button id="btn-week-7" class="active">7 días</button>
+                        <button id="btn-week-28">4 semanas</button>
+                    </div>
+                </div>
+                <div style="display:flex; height:100px; align-items:flex-end; gap:5px; padding-top:10px; position:relative;" id="weekly-chart-container">
+                    </div>
+                <div style="display:flex; justify-content:space-between; margin-top:10px; font-size:0.7em; color:#888;">
+                    <span>Meta cumplida: <strong id="weekly-goals-met" style="color:#FFC107">0/7</strong> días</span>
+                    <span>Total: <strong id="weekly-total" style="color:white">0</strong> pomos</span>
+                </div>
+            </div>
+
+            <!-- WIDGET: Pronóstico de Carga -->
+            <div class="stat-widget" data-widget-id="widget-pronostico">
+                <div class="stat-title">Pronóstico de Carga</div>
+                <div id="forecast-container"></div>
+            </div>
+
+            <!-- WIDGET: Deuda de Estudio -->
+            <div class="stat-widget" data-widget-id="widget-deuda">
+                <div class="stat-title">Deuda de Estudio</div>
+                <div style="text-align:center;">
+                    <div id="deuda-score" style="color:#f44336;">0</div>
+                    <div style="font-size:0.65em; color:#888; text-transform:uppercase; margin-top:2px;">puntos de deuda</div>
+                </div>
+                <div id="deuda-breakdown" class="deuda-breakdown"></div>
+            </div>
+
+            <!-- WIDGET: Eficiencia de Sesión -->
+            <div class="stat-widget" data-widget-id="widget-eficiencia">
+                <div class="stat-title">Eficiencia de Sesión</div>
+                <div class="eficiencia-grid">
+                    <div class="eficiencia-cell">
+                        <div id="ef-tarjetas" class="eficiencia-num" style="color:#4CAF50;">0</div>
+                        <div class="eficiencia-label">Tarjetas</div>
+                    </div>
+                    <div class="eficiencia-cell">
+                        <div id="ef-ratio" class="eficiencia-num" style="color:#2196F3;">-</div>
+                        <div class="eficiencia-label">T/pomo</div>
+                    </div>
+                    <div class="eficiencia-cell">
+                        <div id="ef-facilidad" class="eficiencia-num" style="color:#FFC107;">-</div>
+                        <div class="eficiencia-label">% Fáciles</div>
+                    </div>
+                    <div class="eficiencia-cell">
+                        <div id="ef-sesiones" class="eficiencia-num" style="color:#FF9800;">0</div>
+                        <div class="eficiencia-label">Pomos hoy</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- WIDGET: Mapa de Calor por Hora -->
+            <div class="stat-widget" data-widget-id="widget-horas">
+                <div class="stat-title">Actividad por Hora</div>
+                <div style="display:flex; justify-content:space-between; font-size:0.6em; color:#555; margin-bottom:2px;">
+                    <span>00h</span><span>06h</span><span>12h</span><span>18h</span><span>23h</span>
+                </div>
+                <div id="hora-heatmap-container" class="hora-heatmap"></div>
+                <div id="hora-best" style="text-align:center; font-size:0.7em; color:#888; margin-top:6px;"></div>
+            </div>
+
+            <!-- WIDGET: Calendario -->
+            <div class="stat-widget" data-widget-id="widget-calendario">
+                <div class="stat-title" style="display:flex; justify-content:space-between; align-items:center;">
+                    <button id="btn-cambiarmes" style="background:none; border:none; color:#888; cursor:pointer;">&#9668;</button>
+                    <span id="calendar-month-title">FEBRERO 2026</span>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <button id="btn-add-fecha" title="Añadir fecha clave"><i class="fa-regular fa-calendar-plus"></i></button>
+                        <button id="btn-cambiarmes-2" style="background:none; border:none; color:#888; cursor:pointer;">&#9658;</button>
+                    </div>
+                </div>
+                
+                <div class="heatmap-container">
+                    <div class="week-days-header">
+                        <div class="week-day-name">L</div><div class="week-day-name">M</div>
+                        <div class="week-day-name">X</div><div class="week-day-name">J</div>
+                        <div class="week-day-name">V</div><div class="week-day-name">S</div>
+                        <div class="week-day-name">D</div>
+                    </div>
+                    <div id="calendar-heatmap" class="heatmap-grid"></div>
+                </div>
+                <!-- Leyenda de eventos -->
+                <div id="calendar-legend" style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; font-size:0.65em; color:#888;"></div>
+
+                <!-- Próximos eventos -->
+                <div id="upcoming-events-section" style="margin-top:10px; display:none;">
+                    <div style="font-size:0.72em; color:#666; text-transform:uppercase; letter-spacing:1px; margin-bottom:5px;">Próximos eventos</div>
+                    <ul id="upcoming-events-list"></ul>
+                </div>
+            </div>
+
+            <!-- WIDGET: Ventana de Pendientes -->
+            <div class="stat-widget" id="widget-pendientes" data-widget-id="widget-pendientes">
+                <div class="stat-title">Ventana de Pendientes</div>
+                
+                <div style="text-align:center; margin-bottom:5px; height: 50px;"><span id="pending-total-count" style="font-size:2.5em; font-weight:bold; line-height: 1;">0</span>
+                    <div style="font-size:0.7em; color:#888; text-transform:uppercase;">Tarjetas</div>
+                </div>
+
+                <ul id="pending-list-items" class="section-list"></ul>
+            </div>
+        </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: Resumen de Sesión Pomodoro -->
+<div id="resumen-sesion-modal">
+    <div class="resumen-card">
+        <div class="resumen-title">🍅 Pomodoro completado</div>
+        <div class="resumen-stats">
+            <div class="resumen-stat">
+                <div id="rsm-tarjetas" class="resumen-num" style="color:#4CAF50;">0</div>
+                <div class="resumen-lbl">Tarjetas</div>
+            </div>
+            <div class="resumen-stat">
+                <div id="rsm-facilidad" class="resumen-num" style="color:#2196F3;">-</div>
+                <div class="resumen-lbl">% Fáciles</div>
+            </div>
+            <div class="resumen-stat">
+                <div id="rsm-deuda" class="resumen-num" style="color:#FF9800;">-</div>
+                <div class="resumen-lbl">Δ Deuda</div>
+            </div>
+        </div>
+        <div id="rsm-breakdown" class="resumen-breakdown"></div>
+        <div id="rsm-mensaje" style="font-size:0.8em; color:#888; font-style:italic; margin-bottom:8px;"></div>
+        <button id="btn-cerrarresumensesion" class="resumen-close">Continuar <i class="fa-solid fa-circle-arrow-right"></i></button>
+    </div>
+</div>
+
+<!-- MODAL: Fechas Clave -->
+<div id="fechas-modal">
+    <div class="fechas-card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:1em; font-weight:bold; color:#eee;"><i class="fa-solid fa-calendar-days"></i> Fechas Clave</span>
+            <button id="btn-cerrarfechasmodal" style="background:none; border:none; color:#888; cursor:pointer; font-size:1.1em;">✕</button>
+        </div>
+
+        <!-- Formulario de nueva fecha -->
+        <div class="fechas-form">
+            <input type="text"   id="fk-nombre" placeholder="Nombre del evento (ej: Parcial Análisis)" maxlength="60">
+            <input type="date"   id="fk-fecha">
+            <select id="fk-tipo">
+                <option value="examen">Examen final</option>
+                <option value="prueba">Prueba / Parcial</option>
+                <option value="entrega">Entrega</option>
+                <option value="vacacion">Vacaciones</option>
+                <option value="otro">Otro</option>
+            </select>
+            <select id="fk-asig">
+                <option value="">— Todas las asignaturas —</option>
+            </select>
+            <button id="btn-guardarfechaclave">Añadir evento</button>
+        </div>
+
+        <!-- Lista de eventos guardados -->
+        <div class="fechas-list" id="fechas-list-container">
+            <div style="text-align:center; color:#555; font-size:0.8em; padding:20px 0;" id="fechas-empty-msg">
+                Aún no hay eventos. Añade el primero arriba.
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<div id="settings-modal" class="hidden">
+    <div class="modal-content" style="max-width:520px; width:95%;">
+        <div class="modal-header">
+            <h3>Ajustes</h3>
+            <button id="btn-cerrarajustes" class="btn-modern btn-reveal" style="padding: 4px 4px; min-width:14px; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: rgba(33, 150, 243, 0.1); color: var(--status-blue, #2196F3); border: 1px solid rgba(33, 150, 243, 0.3); font-size: 1em; font-weight: bold; line-height: 1; cursor: pointer; transition: all 0.2s;">
+                ✕
+            </button>
+        </div>
+
+        <!-- ── Tab bar ── -->
+        <div id="settings-tabs" style="display:flex; border-bottom:1px solid #2a2a2a; margin-bottom:18px; gap:2px; flex-wrap:wrap;">
+            <button class="stab stab-active" data-stab="tab-horario" onclick="cambiarPestanaAjustes('tab-horario')"><i class="fa-regular fa-calendar" style="color: rgb(120, 53, 187); "></i> Horario</button>
+            <button class="stab" data-stab="tab-apariencia" onclick="cambiarPestanaAjustes('tab-apariencia')"><i class="fa-solid fa-palette" style="color: rgb(120, 53, 187); font-size: 1.2em;"></i> Apariencia</button>
+            <button class="stab" data-stab="tab-pomodoro" onclick="cambiarPestanaAjustes('tab-pomodoro')">🍅 Pomodoro</button>
+            <button class="stab" data-stab="tab-ia" onclick="cambiarPestanaAjustes('tab-ia')"><i class="fa-solid fa-eye-low-vision" style="color: rgb(120, 53, 187); font-size: 1.2em;"></i> IA</button>
+            <button class="stab" data-stab="tab-cuenta" onclick="cambiarPestanaAjustes('tab-cuenta')"><i class="fa-solid fa-house-user" style="color: rgb(120, 53, 187); font-size: 1.2em;"></i> Cuenta</button>
+            <button class="stab" data-stab="tab-datos" onclick="cambiarPestanaAjustes('tab-datos')"><i class="fa-solid fa-floppy-disk" style="color: rgb(120, 53, 187); font-size: 1.2em;"></i> Datos</button>
+            <button class="stab" data-stab="tab-info" onclick="cambiarPestanaAjustes('tab-info')"><i class="fa-solid fa-circle-info" style="color: rgb(120, 53, 187); font-size: 1.2em;"></i> Sobre el programa</button>
+        </div>
+
+        <!-- ══════════════════════════════════════════════
+             TAB: HORARIO
+        ══════════════════════════════════════════════ -->
+        <div id="tab-horario" class="stab-panel">
+            <p style="font-size:0.8em; color:#888; margin-bottom:10px;">Haz clic en un día para editar tus objetivos.</p>
+            <div id="schedule-grid-container" class="schedule-grid"></div>
+            <div id="day-editor-panel" class="hidden">
+                <h5 id="day-editor-title" style="margin:0 0 10px 0; color:var(--accent);">Editar Lunes</h5>
+                <div style="display:flex; gap:5px; align-items:center;">
+                    <select id="sch-subject-select" style="flex-grow:1; font-size:0.9em; padding:5px;"></select>
+                    <input type="number" id="sch-pomo-input" value="1" style="width:50px; text-align:center; padding:5px;">
+                    <button id="btn-guardarhorariodia" style="padding:5px 10px; background:var(--accent); border:none; cursor:pointer; font-weight:bold;">Guardar</button>
+                </div>
+                <p style="font-size:0.7em; color:#666; margin-top:5px;">* Poner 0 para eliminar la asignatura de este día.</p>
+            </div>
+        </div>
+
+        <!-- ══════════════════════════════════════════════
+             TAB: APARIENCIA
+        ══════════════════════════════════════════════ -->
+        <div id="tab-apariencia" class="stab-panel hidden">
+            <h5 style="color:var(--accent); border-bottom:1px solid #333; margin-bottom:12px;">Colores de asignaturas</h5>
+            <div id="settings-colors-list" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;"></div>
+
+            <h5 style="color:var(--accent); border-bottom:1px solid #333; margin-bottom:12px;">Estilo visual</h5>
+            <div class="setting-row">
+                <label>Estilo Visual de Botones</label>
+                <select id="set-visual-theme" style="width:140px; text-align:left;">
+                    <option value="style-glass">Glassmorphism</option>
+                    <option value="style-cyber">Cyberpunk</option>
+                    <option value="style-skeuo">Skeuomorphic</option>
+                </select>
+            </div>
+            <div class="setting-row">
+                <label>Animación de Pulsado</label>
+                <select id="set-click-effect" style="width:140px; text-align:left;">
+                    <option value="click-skeuo">Táctil (Skeuo)</option>
+                    <option value="click-cyber">Luminosa (Cyber)</option>
+                    <option value="click-none">Ninguna</option>
+                </select>
+            </div>
+            <div style="margin-top: 15px; border-top: 1px solid #333; padding-top: 15px;">
+                <h4 style="margin-top: 0; color: var(--accent);">Gestión de Interfaz</h4>
+                <button class="btn-modern" onclick="restaurarWidgets(); document.getElementById('settings-modal').classList.add('hidden');" style="width: 100%; padding: 10px; background: #2a2a2a; border: 1px solid #444; color: #e0e0e0; border-radius: 4px; cursor: pointer;">
+                    <i class="fa-solid fa-rotate-left"></i> Restaurar diseño de Widgets por defecto
+                </button>
+            </div>
+        </div>
+
+        <!-- ══════════════════════════════════════════════
+             TAB: POMODORO
+        ══════════════════════════════════════════════ -->
+        <div id="tab-pomodoro" class="stab-panel hidden">
+            <div class="setting-row">
+                <label style="margin:0; cursor:pointer;" for="check-auto-start">Iniciar siguiente temporizador automáticamente</label>
+                <input type="checkbox" id="check-auto-start" style="width: 20px;">
+            </div>
+            <p style="font-size:0.85em; color:#666; margin: 14px 0 10px; text-decoration: underline; text-underline-offset: 4px;">Ajustar tiempo:</p>
+            <div class="setting-row">
+                <label style="margin:0">Pomodoro (minutos)</label>
+                <input type="number" id="set-work" value="35">
+            </div>
+            <div class="setting-row">
+                <label style="margin:0">Descanso Corto</label>
+                <input type="number" id="set-short" value="5">
+            </div>
+            <div class="setting-row">
+                <label style="margin:0">Descanso Largo (cada 4 pomodoros)</label>
+                <input type="number" id="set-long" value="15">
+            </div>
+        </div>
+
+        <!-- ══════════════════════════════════════════════
+             TAB: IA
+        ══════════════════════════════════════════════ -->
+        <div id="tab-ia" class="stab-panel hidden">
+            <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center;">
+                <label>API Key de Groq:</label>
+                <input type="password" id="set-groq-key" placeholder="gsk_..." style="padding:5px; width: 60%;">
+            </div>
+            <div class="setting-row">
+                <label style="margin:0; cursor:pointer;" for="set-groq-session-only">Guardar solo en sesión (recomendado)</label>
+                <input type="checkbox" id="set-groq-session-only" checked style="width: 20px;">
+            </div>
+            <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center;">
+                <label>Proxy backend (opcional):</label>
+                <input type="url" id="set-groq-proxy-url" placeholder="https://tu-backend/chat" style="padding:5px; width: 60%;">
+            </div>
+            <p style="font-size:0.7em; color:#888; margin-top:8px;">La API Key se guarda en sesión por defecto. Para mayor seguridad, usa un proxy backend.</p>
+
+
+        </div>
+
+        <!-- ══════════════════════════════════════════════
+             TAB: CUENTA
+        ══════════════════════════════════════════════ -->
+        <div id="tab-cuenta" class="stab-panel hidden">
+            <h5 style="color:var(--accent); border-bottom:1px solid #333; margin-bottom:12px;">Inicio de sesión</h5>
+            <div id="auth-status" style="margin-bottom: 15px; font-size: 0.85em; color: #888;">
+                Estado: Desconectado (Modo Offline)
+            </div>
+            <div id="auth-login-form">
+                <input type="email" id="login-email" placeholder="Correo electrónico" style="width: 100%; padding: 10px; margin-bottom: 10px; background: #1a1a1a; border: 1px solid #333; color: #eee; border-radius: 4px; outline: none; box-sizing: border-box;">
+                <input type="password" id="login-password" placeholder="Contraseña (mín. 6 caracteres)" style="width: 100%; padding: 10px; margin-bottom: 15px; background: #1a1a1a; border: 1px solid #333; color: #eee; border-radius: 4px; outline: none; box-sizing: border-box;">
+                <div style="display: flex; gap: 10px;">
+                    <button id="btn-login" class="btn-modern btn-reveal" style="flex: 1; padding: 10px; background: rgba(33, 150, 243, 0.1); color: var(--status-blue, #2196F3); border: 1px solid var(--status-blue, #2196F3); border-radius: 4px; font-weight: bold; cursor: pointer;">Acceder</button>
+                    <button id="btn-register" class="btn-modern btn-reveal" style="flex: 1; padding: 10px; background: transparent; color: #888; border: 1px solid #555; border-radius: 4px; cursor: pointer;">Registrar</button>
+                </div>
+            </div>
+            <div id="auth-logged-in" class="hidden" style="margin-top: 10px;">
+                <button id="btn-abrirmodalamigos" class="btn-modern btn-reveal" style="width: 100%; padding: 10px; margin-bottom: 8px; background: rgba(76,175,80,0.1); color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                    <i class="fa-solid fa-user-group"></i> Social
+                </button>
+                <button id="btn-cerrarsesion" class="btn-modern btn-reveal" style="width: 100%; padding: 10px; background: rgba(255, 82, 82, 0.1); color: #ff5252; border: 1px solid #ff5252; border-radius: 4px; font-weight: bold; cursor: pointer;">Cerrar sesión</button>
+            </div>
+
+            <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #2a2a2a;">
+                <h5 style="color: var(--accent); margin-bottom: 10px; font-size: 0.9em;"><i class="fa-solid fa-user-shield"></i> Privacidad</h5>
+                <label style="display:flex; align-items:center; justify-content:space-between; background:#1a1a1a; padding:12px 14px; border-radius:8px; border:1px solid #333; cursor:pointer; transition: border 0.3s ease;">
+                    <div>
+                        <div id="privacy-title" style="color:#eee; font-size:0.95em; font-weight:500; transition: color 0.2s ease, opacity 0.2s ease;">Modo Extrovertido</div>
+                        <div id="privacy-desc" style="color:#888; font-size:0.8em; margin-top:2px; transition: opacity 0.2s ease;">Tus estadísticas son visibles para todos</div>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <i id="privacy-icon" class="fa-solid fa-user" style="font-size:1.5em; color:#00b6ca; transition: opacity 0.5s ease, filter 0.15s ease, color 0.6s ease;"></i>
+                        <input type="checkbox" id="set-privacy-stats" style="display:none;">
+                    </div>
+                </label>
+            </div>
+        </div>
+
+        <!-- ══════════════════════════════════════════════
+             TAB: DATOS
+        ══════════════════════════════════════════════ -->
+        <div id="tab-datos" class="stab-panel hidden">
+
+            <p style="font-size: 0.85em; color: #aaa; margin-bottom: 10px; line-height: 1.4;">
+                <strong style="color: var(--status-blue, #2196F3);">Sincronización en la nube:</strong> Vinculada a tu cuenta. Permite portabilidad entre dispositivos. Requiere conexión.
+            </p>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;">
+                <button id="btn-sync-nube" class="btn-modern btn-reveal" style="padding: 10px; background: rgba(168, 175, 76, 0.1); color: #acaf4c; border: 1px solid #acaf4c; border-radius: 4px; font-weight: bold; cursor: pointer;">
+                    <i class="fa-solid fa-cloud-arrow-up"></i> Subir respaldo
+                </button>
+                <button id="btn-forzarbajada" class="btn-modern btn-reveal" style="padding: 10px; background: rgba(156, 39, 176, 0.1); color: #c058d9; border: 1px solid #c058d9; border-radius: 4px; font-weight: bold; cursor: pointer;">
+                    <i class="fa-solid fa-cloud-arrow-down"></i> Bajar respaldo
+                </button>
+            </div>
+
+            <p style="font-size: 0.85em; color: #aaa; margin-bottom: 10px; line-height: 1.4;">
+                <strong style="color: var(--status-blue, #2196F3);">Respaldo Físico (Local):</strong> Mecanismo estricto offline. Genera un archivo JSON en tu disco duro inmune a cortes de red o servidores caídos.
+            </p>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;">
+                <button id="btn-exportarbackup" class="btn-modern btn-reveal" style="padding: 10px; background: transparent; color: #ddd; border: 1px solid #666; border-radius: 4px; cursor: pointer;">Exportar JSON</button>
+                <button id="btn-document" class="btn-modern btn-reveal" style="padding: 10px; background: transparent; color: #ddd; border: 1px solid #666; border-radius: 4px; cursor: pointer;">Importar JSON</button>
+            </div>
+            <input type="file" id="backup-input-unico" accept=".json" style="display:none;">
+            <div style="margin-top:20px; text-align:center;">
+                <button id="btn-borrartodolocal" style="background:#333; color:#ff5252; border:1px solid #ff5252; padding:5px 10px; cursor:pointer; font-size:0.8em;">(!!!) Resetear Toda la Base de Datos</button>
+            </div>
+            
+        </div>
+
+            
+        
+        <div id="tab-info" class="stab-panel hidden">
+            <div class="info-section" style="margin-bottom: 25px;">
+                <h5 style="color: var(--accent); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-keyboard"></i> Atajos de Teclado (Power User)
+                </h5>
+                <p style="font-size: 0.9em; color: #bbb; margin-bottom: 10px;">
+                    Optimiza tu flujo de trabajo y mantén el "estado de foco" utilizando los controles globales:
+                </p>
+                <ul style="list-style: none; padding: 0; font-size: 0.85em; color: #eee; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                    <li><kbd style="background: #333; padding: 2px 5px; border-radius: 3px;">Espacio</kbd> Pausar/Reanudar Pomodoro</li>
+                    <li><kbd style="background: #333; padding: 2px 5px; border-radius: 3px;">Enter</kbd> Revelar/Ocultar respuesta</li>
+                    <li><kbd style="background: #333; padding: 2px 5px; border-radius: 3px;">1 - 4</kbd> Calificar dificultad</li>
+                    <li><kbd style="background: #333; padding: 2px 5px; border-radius: 3px;">L</kbd> Alternar Modo Lectura</li>
+                    <li><kbd style="background: #333; padding: 2px 5px; border-radius: 3px;">S</kbd> Alternar Modo Secuencial</li>
+                    <li><kbd style="background: #333; padding: 2px 5px; border-radius: 3px;">Alt + ←/→</kbd> Navegar en Editor</li>
+                </ul>
+            </div>
+
+            <hr style="border: 0; border-top: 1px solid #2a2a2a; margin: 20px 0;">
+
+            <div class="info-section">
+                <h5 style="color: var(--accent); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-database"></i> Arquitectura de Persistencia Híbrida
+                </h5>
+                <p style="font-size: 0.85em; color: #bbb; line-height: 1.5;">
+                    La aplicación utiliza un modelo <strong>Local-First</strong> diseñado para garantizar la disponibilidad absoluta de tus datos:
+                </p>
+                <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; margin-top: 10px;">
+                    <h5 style="font-size: 0.8em; text-transform: uppercase; color: #888; margin-bottom: 8px;">Capa Local (Alta Velocidad)</h5>
+                    <p style="font-size: 0.85em; color: #ddd; margin-bottom: 10px;">
+                        Tus repasos y telemetría se almacenan en tiempo real en <strong>IndexedDB</strong> y <strong>LocalStorage</strong>, permitiendo estudiar sin conexión a internet.
+                    </p>
+                    
+                    <h5 style="font-size: 0.8em; text-transform: uppercase; color: #888; margin-bottom: 8px;">Capa Nube (Respaldo)</h5>
+                    <p style="font-size: 0.85em; color: #ddd;">
+                        Cada 15 minutos se ejecuta un <strong>Auto-Save</strong> que sincroniza tu progreso con <strong>Firebase Firestore</strong>, protegiendo tu historial contra fallos del dispositivo o limpieza de caché.
+                    </p>
+                </div>
+            </div>
+            <div class="info-section">
+                <h5 style="color: var(--accent); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-tex"></i> Uso de LaTeX
+                </h5>
+            </div>
+
+            <div style="background: #181818; padding: 15px; border-radius: 8px; border: 1px solid #333; margin-top: 20px;">
+            <h4 style="margin: 0 0 10px 0; color: var(--accent); display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 1.2em;"><i class="fa-solid fa-hexagon-nodes"></i></span> Motor de Retención: FSRS-6
+            </h4>
+            <p style="font-size: 0.85em; color: #bbb; line-height: 1.5; margin-bottom: 12px;">
+                "Estudiador Pro" no usa fechas fijas. Utiliza el <strong>Free Spaced Repetition Scheduler (FSRS)</strong>, un modelo matemático que calcula el decaimiento exacto de tus sinapsis en base a 21 parámetros de memoria. En particular este programa utiliza parámetros medios obtenidos por grupos de investigación
+                a lo largo de millones de repasos y miles de usuarios. A la larga, se pueden recopilar los datos para producir parámetros personales y conseguir resultados óptimos.
+            </p>
+            <p style="font-size: 0.85em; color: #bbb; line-height: 1.5; margin-bottom: 12px;">
+                El propósito de este modelo es predecir el momento exacto en el que deberías volver a repasar un concepto en base a su dificultad, tu historial de recuperación de contenidos, tu estabilidad, entre muchos otros.
+            </p>
+
+            <h5 style="margin: 15px 0 5px 0; color: #ddd; font-size: 0.9em;">Las 3 Fases del Aprendizaje:</h5>
+            <ul style="font-size: 0.82em; color: #999; padding-left: 20px; margin-bottom: 15px; line-height: 1.6;">
+                <li><strong>Nueva (New):</strong> Primer contacto. El algoritmo aún no conoce tu retención para este concepto.</li>
+                <li><strong>Reaprendizaje (Learning):</strong> Tarjetas falladas. Intervalos muy cortos (minutos/horas) para forzar la reconexión neuronal.</li>
+                <li><strong>Repaso (Review):</strong> Memoria consolidada. Intervalos largos (días/meses) diseñados para interrumpir la curva del olvido justo antes de que el concepto desaparezca.</li>
+            </ul>
+
+            <h5 style="margin: 0 0 5px 0; color: #ddd; font-size: 0.9em;">Cómo calificar (Botones):</h5>
+            <div style="display: flex; flex-direction: column; gap: 6px; font-size: 0.82em; color: #aaa;">
+                <div style="display: flex; align-items: flex-start; gap: 8px;">
+                    <span style="color: #1976d2; padding: 2px 6px; border-radius: 4px; font-weight: bold; width: 60px; text-align: center; flex-shrink: 0;">1. Fácil</span>
+                    <span>Respuesta trivial e instantánea. Multiplica drásticamente el próximo intervalo.</span>
+                </div>
+                <div style="display: flex; align-items: flex-start; gap: 8px;">
+                    <span style="color: #388e3c; padding: 2px 6px; border-radius: 4px; font-weight: bold; width: 60px; text-align: center; flex-shrink: 0;">2. Bien</span>
+                    <span><strong>(Botón por defecto).</strong> Recordada con fluidez normal. Mantiene el ritmo óptimo de retención.</span>
+                </div>
+                <div style="display: flex; align-items: flex-start; gap: 8px;">
+                    <span style="color: #f57c00; padding: 2px 6px; border-radius: 4px; font-weight: bold; width: 60px; text-align: center; flex-shrink: 0;">3. Difícil</span>
+                    <span>La recordaste, pero con un esfuerzo mental severo o duda extrema.</span>
+                </div>
+
+                <div style="display: flex; align-items: flex-start; gap: 8px;">
+                    <span style="color: #d32f2f; padding: 2px 6px; border-radius: 4px; font-weight: bold; width: 60px; text-align: center; flex-shrink: 0;">4. Crítica</span>
+                    <span>Amnesia total. Fuerza la tarjeta de vuelta a la fase de Reaprendizaje.</span>
+                </div>
+                
+            </div>
+        </div>
+        </div>
+        
+        <!-- BOTÓN DE GUARDAR; LO PONEMOS SIN TAB Y APARECE EN TODAS LAS PESTAÑAS -->
+        <div style="display:flex; justify-content:center; margin-top:18px;">
+            <button id="btn-guardarajustes" class="btn-modern btn-reveal" style="padding: 8px 45px; background: rgba(39, 146, 176, 0.1); color: var(--status-blue, #2196F3); border: 1px solid var(--status-blue, #2196F3); border-radius: 4px; font-weight: bold; cursor: pointer; transition: all 0.2s;">
+                Guardar ajustes
+            </button>
+        </div>
+
+
+        <audio id="alarm-audio" src="data:audio/mp3;base64,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"></audio>
+    </div>
+</div>
+
+<div id="pomodoro-modal" class="hidden" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:2000; display:flex; justify-content:center; align-items:center;">
+    <div class="modal-content" style="max-width:600px; width:95%; border:1px solid #444; background:var(--card-bg);">
+        <div class="modal-header">
+            <h3>Gestión Pomodoro</h3>
+            <button id="btn-cerrarmodalpomodoro" class="btn-modern btn-reveal" style="padding: 4px 4px; min-width:14px; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: rgba(33, 150, 243, 0.1); color: var(--status-blue, #2196F3); border: 1px solid rgba(33, 150, 243, 0.3); font-size: 1em; font-weight: bold; line-height: 1; cursor: pointer; transition: all 0.2s;">
+                ✕
+            </button>
+        </div>
+        
+        <div id="pomodoro-card-content" class="pomo-content" style="padding:10px;">
+            <div class="pomo-tabs">
+                <button id="btn-mode-work" class="pomo-btn-mode active">Pomodoro</button>
+                <button id="btn-mode-short" class="pomo-btn-mode">Descanso Corto</button>
+                <button id="btn-mode-long" class="pomo-btn-mode">Descanso Largo</button>
+            </div>
+            
+            <div id="timer-display" style="font-variant-numeric: tabular-nums; letter-spacing: -2px; font-size:4em; text-align:center;">00:00</div>
+
+            <div class="pomo-controls">
+                <button id="btn-pomo-action" class="btn-pomo-big"><i class="fa-solid fa-play"></i><i class="fa-solid fa-play"></i></button>
+                <button id="btn-finishpomodoro-2" class="btn-pomo-skip" title="Saltar fase"><i class="fa-solid fa-forward"></i></button>
+            </div>
+            
+            <ul id="task-list" class="task-list" style="max-height:200px; overflow-y:auto;"></ul>
+            <div id="add-task-trigger" class="add-task-btn"><i class="fa-solid fa-star"></i> Nueva tarea</div>
+            <div id="finish-time-display" style="margin-top: 15px; color: var(--accent);"></div>
+            
+            <div id="task-form-panel" class="hidden">
+                <input type="text" id="new-task-title" placeholder="¿Qué vamos a hacer?">
+                <div class="est-pomo-container">
+                    <input type="number" id="new-task-est" value="1" class="est-pomo-input">
+                    <button id="btn-adjpomo">&#9650;</button><button>&#9660;</button>
+                </div>
+                <select id="new-task-project"></select>
+                <div class="form-actions">
+                    <button id="btn-hidetaskform" class="btn-cancel">Cancelar</button>
+                    <button id="btn-savenewtask" class="btn-save">Guardar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- ----------------------------------------
+     MODAL: MODO EXAMEN  (v1.16)
+     ---------------------------------------- -->
+<div id="examen-modal" style="display:none; position:fixed; inset:0; z-index:10000; background:rgba(0,0,0,0.88); backdrop-filter:blur(6px); align-items:flex-start; justify-content:center; overflow-y:auto; padding:20px 10px;">
+    <!--  PANTALLA: Configuración  -->
+    <div id="examen-config" style="
+        background:#1e1e1e; border:1px solid #444; border-radius:14px;
+        padding:28px 32px; max-width:480px; width:100%; margin:auto;
+        animation: popIn 0.3s cubic-bezier(0.34,1.56,0.64,1);">
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <h3 style="margin:0; color:#eee;">Modo Examen</h3>
+            <button onclick="cerrarExamen()" class="btn-cerrar-modal" style="background: transparent; border: none; color: #888; font-size: 1.2em; cursor: pointer; padding: 5px; transition: color 0.2s;" onmouseover="this.style.color='var(--status-red)'" onmouseout="this.style.color='#888'">✕</button>
+        </div>
+
+        <!-- Selector de modo -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:18px;">
+            <label id="ex-mode-btn-flash" style="
+                display:flex; flex-direction:column; align-items:center; gap:5px;
+                padding:12px; border:2px solid var(--accent); border-radius:10px;
+                cursor:pointer; background:rgba(76,175,80,0.12);">
+                <span style="font-size:1.5em;"><i class="fa-solid fa-jet-fighter-up"></i> <i class="fa-solid fa-jet-fighter-up"></i> <i class="fa-solid fa-jet-fighter-up"></i></span>
+                <strong style="color:#eee; font-size:0.9em;">Repaso rápido</strong>
+                <span style="font-size:0.7em; color:#888; text-align:center;">Revela y valórate 1-4</span>
+                <input type="radio" name="ex-mode" value="flash" checked style="display:none;">
+            </label>
+            <label id="ex-mode-btn-real" style="
+                display:flex; flex-direction:column; align-items:center; gap:5px;
+                padding:12px; border:2px solid #333; border-radius:10px;
+                cursor:pointer; background:transparent;">
+                <span style="font-size:1.5em;"><i class="fa-solid fa-person-military-rifle"></i><i class="fa-solid fa-person-military-rifle"></i><i class="fa-solid fa-person-military-rifle"></i></span>
+                <strong style="color:#eee; font-size:0.9em;">Examen real</strong>
+                <span style="font-size:0.7em; color:#888; text-align:center;">Escribe, navega, entrega</span>
+                <input type="radio" name="ex-mode" value="real" style="display:none;">
+            </label>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:12px;">
+            <div>
+                <label style="font-size:0.8em; color:#888; display:block; margin-bottom:4px;">ASIGNATURA</label>
+                <select id="ex-asig" style="width:100%; padding:8px; background:#2a2a2a; color:#eee; border:1px solid #444; border-radius:6px; box-sizing:border-box;"></select>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <div>
+                    <label style="font-size:0.8em; color:#888; display:block; margin-bottom:4px;">Nº TARJETAS</label>
+                    <input type="number" id="ex-num" value="10" min="1" style="width:100%; padding:8px; background:#2a2a2a; color:#eee; border:1px solid #444; border-radius:6px; box-sizing:border-box;">
+                </div>
+                <div>
+                    <label id="ex-tiempo-label" style="font-size:0.8em; color:#888; display:block; margin-bottom:4px;">TIEMPO/TARJETA (s, 0=libre)</label>
+                    <input type="number" id="ex-tiempo" value="0" min="0" style="width:100%; padding:8px; background:#2a2a2a; color:#eee; border:1px solid #444; border-radius:6px; box-sizing:border-box;">
+                </div>
+            </div>
+
+            <div>
+                <label style="font-size:0.8em; color:#888; display:block; margin-bottom:6px;">TIPOS (vacío = todos)</label>
+                <div id="ex-tipos-grid" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+            </div>
+
+            <div>
+                <label style="font-size:0.8em; color:#888; display:block; margin-bottom:4px;">TEMAS (ej: 1,3,5 — vacío = todos)</label>
+                <input type="text" id="ex-temas" placeholder="1,2,3 o vacío" style="width:100%; padding:8px; background:#2a2a2a; color:#eee; border:1px solid #444; border-radius:6px; box-sizing:border-box;">
+            </div>
+        </div>
+
+        <button id="btn-iniciarexamen" style="
+            margin-top:20px; width:100%; padding:12px;
+            background:linear-gradient(135deg,#4CAF50,#2e7d32);
+            border:none; border-radius:8px; color:white;
+            font-size:1em; font-weight:bold; cursor:pointer;">
+            Comenzar →
+        </button>
+    </div>
+
+    <!--  PANTALLA: Tarjeta Flash (modo repaso)  -->
+    <div id="examen-flash" style="display:none;
+        background:#1e1e1e; border:1px solid #444; border-radius:14px;
+        padding:26px 30px; max-width:650px; width:100%; margin:auto;
+        animation: popIn 0.25s ease;">
+
+        <!-- Progreso + timer -->
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
+            <div style="flex-grow:1; height:5px; background:#333; border-radius:3px; overflow:hidden;">
+                <div id="ex-f-bar" style="height:100%; background:#4CAF50; width:0%; transition:width 0.3s;"></div>
+            </div>
+            <span id="ex-f-label" style="font-size:0.78em; color:#888; white-space:nowrap;">0/0</span>
+            <span id="ex-f-timer" style="display:none; font-size:0.9em; font-weight:bold; color:#FF9800; background:#1a1100; border-radius:5px; padding:2px 8px;">--</span>
+            <button id="btn-cerrarexamen-3" style="background:none;border:none;color:#555;cursor:pointer;font-size:1.1em; flex-shrink:0;">✕</button>
+        </div>
+
+        <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
+            <span id="ex-f-tipo" style="font-size:0.7em; font-weight:bold; padding:2px 10px; border-radius:12px; background:#4CAF5022; color:#4CAF50; border:1px solid #4CAF50;">Tipo</span>
+            <span id="ex-f-tema" style="font-size:0.75em; color:#555;">Tema</span>
+        </div>
+
+        <div id="ex-f-titulo" style="font-size:1.25em; font-weight:bold; color:#eee; line-height:1.4; margin-bottom:18px;"></div>
+
+        <div id="ex-f-contenido" style="display:none; border-top:1px solid #2a2a2a; padding-top:14px; color:#ccc; line-height:1.7; font-size:0.95em; margin-bottom:14px;"></div>
+
+        <button id="ex-f-btn-revelar" style="
+            width:100%; padding:10px; background:#2a2a2a; border:1px solid #444;
+            color:#ccc; border-radius:8px; cursor:pointer;">
+            Revelar [Enter]
+        </button>
+
+        <!-- Valoración 1-4 -->
+        <div id="ex-f-valoracion" style="display:none; flex-direction:column; gap:8px; margin-top:10px;">
+            <div style="font-size:0.75em; color:#888; text-align:center; margin-bottom:2px;">¿Cómo ha ido? [1-4]</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:8px;">
+                <button id="btn-examenflashpuntuar" style="padding:10px 4px; background:rgba(33,150,243,0.15); border:1px solid #2196F3; color:#2196F3; border-radius:8px; cursor:pointer; font-size:0.85em; font-weight:bold;">1<br><span style="font-weight:normal; font-size:0.8em;">Fácil</span></button>
+                <button id="btn-examenflashpuntuar-2" style="padding:10px 4px; background:rgba(76,175,80,0.15); border:1px solid #4CAF50; color:#4CAF50; border-radius:8px; cursor:pointer; font-size:0.85em; font-weight:bold;">2<br><span style="font-weight:normal; font-size:0.8em;">Bien</span></button>
+                <button id="btn-examenflashpuntuar-3" style="padding:10px 4px; background:rgba(255,152,0,0.15); border:1px solid #FF9800; color:#FF9800; border-radius:8px; cursor:pointer; font-size:0.85em; font-weight:bold;">3<br><span style="font-weight:normal; font-size:0.8em;">Difícil</span></button>
+                <button id="btn-examenflashpuntuar-4" style="padding:10px 4px; background:rgba(244,67,54,0.15); border:1px solid #f44336; color:#f44336; border-radius:8px; cursor:pointer; font-size:0.85em; font-weight:bold;">4<br><span style="font-weight:normal; font-size:0.8em;">Mal</span></button>
+            </div>
+        </div>
+    </div>
+
+    <!--  PANTALLA: Examen real  -->
+    <div id="examen-real" style="display:none;
+        background:#1e1e1e; border:1px solid #444; border-radius:14px;
+        padding:24px 28px; max-width:700px; width:100%; margin:auto;
+        animation: popIn 0.25s ease;">
+
+        <!-- Cabecera: timer global + progreso -->
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+            <span id="ex-r-timer" style="font-size:1.1em; font-weight:bold; color:#FF9800; background:#1a1100; border-radius:6px; padding:3px 12px; min-width:60px; text-align:center; display:none;">--:--</span>
+            <div style="flex-grow:1; height:5px; background:#333; border-radius:3px; overflow:hidden;">
+                <div id="ex-r-bar" style="height:100%; background:#2196F3; width:0%; transition:width 0.3s;"></div>
+            </div>
+            <span id="ex-r-label" style="font-size:0.78em; color:#888; white-space:nowrap;">P 1/0</span>
+            <button id="btn-cerrarexamen-4" style="background:none;border:none;color:#555;cursor:pointer;font-size:1.1em; flex-shrink:0;">✕</button>
+        </div>
+
+        <!-- Navegador de preguntas -->
+        <div id="ex-r-nav" style="display:flex; flex-wrap:wrap; gap:5px; margin-bottom:16px;"></div>
+
+        <!-- Pregunta actual -->
+        <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
+            <span id="ex-r-tipo" style="font-size:0.7em; font-weight:bold; padding:2px 10px; border-radius:12px; background:#2196F322; color:#2196F3; border:1px solid #2196F3;">Tipo</span>
+            <span id="ex-r-tema" style="font-size:0.75em; color:#555;">Tema</span>
+        </div>
+        <div id="ex-r-titulo" style="font-size:1.2em; font-weight:bold; color:#eee; line-height:1.4; margin-bottom:16px;"></div>
+
+        <textarea id="ex-r-respuesta" placeholder="Escribe tu respuesta aquí... (puedes usar LaTeX: $...$)" style="
+            width:100%; min-height:120px; padding:12px;
+            background:#151515; color:#ccc; border:1px solid #3a3a3a;
+            border-radius:8px; font-family:monospace; font-size:0.9em;
+            resize:vertical; box-sizing:border-box;
+            transition: border-color 0.2s;" 
+></textarea>
+
+        <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
+            <button id="btn-examenrealanterior" style="padding:8px 16px; background:#2a2a2a; border:1px solid #444; color:#888; border-radius:6px; cursor:pointer;">&#x2190;  Anterior</button>
+            <button id="btn-examenrealsiguiente" style="padding:8px 16px; background:#2a2a2a; border:1px solid #444; color:#888; border-radius:6px; cursor:pointer;">Siguiente &#x2192;</button>
+            <div style="flex-grow:1;"></div>
+            <button id="btn-examenrealentregar" style="
+                padding:8px 22px;
+                background:linear-gradient(135deg,#2196F3,#1565c0);
+                border:none; border-radius:6px; color:white;
+                font-weight:bold; cursor:pointer;">
+                Entregar examen
+            </button>
+        </div>
+    </div>
+
+    <!--  PANTALLA: Corrección del examen real  -->
+    <div id="examen-correccion" style="display:none;
+        background:#1e1e1e; border:1px solid #444; border-radius:14px;
+        padding:24px 28px; max-width:700px; width:100%; margin:auto;">
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h3 style="margin:0; color:#eee;">Corrección — puntúate cada respuesta</h3>
+            <button id="btn-cerrarexamen-5" style="background:none;border:none;color:#555;cursor:pointer;font-size:1.1em;">✕</button>
+        </div>
+        <p style="font-size:0.8em; color:#888; margin:0 0 16px 0;">
+            Compara tu respuesta con la solución y puntúate 1-4. La nota final pondera:
+            <strong style="color:#2196F3">1=100%</strong>, <strong style="color:#4CAF50">2=75%</strong>,
+            <strong style="color:#FF9800">3=40%</strong>, <strong style="color:#f44336">4=0%</strong>.
+        </p>
+        <div id="ex-c-lista" style="display:flex; flex-direction:column; gap:14px; max-height:60vh; overflow-y:auto;"></div>
+        <button id="ex-c-btn-nota" style="
+            margin-top:16px; width:100%; padding:12px;
+            background:linear-gradient(135deg,#4CAF50,#2e7d32);
+            border:none; border-radius:8px; color:white;
+            font-size:1em; font-weight:bold; cursor:pointer;">
+            Ver nota final →
+        </button>
+    </div>
+
+    <!-- -------- PANTALLA: Resultados------      -->
+    <div id="examen-resultados" style="display:none;
+        background:#1e1e1e; border:1px solid #444; border-radius:14px;
+        padding:28px 32px; max-width:500px; width:100%; margin:auto; text-align:center;">
+
+        <div style="font-size:2.5em; margin-bottom:8px;" id="ex-res-emoji"><i class="fa-solid fa-flag-checkered"></i></div>
+        <h3 style="margin:0 0 4px 0; color:#eee;" id="ex-res-titulo">Completado</h3>
+        <p style="color:#888; font-size:0.85em; margin-bottom:20px;" id="ex-res-asig"></p>
+
+        <div style="display:flex; justify-content:center; gap:20px; margin-bottom:16px;">
+            <div><div id="ex-res-nota" style="font-size:3em; font-weight:bold; color:#2196F3;">-</div><div style="font-size:0.65em; color:#888; text-transform:uppercase;">Nota</div></div>
+            <div><div id="ex-res-ok" style="font-size:3em; font-weight:bold; color:#4CAF50;">0</div><div style="font-size:0.65em; color:#888; text-transform:uppercase;">Bien</div></div>
+            <div><div id="ex-res-fail" style="font-size:3em; font-weight:bold; color:#f44336;">0</div><div style="font-size:0.65em; color:#888; text-transform:uppercase;">A repasar</div></div>
+        </div>
+
+        <div id="ex-res-lista" style="text-align:left; font-size:0.8em; max-height:220px; overflow-y:auto; border-top:1px solid #2a2a2a; padding-top:12px; margin-bottom:16px;"></div>
+
+        <div style="display:flex; gap:10px;">
+            <button id="btn-repetirexamen" style="flex:1; padding:10px; background:#2a2a2a; border:1px solid #444; color:#ccc; border-radius:8px; cursor:pointer;"><i class="fa-solid fa-rotate-left"></i> Repetir</button>
+            <button id="btn-cerrarexamen-6" style="flex:1; padding:10px; background:linear-gradient(135deg,#4CAF50,#2e7d32); border:none; border-radius:8px; color:white; font-weight:bold; cursor:pointer;">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+
+<canvas id="pizarra-canvas" class="hidden" style="position: fixed; top: 0; left: 0; z-index: 9000; cursor: crosshair; touch-action: none;"></canvas>
+<div id="pizarra-controls" style="position: fixed; bottom: 20px; right: 20px; z-index: 9001; display: flex; gap: 10px; flex-direction: column; align-items: flex-end;">
+    
+    
+
+    <div id="pizarra-tools" class="hidden" style="background: #1a1a1a; padding: 12px 10px; border-radius: 10px; border: 1px solid #444; display: flex; flex-direction: column; gap: 10px; align-items: center; min-width: 52px;">
+        
+        <!-- MODOS -->
+        <div style="display:flex; flex-direction:column; gap:4px; width:100%;">
+            <button id="pz-btn-lapiz" title="Lápiz" style="background:#333; color:white; border:1px solid #555; padding:6px; border-radius:6px; cursor:pointer; font-size:1em; transition:0.2s;">✏️</button>
+            <button id="pz-btn-resaltador" title="Resaltador" style="background:#333; color:white; border:1px solid #555; padding:6px; border-radius:6px; cursor:pointer; font-size:1em; transition:0.2s;">🖊️</button>
+            <button id="pz-btn-linea" title="Línea recta" style="background:#333; color:white; border:1px solid #555; padding:6px; border-radius:6px; cursor:pointer; font-size:1em; transition:0.2s;">📏</button>
+            <button id="pz-btn-borrador" title="Borrador" style="background:#333; color:white; border:1px solid #555; padding:6px; border-radius:6px; cursor:pointer; font-size:1em; transition:0.2s;"><i class="fa-solid fa-eraser"></i></button>
+        </div>
+
+        <!-- SEPARADOR -->
+        <div style="width:100%; height:1px; background:#333;"></div>
+
+        <!-- PALETA RÁPIDA -->
+        <div style="display:flex; flex-direction:column; gap:4px;">
+            <div id="pz-color-amarillo" title="Amarillo" style="width:28px;height:28px;border-radius:50%;background:#ffff00;cursor:pointer;border:2px solid #666;"></div>
+            <div id="pz-color-blanco" title="Blanco"   style="width:28px;height:28px;border-radius:50%;background:#ffffff;cursor:pointer;border:2px solid #555;"></div>
+            <div id="pz-color-cyan" title="Cian"     style="width:28px;height:28px;border-radius:50%;background:#00e5ff;cursor:pointer;border:2px solid #555;"></div>
+            <div id="pz-color-salmon" title="Rojo"     style="width:28px;height:28px;border-radius:50%;background:#ff6b6b;cursor:pointer;border:2px solid #555;"></div>
+            <div id="pz-color-verde" title="Verde"    style="width:28px;height:28px;border-radius:50%;background:#69ff47;cursor:pointer;border:2px solid #555;"></div>
+            <input type="color" id="pizarra-color" value="#ffff00" title="Color personalizado" style="width:28px;height:28px;padding:1px;border:2px solid #555;border-radius:50%;cursor:pointer;background:#333;">
+        </div>
+
+        <!-- SEPARADOR -->
+        <div style="width:100%; height:1px; background:#333;"></div>
+
+        <!-- GROSOR -->
+        <input type="range" id="pizarra-grosor" min="1" max="30" value="3" style="writing-mode:vertical-lr; direction:rtl; width:28px; height:70px; cursor:pointer;" title="Grosor">
+
+        <!-- SEPARADOR -->
+        <div style="width:100%; height:1px; background:#333;"></div>
+
+        <!-- ACCIONES -->
+        <button id="btn-undopizarra" title="Deshacer (Ctrl+Z)" style="background:#333; color:#aaa; border:1px solid #555; padding:6px; border-radius:6px; cursor:pointer; font-size:0.9em; width:100%;">&hookleftarrow;</button>
+        <button id="btn-limpiarpizarra" title="Borrar todo" style="background:#5a1a1a; color:#ff6b6b; border:1px solid #7a2a2a; padding:6px; border-radius:6px; cursor:pointer; font-size:0.9em; width:100%;"><i class="fa-regular fa-trash-can"></i></button>
+        <button id="btn-togglepizarra-2" title="Cerrar" style="background:#333; color:#888; border:1px solid #555; padding:6px; border-radius:6px; cursor:pointer; font-size:0.9em; width:100%;">&times;</button>
+    </div>
+</div>
+<div id="mobile-nav-bar">
+    <button id="btn-togglemobilemenu" class="mobile-nav-btn">
+        ☰<span>Menú</span>
+    </button>
+    <button id="btn-cerrarpanelesmoviles" class="mobile-nav-btn active">
+        <i class="fa-brands fa-fort-awesome"></i><span>Principal</span>
+    </button>
+    <button id="btn-togglemobilestats" class="mobile-nav-btn">
+    <i class="fa-solid fa-chart-column"></i>
+    <span>Estadísticas</span>
+</button>
+</div>
+<div id="ai-chat-widget" class="hidden">
+    <div class="chat-header">
+    <div style="display: flex; align-items: center; gap: 8px;">
+        <i class="fa-regular fa-eye"></i>
+        <span>EL OMNISCIENTE ESCUCHA</span>
+    </div>
+    <button id="btn-togglechat" style="background:none; border:none; color:#fff; cursor:pointer; font-size: 1.2em;">&times;</button>
+    </div>
+    <div id="chat-messages">
+        <div class="chat-msg system">
+            Mi nombre es Llama 3, funciono gracias a una API que puedes enlazar en ajustes. Si no tienes, puedes conseguirla gratis en <a href="https://console.groq.com/keys" target="_blank" style="color: #4CAF50; text-decoration: underline; cursor: pointer;"> https://console.groq.com/keys
+    </a>.<br>Es una llave privada, no la compartas a la ligera. Puedo leer el contenido de lo que estás estudiando ahora mismo y en base a eso contestarte, no necesitas enlazar nada.<br>Recuerda que lo que compartas con la IA ya no es privado.
+        </div>
+    </div>
+    <div class="chat-input-area">
+        <textarea id="ai-user-input" placeholder="Dile algo al todopoderoso"></textarea>
+        <button id="btn-send-ai">➤</button>
+    </div>
+</div>
+
+<button id="btn-open-chat" title="Invocar fuerza divina">
+    <i class="fa-regular fa-eye"></i>
+</button>
+
+<!-- MODAL AMIGOS -->
+<div id="modal-amigos" class="hidden" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:3000; display:flex; justify-content:center; align-items:center;">
+    <div style="background:var(--card-bg); border:1px solid #444; border-radius:8px; padding:25px; width:95%; max-width:500px; max-height:82vh; overflow-y:auto; box-sizing:border-box;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; border-bottom:1px solid #333; padding-bottom:15px;">
+            <h3 style="margin:0; color:var(--accent); font-size:1.1em;">Social</h3>
+            <button id="btn-cerrarmodalamigos" style="background:none; border:none; color:#888; cursor:pointer; font-size:1.3em; line-height:1;">✕</button>
+        </div>
+        <div id="amigos-contenido">
+            <p style="color:#888; text-align:center;">Cargando...</p>
+        </div>
+    </div>
+</div>
+<!-- (funciones sociales integradas en script principal) -->
+<!-- MODAL FILTROS -->
+<div id="modal-filtros" class="hidden" style="position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:2000; display:flex; justify-content:center; align-items:center; padding:16px; box-sizing:border-box;">
+    <div style="background:var(--card-bg); border:1px solid #444; border-radius:10px; width:95%; max-width:400px; max-height:88vh; display:flex; flex-direction:column; overflow:hidden;">
+
+        <!-- Header fijo -->
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-bottom:1px solid #333; flex-shrink:0;">
+            <h3 style="margin:0; font-size:0.9em; color:var(--text-main);">
+                <i class="fa-solid fa-filter" style="color:var(--accent); margin-right:6px;"></i>Filtros de estudio
+            </h3>
+            <button id="btn-cerrarmodalfiltros" style="background:rgba(255,82,82,0.15); border:1px solid rgba(255,82,82,0.5); color:#ff5252; border-radius:6px; width:28px; height:28px; cursor:pointer; font-size:1em; display:flex; align-items:center; justify-content:center; flex-shrink:0; line-height:1;">✕</button>
+        </div>
+
+        <!-- Cuerpo scrolleable -->
+        <div style="overflow-y:auto; padding:10px 14px; display:flex; flex-direction:column; gap:7px;">
+            <p style="font-size:0.8em; color:#888; margin-top:0;">
+            Pulsa los apartados para aplicar los filtros. En gris, no se aplican; en otro color, sí.</p>
+
+            <!-- checkbox oculto, fila clicable, icono como indicador -->
+            <input type="checkbox" id="check-filtro-hoy" style="display:none;">
+            <div id="btn-document-2" style="display:flex; align-items:center; gap:10px; cursor:pointer; padding:7px 10px; border-radius:6px; background:#1a1a1a; border:1px solid #2a2a2a; user-select:none;">
+                <i id="icon-hoy" class="fa-solid fa-globe" style="color:#555; font-size:1em; transition:color 0.2s; width:16px; text-align:center;"></i>
+                <span style="font-size:0.82em; color:#ccc;">Pendientes hoy</span>
+            </div>
+
+            <input type="checkbox" id="check-filtro-nuevas" style="display:none;">
+            <div id="btn-document-3" style="display:flex; align-items:center; gap:10px; cursor:pointer; padding:7px 10px; border-radius:6px; background:#1a1a1a; border:1px solid #2a2a2a; user-select:none;">
+                <i id="icon-nuevas" class="fa-solid fa-user-astronaut" style="color:#555; font-size:1em; transition:color 0.2s; width:16px; text-align:center;"></i>
+                <span style="font-size:0.82em; color:#ccc;">Nunca repasadas</span>
+            </div>
+
+            <div style="padding:7px 10px; border-radius:6px; background:#1a1a1a; border:1px solid #2a2a2a;">
+                <input type="checkbox" id="check-filtro-tema" style="display:none;">
+                <div id="btn-document-4" style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:5px; user-select:none;">
+                    <i id="icon-tema" class="fa-solid fa-shuttle-space" style="color:#555; font-size:1em; transition:color 0.2s; width:16px; text-align:center;"></i>
+                    <span style="font-size:0.82em; color:#ccc;">Temas</span>
+                </div>
+                <input type="text" id="filtro-tema-val" placeholder="1,2  ó  1-5  ó  1-3,7" style="width:100%; box-sizing:border-box; background:#111; border:1px solid #444; border-radius:4px; color:#ddd; font-size:0.78em; padding:4px 7px; outline:none;">
+            </div>
+
+            <div style="padding:7px 10px; border-radius:6px; background:#1a1a1a; border:1px solid #2a2a2a;">
+                <input type="checkbox" id="check-filtro-rango" style="display:none;">
+                <div id="btn-document-5" style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:5px; user-select:none;">
+                    <i id="icon-rango" class="fa-solid fa-moon" style="color:#555; font-size:1em; transition:color 0.2s; width:16px; text-align:center;"></i>
+                    <span style="font-size:0.82em; color:#ccc;">Rango de índices</span>
+                </div>
+                <input type="text" id="filtro-rango-val" placeholder="5-12  ó  1,3,7-10" style="width:100%; box-sizing:border-box; background:#111; border:1px solid #444; border-radius:4px; color:#ddd; font-size:0.78em; padding:4px 7px; outline:none;">
+            </div>
+
+            <div style="padding:7px 10px; border-radius:6px; background:#1a1a1a; border:1px solid #2a2a2a;">
+                <input type="checkbox" id="check-filtro-tipo" style="display:none;">
+                <div id="btn-document-6" style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:7px; user-select:none;">
+                    <i id="icon-tipo" class="fa-solid fa-satellite" style="color:#555; font-size:1em; transition:color 0.2s; width:16px; text-align:center;"></i>
+                    <span style="font-size:0.82em; color:#ccc;">Tipo / Apartado</span>
+                </div>
+                <div id="filtro-tipo-grid" style="display:flex; flex-wrap:wrap; gap:5px;"></div>
+            </div>
+
+            <div style="padding:7px 10px; border-radius:6px; background:#1a1a1a; border:1px solid #2a2a2a;">
+                <input type="checkbox" id="check-filtro-dificultad" style="display:none;">
+                <div id="btn-document-7" style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:7px; user-select:none;">
+                    <i id="icon-dificultad" class="fa-solid fa-meteor" style="color:#555; font-size:1em; transition:color 0.2s; width:16px; text-align:center;"></i>
+                    <span style="font-size:0.82em; color:#ccc;">Por Fase de Aprendizaje (FSRS)</span>
+                </div>
+                <div style="display:flex; gap:5px; flex-wrap:wrap;">
+                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-size:0.78em; color:#4caf50; background:rgba(76,175,80,0.1); border:1px solid rgba(76,175,80,0.4); border-radius:12px; padding:3px 10px; user-select:none;">
+                        <input type="checkbox" id="check-dif-1" style="accent-color:#4caf50;"> Mantenimiento (Fácil)
+                    </label>
+                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-size:0.78em; color:#2196f3; background:rgba(33,150,243,0.1); border:1px solid rgba(33,150,243,0.4); border-radius:12px; padding:3px 10px; user-select:none;">
+                        <input type="checkbox" id="check-dif-2" style="accent-color:#2196f3;"> Retención (Bien)
+                    </label>
+                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-size:0.78em; color:#ff9800; background:rgba(255,152,0,0.1); border:1px solid rgba(255,152,0,0.4); border-radius:12px; padding:3px 10px; user-select:none;">
+                        <input type="checkbox" id="check-dif-3" style="accent-color:#ff9800;"> Consolidación (Difícil)
+                    </label>
+                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-size:0.78em; color:#f44336; background:rgba(244,67,54,0.1); border:1px solid rgba(244,67,54,0.4); border-radius:12px; padding:3px 10px; user-select:none;">
+                        <input type="checkbox" id="check-dif-4" style="accent-color:#f44336;"> Reaprendizaje (Crítica)
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer fijo -->
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 14px; border-top:1px solid #333; flex-shrink:0;">
+            <button id="btn-limpiarfiltros" style="background:transparent; border:1px solid #444; color:#888; font-size:0.78em; cursor:pointer; padding:4px 10px; border-radius:4px;">✕ Limpiar</button>
+            <span id="contador-filtro-modal" style="font-size:0.78em; color:#666; font-family:monospace;"></span>
+            <button id="btn-cerrarmodalfiltros-2" style="background:rgba(143, 47, 162,0.15); border:1px solid #AE39C6; color:#AE39C6; font-size:0.8em; cursor:pointer; padding:5px 14px; border-radius:6px; font-weight:bold;">Aplicar</button>
+        </div>
+    </div>
+</div>
+
+
+<!-- Módulos cargados en orden de dependencias -->
+<script src="src/js/state.js"></script>
+<script src="src/js/db.js" defer></script>
+<script src="src/js/domain.js" defer></script>
+<script src="src/js/study-engine.js" defer></script>
+<script src="src/js/telemetry.js" defer></script>
+<script src="src/js/exam.js" defer></script> 
+<script src="src/js/pomodoro.js" defer></script> 
+<script src="src/js/pdf-manager.js" defer></script> 
+<script src="src/js/ui.js" defer></script>
+<script src="src/js/ai.js" defer></script> 
+<script src="src/js/parser.js" defer></script>
+<script src="src/js/data-io.js" defer></script> <script src="src/js/pizarra.js" defer></script>
+<script src="src/js/firebase.js" defer></script>
+<script src="src/js/widget-manager.js"></script>
+<script src="src/js/app.js" defer></script>
+</body>

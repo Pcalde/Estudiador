@@ -69,12 +69,17 @@ const EXAM = (() => {
         if (_timer) { clearInterval(_timer); _timer = null; }
     }
 
+    function _guardarRespuestaActual() {
+        const input = document.getElementById('ex-r-respuesta');
+        if (input) _respuestas[_idx] = input.value;
+    }
+
     // ── CONFIG ────────────────────────────────────────────────────
     function abrir() {
         if (typeof Logger !== 'undefined') Logger.info('Modo Examen: abriendo');
 
-        // Usamos el global directo: el listener de teclado en app.js lo lee así
-        window._examenActivo = true;
+        // Fuga de estado corregida. Inyección en contenedor reactivo.
+        State.set('examenActivo', true);
 
         document.getElementById('examen-modal').style.display = 'flex';
         _show('examen-config');
@@ -253,29 +258,29 @@ const EXAM = (() => {
     }
 
     function realGuardarRespuesta() {
-        _respuestas[_idx] = document.getElementById('ex-r-respuesta').value;
+        _guardarRespuestaActual();
         _realRender();
     }
 
     function realIrA(i) {
-        _respuestas[_idx] = document.getElementById('ex-r-respuesta').value;
+        _guardarRespuestaActual();
         _idx = i;
         _realRender();
     }
 
     function realSiguiente() {
-        _respuestas[_idx] = document.getElementById('ex-r-respuesta').value;
+        _guardarRespuestaActual();
         if (_idx < _cola.length - 1) { _idx++; _realRender(); }
     }
 
     function realAnterior() {
-        _respuestas[_idx] = document.getElementById('ex-r-respuesta').value;
+        _guardarRespuestaActual();
         if (_idx > 0) { _idx--; _realRender(); }
     }
 
     function realEntregar() {
         _clearTimer();
-        _respuestas[_idx] = document.getElementById('ex-r-respuesta').value;
+        _guardarRespuestaActual();
         if (typeof Logger !== 'undefined') Logger.info('Examen real entregado');
         _show('examen-correccion');
         _renderCorreccion();
@@ -283,42 +288,48 @@ const EXAM = (() => {
 
     // ── CORRECCIÓN ────────────────────────────────────────────────
     function _renderCorreccion() {
-        document.getElementById('ex-c-lista').innerHTML = _cola.map((c, i) => {
-            const color = TIPOS_COLORES[c.Apartado] || '#888';
-            const botonesNota = [1, 2, 3, 4].map(n => {
-                const bg  = ['', 'rgba(33,150,243,0.2)', 'rgba(76,175,80,0.2)', 'rgba(255,152,0,0.2)', 'rgba(244,67,54,0.2)'][n];
-                const bc  = ['', '#2196F3', '#4CAF50', '#FF9800', '#f44336'][n];
-                const lbl = ['', 'Fácil', 'Bien', 'Difícil', 'Mal'][n];
-                return `<button onclick="window.examenCorreccionPuntuar(${i},${n})" id="ex-c-btn-${i}-${n}"
-                    style="padding:7px 2px;background:${bg};border:1px solid ${bc};color:${bc};
-                           border-radius:6px;cursor:pointer;font-size:0.8em;font-weight:bold;">${n} ${lbl}</button>`;
-            }).join('');
+        const fragment = document.createDocumentFragment();
 
-            return `
-            <div id="ex-c-item-${i}" style="border:1px solid #2a2a2a;border-radius:8px;padding:14px;background:#151515;">
-                <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">
-                    <span style="font-size:0.7em;padding:1px 8px;border-radius:10px;background:${color}22;color:${color};border:1px solid ${color};">${c.Apartado || ''}</span>
-                    <span style="font-size:0.75em;color:#555;">Tema ${c.Tema || '?'}</span>
-                    <span style="font-size:0.75em;color:#888;margin-left:auto;">P${i + 1}</span>
+        _cola.forEach((c, i) => {
+            const color = TIPOS_COLORES[c.Apartado] || '#888';
+            const card = document.createElement('div');
+            card.className = 'exam-correction-card';
+            
+            const respuestaUsuario = (_respuestas[i] || '').trim() || '<em style="color:#555">(en blanco)</em>';
+            
+            let botonesNota = '';
+            [1, 2, 3, 4].forEach(n => {
+                const lbl = ['', 'Fácil', 'Bien', 'Difícil', 'Mal'][n];
+                botonesNota += `<button onclick="window.examenCorreccionPuntuar(${i},${n})" id="ex-c-btn-${i}-${n}" class="exam-btn-grade grade-${n}">${n} ${lbl}</button>`;
+            });
+
+            card.innerHTML = `
+                <div class="exam-card-header">
+                    <span class="exam-badge" style="background:${color}22; color:${color}; border: 1px solid ${color};">${c.Apartado || ''}</span>
+                    <span class="exam-meta">Tema ${c.Tema || '?'}</span>
+                    <span class="exam-meta right">P${i + 1}</span>
                 </div>
-                <div style="font-weight:bold;color:#eee;margin-bottom:10px;">${c.Titulo || ''}</div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;font-size:0.85em;">
+                <div class="exam-card-title">${c.Titulo || ''}</div>
+                <div class="exam-card-grid">
                     <div>
-                        <div style="color:#888;margin-bottom:4px;font-size:0.8em;text-transform:uppercase;">Tu respuesta</div>
-                        <div style="background:#1a1a1a;border-radius:5px;padding:8px;color:#aaa;white-space:pre-wrap;min-height:40px;">
-                            ${(_respuestas[i] || '').trim() || '<em style="color:#555">(en blanco)</em>'}
-                        </div>
+                        <div class="exam-col-label">Tu respuesta</div>
+                        <div class="exam-ans-box user-ans">${respuestaUsuario}</div>
                     </div>
                     <div>
-                        <div style="color:#888;margin-bottom:4px;font-size:0.8em;text-transform:uppercase;">Solución</div>
-                        <div style="background:#1a1a1a;border-radius:5px;padding:8px;color:#ccc;line-height:1.5;min-height:40px;">
-                            ${c.Contenido || ''}
-                        </div>
+                        <div class="exam-col-label">Solución</div>
+                        <div class="exam-ans-box correct-ans">${c.Contenido || ''}</div>
                     </div>
                 </div>
-                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">${botonesNota}</div>
-            </div>`;
-        }).join('');
+                <div class="exam-grade-grid">${botonesNota}</div>
+            `;
+            fragment.appendChild(card);
+        });
+
+        const lista = document.getElementById('ex-c-lista');
+        if (lista) {
+            lista.innerHTML = '';
+            lista.appendChild(fragment);
+        }
 
         if (typeof MathJax !== 'undefined')
             MathJax.typesetPromise([document.getElementById('ex-c-lista')]).catch(() => {});
@@ -364,7 +375,6 @@ const EXAM = (() => {
         document.getElementById('ex-res-asig').innerText =
             `${_config.asig} · ${total} tarjetas · ${_config.modo === 'flash' ? 'Repaso rápido' : 'Examen real'}`;
 
-        // Bug corregido: el original solo extraía [estrellas, titulo], colorTexto quedaba undefined
         const [estrellas, titulo, colorTexto] =
             notaFinal >= 9   ? [5, 'Sobresaliente',      '#FFD700'] :
             notaFinal >= 8   ? [4, 'Notable alto',        '#bb86fc'] :
@@ -376,23 +386,41 @@ const EXAM = (() => {
 
         document.getElementById('ex-res-emoji').innerHTML = generarBarraEstrellas(estrellas);
         const elTitulo = document.getElementById('ex-res-titulo');
-        elTitulo.innerText   = titulo;
-        elTitulo.style.color = colorTexto;
+        if (elTitulo) {
+            elTitulo.innerText   = titulo;
+            elTitulo.style.color = colorTexto;
+        }
 
         const falladas = _cola.filter((_, i) => pts[i] >= 3);
-        document.getElementById('ex-res-lista').innerHTML = falladas.length === 0
-            ? '<p style="color:#4CAF50;text-align:center;"><i class="fa-solid fa-check"></i> Todo correcto o bien</p>'
-            : `<p style="color:#888;margin:0 0 8px 0;">A repasar (${falladas.length}):</p>` +
-              falladas.map(c =>
-                  `<div style="padding:4px 0;border-bottom:1px solid #222;color:#ccc;">
-                      <span style="color:#f44336;margin-right:5px;">✖</span>
-                      <strong>${c.Titulo || '?'}</strong>
-                      <span style="color:#555;font-size:0.85em;"> · ${c.Apartado || ''}</span>
-                   </div>`
-              ).join('');
+        const listaEl = document.getElementById('ex-res-lista');
+        if (listaEl) {
+            listaEl.innerHTML = falladas.length === 0
+                ? '<p style="color:#4CAF50;text-align:center;"><i class="fa-solid fa-check"></i> Todo correcto o bien</p>'
+                : `<p style="color:#888;margin:0 0 8px 0;">A repasar (${falladas.length}):</p>` +
+                  falladas.map(c =>
+                      `<div style="padding:4px 0;border-bottom:1px solid #222;color:#ccc;">
+                          <span style="color:#f44336;margin-right:5px;">✖</span>
+                          <strong>${c.Titulo || '?'}</strong>
+                          <span style="color:#555;font-size:0.85em;"> · ${c.Apartado || ''}</span>
+                       </div>`
+                  ).join('');
+        }
 
         if (typeof Logger !== 'undefined')
             Logger.info(`Examen terminado: nota ${niceNota}, bien=${bien}, repasar=${aRep}`);
+
+        // DELEGACIÓN ARQUITECTÓNICA: Emitimos el payload para que Telemetry lo recoja
+        if (typeof EventBus !== 'undefined') {
+            EventBus.emit('EXAMEN_COMPLETADO', {
+                fecha: new Date().toISOString(),
+                asignatura: _config.asig,
+                modo: _config.modo,
+                nota: parseFloat(niceNota),
+                total: total,
+                bien: bien,
+                mal: aRep
+            });
+        }
     }
 
     function repetir() {
@@ -411,12 +439,11 @@ const EXAM = (() => {
 
     function cerrar() {
         _clearTimer();
-        // Global directo: el listener de teclado en app.js lo lee como _examenActivo
-        window._examenActivo = false;
+        State.set('examenActivo', false);
         const modal = document.getElementById('examen-modal');
         if (modal) {
             modal.style.display = 'none';
-            modal.classList.remove('active'); // por si el CSS usa esta clase para animaciones
+            modal.classList.remove('active'); 
         }
     }
 

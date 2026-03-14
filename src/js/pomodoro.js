@@ -53,11 +53,14 @@ const POMODORO = (() => {
     function _updatePomosToLongBreak() {
         const ciclos = State.get('pomoCycles') || 0;
         const modo = State.get('currentMode');
-        const ciclosHechos = ciclos % 4;
-        const faltan = 4 - ciclosHechos;
+        const settings = State.get('pomoSettings') || {};
+        const ciclosMax = settings.cyclesBeforeLong || 4;
+        
+        const ciclosHechos = ciclos % ciclosMax;
+        const faltan = ciclosMax - ciclosHechos;
         
         const infoElem = document.getElementById('mini-cycle-info');
-        if(infoElem) {
+        if (infoElem) {
             if (faltan === 1 && modo === 'work') {
                 infoElem.innerHTML = "Siguiente: <strong>LARGO</strong>";
                 infoElem.style.color = "var(--accent)";
@@ -111,11 +114,42 @@ const POMODORO = (() => {
         UI.updateTimerDisplay(State.get('timeLeft'), State.get('currentMode'));
     }
 
+    function _resolverAsignaturaDeTarea(taskText) {
+        let asignaturaParaRegistro = "General"; 
+        const match = taskText.match(/\[(.*?)\]/);
+        
+        if (match) {
+            let rawTag = match[1].replace(/#/g, '').trim(); 
+            if (rawTag.includes(':')) {
+                const partes = rawTag.split(':');
+                const posible = partes[partes.length - 1].trim();
+                if (_esAsignaturaValida(posible)) return posible;
+            }
+            
+            const proys = State.get('projects') || [];
+            const proyecto = proys.find(p => (typeof p === 'object' ? p.nombre : p).toLowerCase() === rawTag.toLowerCase());
+            
+            if (proyecto && typeof proyecto === 'object' && proyecto.asignatura) {
+                asignaturaParaRegistro = proyecto.asignatura;
+            } else if (_esAsignaturaValida(rawTag)) {
+                const bib = State.get('biblioteca') || {};
+                const nombreReal = Object.keys(bib).find(k => k.toLowerCase() === rawTag.toLowerCase());
+                asignaturaParaRegistro = nombreReal || rawTag;
+            } else {
+                asignaturaParaRegistro = rawTag;
+            }
+        }
+        return asignaturaParaRegistro;
+    }
+
     function finishPomodoro() {
         pauseTimer();
         _playAlarm();
 
-        let modoActual = State.get('currentMode');
+        const modoActual = State.get('currentMode');
+        const settings = State.get('pomoSettings') || {};
+        const ciclosMax = settings.cyclesBeforeLong || 4; // Desacoplamiento de la constante
+        
         let nextMode = 'work';
         let asignaturaParaRegistro = "General"; 
 
@@ -123,34 +157,13 @@ const POMODORO = (() => {
             const list = State.get('taskList') || [];
             const idx = list.findIndex(t => t.active);
             
-            if(idx !== -1) { 
+            if (idx !== -1) { 
                 list[idx].completed++; 
                 saveTasks(); 
-                
-                const match = list[idx].text.match(/\[(.*?)\]/);
-                if (match) {
-                    let rawTag = match[1].replace(/#/g, '').trim(); 
-                    if (rawTag.includes(':')) {
-                        const partes = rawTag.split(':');
-                        const posible = partes[partes.length - 1].trim();
-                        if (_esAsignaturaValida(posible)) asignaturaParaRegistro = posible;
-                    } else {
-                        const proys = State.get('projects') || [];
-                        const proyecto = proys.find(p => (typeof p === 'object' ? p.nombre : p).toLowerCase() === rawTag.toLowerCase());
-                        if (proyecto && typeof proyecto === 'object' && proyecto.asignatura) {
-                            asignaturaParaRegistro = proyecto.asignatura;
-                        } else if (_esAsignaturaValida(rawTag)) {
-                            const bib = State.get('biblioteca') || {};
-                            const nombreReal = Object.keys(bib).find(k => k.toLowerCase() === rawTag.toLowerCase());
-                            asignaturaParaRegistro = nombreReal || rawTag;
-                        } else {
-                            asignaturaParaRegistro = rawTag;
-                        }
-                    }
-                }
+                asignaturaParaRegistro = _resolverAsignaturaDeTarea(list[idx].text);
             }
             
-            // Emitir evento de dominio en lugar de llamar a app.js directamente
+            // Emisión de telemetría limpia. Sin mutaciones directas de UI.
             const evento = new CustomEvent('pomodoro:finished', { 
                 detail: { asignatura: asignaturaParaRegistro } 
             });
@@ -158,7 +171,8 @@ const POMODORO = (() => {
             
             let ciclos = (State.get('pomoCycles') || 0) + 1;
             State.set('pomoCycles', ciclos);
-            if (ciclos > 0 && ciclos % 4 === 0) nextMode = 'long';
+            
+            if (ciclos > 0 && ciclos % ciclosMax === 0) nextMode = 'long';
             else nextMode = 'short';
 
         } else {
@@ -168,7 +182,6 @@ const POMODORO = (() => {
         document.title = "🔔 " + (nextMode === 'work' ? "WORK" : "BREAK");
         setMode(nextMode);
 
-        const settings = State.get('pomoSettings');
         if (settings.autoStart === true) {
             setTimeout(() => { startTimer(); }, 1500);
         }
@@ -181,19 +194,6 @@ const POMODORO = (() => {
         const enBiblio = Object.keys(bib).some(k => k.toLowerCase() === n);
         const enColores = (typeof COLORES_ASIGNATURAS !== 'undefined') && Object.keys(COLORES_ASIGNATURAS).some(k => k.toLowerCase() === n);
         return enBiblio || enColores;
-    }
-
-    function _playAlarm() {
-        const audio = document.getElementById('alarm-audio');
-        if(audio) {
-            const promesa = audio.play();
-            if (promesa !== undefined) {
-                promesa.catch(error => {
-                    if(typeof Logger !== 'undefined') Logger.warn("Fallo audio, usando fallback.", error);
-                    _generarBeep();
-                });
-            }
-        } else _generarBeep();
     }
 
     function _generarBeep() {
@@ -209,17 +209,42 @@ const POMODORO = (() => {
 
     // --- GESTIÓN DE TAREAS ---
 
-    function showTaskForm() {
+
+    function showTaskForm(editIdx = -1) {
+        State.set('editingTaskIndex', editIdx);
+        
         document.getElementById('add-task-trigger').classList.add('hidden');
         document.getElementById('task-form-panel').classList.remove('hidden');
-        document.getElementById('new-task-title').focus();
+        
+        const inputTitle = document.getElementById('new-task-title');
+        const inputEst = document.getElementById('new-task-est');
+        
+        if (editIdx >= 0) {
+            const list = State.get('taskList') || [];
+            const t = list[editIdx];
+            if (t) {
+                // Parseo inverso para rellenar el formulario limpiamente
+                let rawText = t.text;
+                const match = rawText.match(/\[(.*?)\]$/);
+                if (match) {
+                    const projSelect = document.getElementById('new-task-project');
+                    if (projSelect) projSelect.value = match[1];
+                    rawText = rawText.replace(/\[.*?\]$/, '').trim();
+                }
+                inputTitle.value = rawText;
+                inputEst.value = t.est;
+            }
+        } else {
+            inputTitle.value = "";
+            inputEst.value = 1;
+        }
+        inputTitle.focus();
     }
 
     function hideTaskForm() {
         document.getElementById('add-task-trigger').classList.remove('hidden');
         document.getElementById('task-form-panel').classList.add('hidden');
-        document.getElementById('new-task-title').value = "";
-        document.getElementById('new-task-est').value = 1;
+        State.set('editingTaskIndex', -1);
     }
 
     function adjPomo(delta) {
@@ -229,17 +254,28 @@ const POMODORO = (() => {
     }
 
     function saveNewTask() {
-        const t = document.getElementById('new-task-title').value;
+        const t = document.getElementById('new-task-title').value.trim();
         const est = parseInt(document.getElementById('new-task-est').value) || 1;
-        const proj = document.getElementById('new-task-project').value;
+        const projInput = document.getElementById('new-task-project');
+        const proj = projInput ? projInput.value : "";
         
-        if(!t || t.trim() === "") return;
+        if (!t) return;
         
         const tag = proj ? `[${proj}]` : ""; 
         const taskText = tag ? `${t} ${tag}` : t;
         
         const list = State.get('taskList') || [];
-        list.push({ text: taskText, est: est, completed: 0, active: false, done: false });
+        const editIdx = State.get('editingTaskIndex');
+        
+        if (editIdx >= 0 && editIdx < list.length) {
+            // Actualización In-Place
+            list[editIdx].text = taskText;
+            list[editIdx].est = est;
+        } else {
+            // Inserción nueva
+            list.push({ text: taskText, est: est, completed: 0, active: false, done: false });
+        }
+        
         State.set('taskList', list);
         saveTasks();
         renderTasks(); 
@@ -248,73 +284,74 @@ const POMODORO = (() => {
 
     function renderTasks() { 
         const list = State.get('taskList') || [];
-        UI.renderTasks(list); 
-        UI.updateFinishTime(list, State.get('pomoSettings'));
-        UI.actualizarDesplegableMini(list);
+        if (typeof UI !== 'undefined' && UI.renderTasks) {
+            UI.renderTasks(list); 
+            UI.updateFinishTime(list, State.get('pomoSettings'));
+            UI.actualizarDesplegableMini(list);
+        }
     }
 
-    function updateFinishTime() { UI.updateFinishTime(State.get('taskList') || [], State.get('pomoSettings')); }
+    function updateFinishTime() { 
+        if (typeof UI !== 'undefined' && UI.updateFinishTime) {
+            UI.updateFinishTime(State.get('taskList') || [], State.get('pomoSettings')); 
+        }
+    }
 
     function activarTareaDesdeMini(indexStr) {
         const idx = parseInt(indexStr);
         const list = State.get('taskList') || [];
         if (idx === -1) {
             list.forEach(t => t.active = false);
+            State.set('taskList', list);
+            saveTasks();
+            renderTasks();
         } else if (idx >= 0 && list[idx]) {
             toggleActive(idx);
-            return; 
         }
-        State.set('taskList', list);
-        saveTasks();
-        renderTasks();
     }
     
     function toggleActive(i) {
         const list = State.get('taskList') || [];
-        list.forEach((t,x) => t.active = (x === i)); 
+        
+        // Optimización O(1) de memoria. No iterar toda la matriz.
+        const prevIdx = list.findIndex(t => t.active);
+        if (prevIdx !== -1 && prevIdx !== i) list[prevIdx].active = false;
+        
+        if (list[i]) list[i].active = !list[i].active; 
+        
         State.set('taskList', list);
-        saveTasks(); renderTasks();
+        saveTasks(); 
+        renderTasks();
     }
 
     function toggleDone(i) {
         const list = State.get('taskList') || [];
-        list[i].done = !list[i].done; 
+        if (list[i]) list[i].done = !list[i].done; 
         State.set('taskList', list);
-        saveTasks(); renderTasks();
+        saveTasks(); 
+        renderTasks();
     }
 
     function editTask(i, ev) {
-        if(ev) ev.stopPropagation();
-        const list = State.get('taskList') || [];
-        const t = list[i];
-        
-        const nuevoTexto = prompt("Editar nombre de la tarea:", t.text);
-        if (nuevoTexto === null) return; 
-        
-        const nuevaEst = prompt("Editar estimación de Pomodoros:", t.est);
-        if (nuevaEst === null) return; 
-
-        const estInt = parseInt(nuevaEst);
-        if (nuevoTexto.trim() !== "" && !isNaN(estInt) && estInt > 0) {
-            t.text = nuevoTexto;
-            t.est = estInt;
-            State.set('taskList', list);
-            saveTasks();
-            renderTasks();
-        } else {
-            alert("Datos inválidos. La estimación debe ser un número mayor a 0.");
-        }
+        if (ev) ev.stopPropagation();
+        // Cero diálogos nativos. Delegación pura a la UI construida.
+        showTaskForm(i);
     }
 
     function deleteTask(i) {
         const list = State.get('taskList') || [];
-        list.splice(i,1); 
+        list.splice(i, 1); 
         State.set('taskList', list);
-        saveTasks(); renderTasks();
+        saveTasks(); 
+        renderTasks();
     }
 
     function saveTasks() {
+        // Mantenemos la doble capa por la transición de Firebase, pero acoplado al Bus
         localStorage.setItem('pomo_tasks', JSON.stringify(State.get('taskList')));
+        if (typeof EventBus !== 'undefined') {
+            EventBus.emit('STATE_CHANGED', { keys: ['taskList'] });
+        }
         const evt = new CustomEvent('pomodoro:tasksUpdated');
         document.dispatchEvent(evt);
     }

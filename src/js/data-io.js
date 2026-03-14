@@ -19,13 +19,10 @@ const DataIO = (() => {
     // ════════════════════════════════════════════════════════════
     // 1. IMPORTACIÓN LaTeX (Corregida: Respeta títulos manuales)
     // ════════════════════════════════════════════════════════════
-    function procesarImportacionLatex() {
+    function procesarImportacionLatex(rawInput, temaDefault) {
         const asigActual = State.get('nombreAsignaturaActual');
         if (!asigActual) { alert("Selecciona una asignatura primero."); return; }
 
-        const rawInput = document.getElementById('import-area-latex').value;
-        const temaDefault = parseInt(document.getElementById('latex-tema-input').value) || 1;
-        
         const newCards = (typeof Parser !== 'undefined') ? Parser.parseLatexToCards(rawInput, temaDefault) : [];
         if (newCards.length === 0) { alert("No se detectaron comandos válidos."); return; }
 
@@ -183,7 +180,12 @@ const DataIO = (() => {
 })();
 
 // Proxies Globales para compatibilidad con app.js
-window.procesarImportacionLatex    = () => DataIO.procesarImportacionLatex();
+window.procesarImportacionLatex = () => {
+    // La lectura del DOM ocurre en el límite de la aplicación, no en la capa de datos.
+    const rawInput = document.getElementById('import-area-latex')?.value || '';
+    const temaDefault = parseInt(document.getElementById('latex-tema-input')?.value) || 1;
+    DataIO.procesarImportacionLatex(rawInput, temaDefault);
+};
 window.procesarImportacion         = () => DataIO.procesarImportacion();
 window.descargarAsignaturaActual   = () => DataIO.descargarAsignaturaActual();
 window.exportarBackup              = () => DataIO.exportarBackup();

@@ -271,12 +271,20 @@
         const settings = Util.loadLS('pomo_settings');
         if (settings) {
             pomoSettings = settings;
-            const ids = { 'set-work': 'work', 'set-short': 'short', 'set-long': 'long' };
-            const defaults = { work: 25, short: 5, long: 15 };
+            // Añadimos 'set-cycles' al mapa de IDs
+            const ids = { 
+                'set-work': 'work', 
+                'set-short': 'short', 
+                'set-long': 'long',
+                'set-cycles': 'cyclesBeforeLong' 
+            };
+            const defaults = { work: 25, short: 5, long: 15, cyclesBeforeLong: 4 };
+            
             Object.entries(ids).forEach(([elId, key]) => {
                 const el = document.getElementById(elId);
                 if (el) el.value = pomoSettings[key] ?? defaults[key];
             });
+            
             const elAuto = document.getElementById('check-auto-start');
             if (elAuto) elAuto.checked = !!pomoSettings.autoStart;
         }
@@ -814,7 +822,9 @@ function renderFechasList() { UI.renderFechasList(fechasClave); }
         pomoSettings.work = parseInt(document.getElementById('set-work').value) || 35;
         pomoSettings.short = parseInt(document.getElementById('set-short').value) || 5;
         pomoSettings.long = parseInt(document.getElementById('set-long').value) || 15;
+        pomoSettings.cyclesBeforeLong = parseInt(document.getElementById('set-cycles').value) || 4;
         pomoSettings.autoStart = document.getElementById('check-auto-start').checked;
+        
         State.set('pomoSettings', pomoSettings);
         localStorage.setItem('pomo_settings', JSON.stringify(pomoSettings));
     }
@@ -1328,27 +1338,6 @@ function renderFechasList() { UI.renderFechasList(fechasClave); }
     }
 
 
-    // Atajos de teclado para el examen — SOLO activos cuando _examenActivo=true
-    document.addEventListener('keydown', (ev) => {
-        if (!_examenActivo) return;
-        const tag = ev.target.tagName;
-        // No interferir cuando el usuario está escribiendo en el textarea del examen real
-        if (tag === 'TEXTAREA') return;
-
-        if (ev.key === 'Enter') {
-            const btnR = document.getElementById('ex-f-btn-revelar');
-            if (btnR && btnR.style.display !== 'none') { ev.preventDefault(); examenFlashRevelar(); }
-            return;
-        }
-        // 1-4: calificar en modo flash
-        if (['1','2','3','4'].includes(ev.key)) {
-            const val = document.getElementById('ex-f-valoracion');
-            if (val && val.style.display !== 'none') {
-                ev.preventDefault();
-                examenFlashPuntuar(parseInt(ev.key));
-            }
-        }
-    });
 
     // ── Bootloader Asíncrono Unificado ──────────────────────────────
     async function arrancarAplicacion() {
@@ -1426,6 +1415,12 @@ function renderFechasList() { UI.renderFechasList(fechasClave); }
      * @sideEffects Inicializa variables globales y acopla listeners al DOM.
      */
     document.addEventListener('DOMContentLoaded', async () => {
+        // 1. Registrar el escuchador del EventBus para el historial de exámenes
+        if (typeof EventBus !== 'undefined') {
+            EventBus.on('EXAMEN_COMPLETADO', (payload) => {
+                if (typeof window.registrarExamen === 'function') window.registrarExamen(payload);
+            });
+        }
         // 1. BLOQUEO: Esperamos a que la base de datos local unificada cargue
         await arrancarAplicacion();
 
@@ -1490,22 +1485,48 @@ function renderFechasList() { UI.renderFechasList(fechasClave); }
                 
             });
         }
+        
 
         // --- B. CONTROLADOR DE TECLADO (GLOBAL) ---
         document.addEventListener('keydown', (e) => {
-            if (!e.key) return; // GUARD: Previene colapsos con eventos sintéticos o teclados virtuales
+            if (!e.key) return;
             
             const key = e.key.toLowerCase();
             const tag = e.target.tagName;
             const isInput = (tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable || tag === 'SELECT');
 
-            // Detectar si estamos en el Editor Amigable
+            // 1. PRIORIDAD CRÍTICA: Modo Examen
+            if (State.get('examenActivo')) {
+                const isFlash = document.getElementById('examen-flash')?.style.display === 'block';
+                if (!isFlash) return; 
+                if (isInput) return;
+
+                const btnRevelar = document.getElementById('ex-f-btn-revelar');
+                const isRevelado = btnRevelar && btnRevelar.style.display === 'none';
+
+                if ((e.code === 'Space' || key === 'enter') && !isRevelado) {
+                    e.preventDefault();
+                    if (typeof window.examenFlashRevelar === 'function') window.examenFlashRevelar();
+                    if (typeof simularClickVisual === 'function') simularClickVisual('#ex-f-btn-revelar');
+                    return;
+                }
+
+                if (isRevelado && ['1', '2', '3', '4'].includes(key)) {
+                    e.preventDefault();
+                    window.examenFlashPuntuar(parseInt(key));
+                    const suffix = key === '1' ? '' : `-${key}`;
+                    if (typeof simularClickVisual === 'function') simularClickVisual(`#btn-examenflashpuntuar${suffix}`);
+                    return;
+                }
+                return; 
+            }
+
+            // 2. CONTEXTO: Editor Amigable (Modo Power User)
             const editorCard = document.getElementById('editor-card');
             const isEditorActive = editorCard && !editorCard.classList.contains('hidden');
 
-            // --- MODO POWER USER: Navegar en el editor INCLUSO mientras escribes ---
             if (isEditorActive) {
-                // Usamos la tecla Alt + Flechas/A/D para saltar de tarjeta sin perder el foco
+                // Navegar con Alt incluso si el foco está en un input
                 if (e.altKey && (key === 'a' || key === 'arrowleft')) {
                     e.preventDefault();
                     if(typeof simularClickVisual === 'function') simularClickVisual('#btn-edit-prev');
@@ -1519,7 +1540,7 @@ function renderFechasList() { UI.renderFechasList(fechasClave); }
                     return;
                 }
                 
-                // Si NO estamos escribiendo texto, permitimos las teclas normales también
+                // Si NO estamos escribiendo, permitimos A/D y Flechas simples
                 if (!isInput) {
                     if (key === 'a' || key === 'arrowleft') {
                         e.preventDefault();
@@ -1536,91 +1557,82 @@ function renderFechasList() { UI.renderFechasList(fechasClave); }
                 }
             }
 
-            // 1. Evitar disparar el resto de atajos globales si estamos escribiendo texto
-            if(isInput) return;
+            // 3. BLOQUEO: Si estamos escribiendo en cualquier otro input, abortar atajos globales
+            if (isInput) return;
 
-            // --- ATAJOS GLOBALES ---
+            // 4. ATAJOS GLOBALES (Fuera de inputs)
             
-            // ESPACIO: Pausar/Reanudar Pomodoro
-            if(key === ' ') {
+            // ESPACIO: Pomodoro
+            if (key === ' ') {
                 e.preventDefault();
-                if(typeof toggleTimer === 'function') toggleTimer();
-                if(typeof simularClickVisual === 'function') {
+                if (typeof toggleTimer === 'function') toggleTimer();
+                if (typeof simularClickVisual === 'function') {
                     simularClickVisual('#mini-btn-toggle'); 
                     simularClickVisual('#btn-pomo-action');
                 }
                 return;
             }
 
-            // TECLA 'L': Modo Lectura
-            if(key === 'l') { 
+            // TECLAS L y S: Modos
+            if (key === 'l' || key === 's') {
                 e.preventDefault();
-                const chk = document.getElementById('check-lectura');
-                if(chk) { 
-                    chk.checked = !chk.checked; 
-                    if(typeof window.toggleModoLectura === 'function') window.toggleModoLectura(); 
-                    if(typeof feedbackVisualSimple === 'function') feedbackVisualSimple(chk.parentElement);
+                const id = key === 'l' ? 'check-lectura' : 'check-secuencial';
+                const fn = key === 'l' ? window.toggleModoLectura : window.toggleModoSecuencial;
+                const chk = document.getElementById(id);
+                if (chk) {
+                    chk.checked = !chk.checked;
+                    if (typeof fn === 'function') fn(chk.checked);
+                    if (typeof feedbackVisualSimple === 'function') feedbackVisualSimple(chk.parentElement);
                 }
                 return;
             }
 
-            if(key === 's') { 
-                e.preventDefault();
-                const chk = document.getElementById('check-secuencial');
-                if(chk) { 
-                    chk.checked = !chk.checked; 
-                    if(typeof window.toggleModoSecuencial === 'function') window.toggleModoSecuencial(); 
-                    if(typeof feedbackVisualSimple === 'function') feedbackVisualSimple(chk.parentElement);
-                }
-                return;
-            }
-
-            // --- ATAJOS CONTEXTO ESTUDIO ---
+            // 5. CONTEXTO: Estudio
             const studyCard = document.getElementById('study-card');
-            const isStudyActive = studyCard && !studyCard.classList.contains('hidden');
-            
-            if(isStudyActive) {
-                // FLECHA DERECHA o 'D': Siguiente
-                if(key === 'd' || key === 'arrowright') {
-                    e.preventDefault();
-                    if(typeof simularClickVisual === 'function') simularClickVisual('.btn-next');
-                    if(typeof window.siguienteTarjeta === 'function') window.siguienteTarjeta();
-                    return;
-                }
+            if (studyCard && !studyCard.classList.contains('hidden')) {
                 
-                if(key === 'a' || key === 'arrowleft') {
+                // ENTER: Revelar / Ocultar
+                if (key === 'enter') {
                     e.preventDefault();
-                    const btnPrev = document.getElementById('btn-prev');
-                    if(btnPrev && !btnPrev.classList.contains('hidden')) {
-                        if(typeof simularClickVisual === 'function') simularClickVisual('#btn-prev');
-                        if(typeof window.anteriorTarjeta === 'function') window.anteriorTarjeta();
-                    }
-                    return;
-                }
-
-                // ENTER: Revelar u Ocultar respuesta
-                if(key === 'enter') { 
-                    e.preventDefault();
-                    
                     const contenido = document.getElementById('concepto-contenido');
                     const estaVisible = contenido && !contenido.classList.contains('hidden');
-                    
-                    if(estaVisible) {
-                        if(typeof simularClickVisual === 'function') simularClickVisual('#btn-ocultar');
-                        if(typeof UI.ocultarRespuesta === 'function') UI.ocultarRespuesta();
+                    if (estaVisible) {
+                        if (typeof simularClickVisual === 'function') simularClickVisual('#btn-ocultar');
+                        if (typeof UI.ocultarRespuesta === 'function') UI.ocultarRespuesta();
                     } else {
-                        if(typeof simularClickVisual === 'function') simularClickVisual('#btn-main-revelar');
-                        if(typeof UI.revelar === 'function') UI.revelar();
+                        if (typeof simularClickVisual === 'function') simularClickVisual('#btn-main-revelar');
+                        if (typeof UI.revelar === 'function') UI.revelar();
                     }
                     return;
                 }
-                
+
+                // D / Flecha Derecha: Siguiente
+                if (key === 'd' || key === 'arrowright') {
+                    e.preventDefault();
+                    if (typeof simularClickVisual === 'function') simularClickVisual('#btn-siguientetarjeta');
+                    if (typeof window.siguienteTarjeta === 'function') window.siguienteTarjeta();
+                    return;
+                }
+
+                // A / Flecha Izquierda: Anterior
+                if (key === 'a' || key === 'arrowleft') {
+                    e.preventDefault();
+                    const btnPrev = document.getElementById('btn-prev');
+                    if (btnPrev && !btnPrev.classList.contains('hidden')) {
+                        if (typeof simularClickVisual === 'function') simularClickVisual('#btn-prev');
+                        if (typeof window.anteriorTarjeta === 'function') window.anteriorTarjeta();
+                    }
+                    return;
+                }
+
                 // NÚMEROS 1-4: Calificar
-                if(['1','2','3','4'].includes(key)) {
+                if (['1', '2', '3', '4'].includes(key)) {
                     const controles = document.getElementById('controles-respuesta');
-                    if(controles && !controles.classList.contains('hidden')) {
-                        if(typeof simularClickVisual === 'function') simularClickVisual(`.btn-dif-${key}`); 
-                        if(typeof window.procesarRepaso === 'function') window.procesarRepaso(parseInt(key));
+                    if (controles && !controles.classList.contains('hidden')) {
+                        e.preventDefault();
+                        const suffix = key === '1' ? '' : `-${key}`;
+                        if (typeof simularClickVisual === 'function') simularClickVisual(`#btn-procesarrepaso${suffix}`);
+                        if (typeof window.procesarRepaso === 'function') window.procesarRepaso(parseInt(key));
                     }
                     return;
                 }
@@ -1853,8 +1865,6 @@ document.addEventListener("DOMContentLoaded", () => {
   on("#btn-limpiarfiltros", "click", limpiarFiltros);
   on("#btn-cerrarmodalfiltros-2", "click", cerrarModalFiltros);
   on("#set-privacy-stats", "change", togglePrivacidadUI);
-  // Iniciamos el arranque asíncrono una vez el DOM está listo
-  arrancarAplicacion();
 });
 
 // ════════════════════════════════════════════════════════════════

@@ -111,35 +111,36 @@ function cerrarFechasModal() {
         }
     }
 
-    function showResumenSesion(sesion) {
+    function showResumenSesion(sesion, deudaAhora) { // Inyectar deudaAhora
         const tarjetas = sesion.tarjetas;
         const pctFacil = tarjetas > 0 ? Math.round((sesion.faciles / tarjetas) * 100) : 0;
-        const deudaAhora = calcularDeuda();
         const deltaDeuda = sesion.deudaInicial - deudaAhora;
 
         document.getElementById('rsm-tarjetas').innerText = tarjetas;
         document.getElementById('rsm-facilidad').innerText = tarjetas > 0 ? pctFacil + '%' : '-';
         
         const deudaEl = document.getElementById('rsm-deuda');
-        if (deltaDeuda > 0) {
-            deudaEl.innerText = '-' + deltaDeuda;
-            deudaEl.style.color = '#4CAF50';
-        } else if (deltaDeuda < 0) {
-            deudaEl.innerText = '+' + Math.abs(deltaDeuda);
-            deudaEl.style.color = '#f44336';
-        } else {
-            deudaEl.innerText = '=';
-            deudaEl.style.color = '#888';
+        if (deudaEl) { // Defensa contra null
+            if (deltaDeuda > 0) {
+                deudaEl.innerText = '-' + deltaDeuda;
+                deudaEl.style.color = '#4CAF50';
+            } else if (deltaDeuda < 0) {
+                deudaEl.innerText = '+' + Math.abs(deltaDeuda);
+                deudaEl.style.color = '#f44336';
+            } else {
+                deudaEl.innerText = '=';
+                deudaEl.style.color = '#888';
+            }
         }
 
         let breakdownHtml = '';
         if (tarjetas > 0) {
             const parts = [];
-            if (sesion.faciles > 0) parts.push(` Fáciles: <strong>${sesion.faciles}</strong>`);
+            if (sesion.faciles > 0) parts.push(`🟢 Fáciles: <strong>${sesion.faciles}</strong>`);
             const bien = tarjetas - sesion.faciles - sesion.dificiles - sesion.criticas;
-            if (bien > 0) parts.push(`ðŸŸ¡ Bien: <strong>${bien}</strong>`);
-            if (sesion.dificiles > 0) parts.push(`ðŸŸ  Difíciles: <strong>${sesion.dificiles}</strong>`);
-            if (sesion.criticas > 0) parts.push(`ðŸ”´ Críticas: <strong>${sesion.criticas}</strong>`);
+            if (bien > 0) parts.push(`🟡 Bien: <strong>${bien}</strong>`);
+            if (sesion.dificiles > 0) parts.push(`🟠 Difíciles: <strong>${sesion.dificiles}</strong>`);
+            if (sesion.criticas > 0) parts.push(`🔴 Críticas: <strong>${sesion.criticas}</strong>`);
             breakdownHtml = parts.join(' &nbsp;·&nbsp; ');
         }
         document.getElementById('rsm-breakdown').innerHTML = breakdownHtml;
@@ -154,13 +155,39 @@ function cerrarFechasModal() {
         const msg = mensajes.find(([limit]) => tarjetas <= limit) || mensajes[mensajes.length-1];
         document.getElementById('rsm-mensaje').innerText = msg[1];
 
-        document.getElementById('resumen-sesion-modal').classList.add('visible');
+        const modal = document.getElementById('resumen-sesion-modal');
+        if(modal) modal.classList.add('visible');
     }
 
 
 // ── Grupo 2: Renderizado con inyección de dependencias ───────
 
+    function getEstadoFiltros() {
+        return {
+            hoy: document.getElementById('check-filtro-hoy')?.checked,
+            nuevas: document.getElementById('check-filtro-nuevas')?.checked,
+            tema: document.getElementById('check-filtro-tema')?.checked,
+            rango: document.getElementById('check-filtro-rango')?.checked,
+            tipo: document.getElementById('check-filtro-tipo')?.checked,
+            dificultad: document.getElementById('check-filtro-dificultad')?.checked,
+            temaVal: document.getElementById('filtro-tema-val')?.value || '',
+            rangoVal: document.getElementById('filtro-rango-val')?.value || '',
+            tiposSeleccionados: [...document.querySelectorAll('#filtro-tipo-grid input:checked')].map(cb => cb.value.toLowerCase()),
+            difsActivas: ['1','2','3','4'].filter(n => document.getElementById(`check-dif-${n}`)?.checked)
+        };
+    }
 
+    function renderEstadoFiltros(nFiltros, totalFiltrados) {
+        const icon = document.getElementById('filtros-icon');
+        const btn = document.getElementById('btn-filtros-dropdown');
+        if (icon) icon.style.color = nFiltros > 0 ? '#4caf50' : '#e53935';
+        if (btn) btn.style.borderColor = nFiltros > 0 ? '#4caf50' : '#555';
+
+        const contador = document.getElementById('contador-filtro');
+        if (contador) contador.innerText = `[${totalFiltrados}]`;
+        const contadorModal = document.getElementById('contador-filtro-modal');
+        if (contadorModal) contadorModal.innerText = `${totalFiltrados} tarjetas`;
+    }
 
     function renderizarConceptoActual(tarjeta, modoLec) {
         if(!tarjeta) return;
@@ -287,10 +314,12 @@ function cerrarFechasModal() {
 
     function renderTasks(lista) {
         const l = document.getElementById('task-list'); 
+        if (!l) return;
         l.innerHTML = "";
         
+        const fragment = document.createDocumentFragment();
+        
         lista.forEach((t, i) => {
-            // 1. DETECCIÓN INTELIGENTE DE COLOR (Misma lógica robusta)
             let colorTema = "#666"; 
             const match = t.text.match(/\[(.*?)\]/);
             
@@ -300,28 +329,22 @@ function cerrarFechasModal() {
                     const partes = rawTag.split(':');
                     rawTag = partes[partes.length - 1].trim();
                 }
-                colorTema = getColorAsignatura(rawTag);
+                // Requiere que window.getColorAsignatura sea seguro
+                colorTema = window.getColorAsignatura(rawTag);
             }
 
             const li = document.createElement('li'); 
-            
-            // 2. INYECCIÓN DE LA VARIABLE CSS
-            // Esto permite que el CSS controle todas las animaciones hover/active
             li.style.setProperty('--task-color', colorTema);
-            
             li.className = `task-item ${t.active ? 'active-task' : ''} ${t.done ? 'done' : ''}`;
             
-            // Evento Click
             li.onclick = (e) => { 
-                if(e.target.tagName !== 'BUTTON') toggleActive(i); 
-                updatePomoStats();
+                if(e.target.tagName !== 'BUTTON') window.toggleActive(i); // Proxy seguro
+                window.updatePomoStats();
             };
             
-            // 3. RENDERIZADO
-            // Nota: Usamos 'colorTema' para los textos y barra, pero el contenedor usa la variable CSS
             li.innerHTML = `
                 <div style="flex-grow:1; display:flex; flex-direction:column;">
-                    <span style="color:${t.done ? '#888' : '#e0e0e0'}; font-weight:500;">${t.text}</span>
+                    <span style="color:${t.done ? '#888' : '#e0e0e0'}; font-weight:500;">${window.escapeHtml(t.text)}</span>
                     <div class="task-progress-bg">
                         <div style="height:100%; background:${colorTema}; width:${Math.min(100, (t.completed/t.est)*100)}%; transition: width 0.3s;"></div>
                     </div>
@@ -336,8 +359,10 @@ function cerrarFechasModal() {
                     </div>
                 </div>
             `;
-            l.appendChild(li);
+            fragment.appendChild(li);
         });
+        
+        l.appendChild(fragment); // Único reflow
     }
 
     function updateTimerDisplay(segsLeft, mode) { 
@@ -533,10 +558,13 @@ function renderFechasList(fechas) {
             else if (diasFaltantes === 1) badgeHtml = '<span class="badge" style="background:#e67e22; padding:2px 6px; border-radius:4px; font-size:0.8em;">Mañana</span>';
             else badgeHtml = `<span class="badge" style="background:#256ca5; padding:2px 6px; border-radius:4px; font-size:0.8em;">Faltan ${diasFaltantes}d</span>`;
 
+            // Saneamiento de datos antes de inyectar en el DOM
+            const safeNombre = window.escapeHtml ? window.escapeHtml(ev.nombre) : ev.nombre.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            
             el.innerHTML = `
                 <div class="event-icon" style="margin-right: 12px; font-size: 1.2em;">${iconHtml}</div>
                 <div class="event-details" style="flex: 1;">
-                    <div class="event-name" style="font-weight: bold; color: var(--text-main);">${ev.nombre}</div>
+                    <div class="event-name" style="font-weight: bold; color: var(--text-main);">${safeNombre}</div>
                     <div class="event-date" style="font-size: 0.85em; color: #aaa;">${fechaUI} ${badgeHtml}</div>
                 </div>
             `;
@@ -656,29 +684,12 @@ function abrirFechasModal(bib, asigActual) {
         });
     }
 
-    function updatePronostico(bib, asigActual) {
+    function updatePronostico(counts, maxCount) {
         const container = document.getElementById('forecast-container');
-        if (!container || !asigActual || !bib[asigActual]) return;
+        if (!container) return;
         container.innerHTML = "";
 
-        const cards = bib[asigActual];
-        const dayLabels = ["D","L","M","X","J","V","S"];
-
-        // Contar tarjetas por día para los próximos 7 días
-        let counts = [];
-        for (let i = 0; i < 7; i++) {
-            const d = new Date(); d.setDate(d.getDate() + i);
-            const dStr = formatearFecha(d);
-            const dayLabel = dayLabels[d.getDay()];
-            const isToday = i === 0;
-            const count = cards.filter(c => c.ProximoRepaso === dStr).length
-                        + (i === 0 ? cards.filter(c => c.ProximoRepaso && fechaValor(c.ProximoRepaso) < fechaValor(dStr)).length : 0);
-            counts.push({ dStr, dayLabel, count, isToday });
-        }
-
-        const maxCount = Math.max(...counts.map(c => c.count), 1);
-
-        counts.forEach(({ dStr, dayLabel, count, isToday }) => {
+        counts.forEach(({ dayLabel, count, isToday }) => {
             const pct = (count / maxCount) * 100;
             const color = isToday ? 'var(--accent)' : count > 20 ? '#f44336' : count > 10 ? '#FF9800' : '#256ca5';
 
@@ -695,51 +706,12 @@ function abrirFechasModal(bib, asigActual) {
         });
     }
 
-    function updateDeudaEstudio(bib, asigActual) {
+    function updateDeudaEstudio(deudaTotal, contadores, deudaDesglose) {
         const scoreEl = document.getElementById('deuda-score');
         const breakdownEl = document.getElementById('deuda-breakdown');
-        if (!scoreEl || !asigActual || !bib[asigActual]) return;
+        if (!scoreEl) return;
 
-        const todayVal = window.fechaValor(window.getFechaHoy());
-        let deudaTotal = 0;
-        
-        let contadores = { nuevas: 0, learning: 0, repasoNormal: 0, criticas: 0 };
-        let deudaDesglose = { nuevas: 0, learning: 0, repasoNormal: 0, criticas: 0 };
-
-        bib[asigActual].forEach(c => {
-            if (c.ProximoRepaso && window.fechaValor(c.ProximoRepaso) <= todayVal) {
-                // DETECCIÓN INTELIGENTE: Si no tiene fsrs_state ni UltimoRepaso, es Nueva
-                const isNew = c.fsrs_state === 'new' || (!c.fsrs_state && !c.UltimoRepaso);
-                
-                if (isNew) {
-                    deudaTotal += 1.0;
-                    contadores.nuevas++;
-                    deudaDesglose.nuevas += 1.0;
-                } else if (c.fsrs_state === 'learning') {
-                    deudaTotal += 4.0;
-                    contadores.learning++;
-                    deudaDesglose.learning += 4.0;
-                } else {
-                    const elapsed = c.UltimoRepaso ? Math.max(0, window.diffDiasCalendario(c.UltimoRepaso, window.getFechaHoy())) : 0;
-                    const stability = c.fsrs_stability || 1;
-                    const R = Math.pow(0.9, elapsed / stability);
-                    const D = c.fsrs_difficulty || 5;
-                    const peso = Math.max(0.5, (1 - R) * D);
-                    
-                    deudaTotal += peso;
-                    if (R < 0.8) {
-                        contadores.criticas++;
-                        deudaDesglose.criticas += peso;
-                    } else {
-                        contadores.repasoNormal++;
-                        deudaDesglose.repasoNormal += peso;
-                    }
-                }
-            }
-        });
-
-        deudaTotal = Math.round(deudaTotal);
-        scoreEl.innerText = deudaTotal;
+        scoreEl.innerText = Math.round(deudaTotal);
         scoreEl.style.color = deudaTotal === 0 ? '#4CAF50' : deudaTotal < 15 ? '#FFC107' : deudaTotal < 40 ? '#FF9800' : '#f44336';
 
         let html = '';
@@ -821,65 +793,56 @@ function abrirFechasModal(bib, asigActual) {
 
 // ── Grupo 3: Renderizado con I/O extraída al wrapper ─────────
 
-    function updateDifficultyStats(bib, asigActual, prevSnap) {
-    if(!asigActual || !bib[asigActual]) return;
+    function updateDifficultyStats(counts, prevSnap, total, pendientesHoy) {
+        const elTotal = document.getElementById('total-cards-count');
+        const elHoy = document.getElementById('today-cards-count');
+        if(elTotal) elTotal.innerText = total;
+        if(elHoy) elHoy.innerText = pendientesHoy;
 
-    const cards = bib[asigActual];
-    const total = cards.length;
-    
-    // Contadores: 0:Nueva, 1:Fácil, 2:Bien, 3:Difícil, 4:Crítica
-    let counts = { 0:0, 1:0, 2:0, 3:0, 4:0 };
-    let pendientesHoy = 0;
-    const todayVal = fechaValor(getFechaHoy());
+        const labels = { 0: "Nuevas", 1: "Fáciles", 2: "Bien", 3: "Difíciles", 4: "Críticas" };
+        const colors = { 0: "#9e9e9e", 1: "#2196F3", 2: "#4CAF50", 3: "#FF9800", 4: "#f44336" };
 
-    cards.forEach(c => {
-        const dif = (c.Dificultad === null || c.Dificultad === undefined) ? 2 : parseInt(c.Dificultad);
-        const etapa = c.EtapaRepaso || 0;
-        const tieneRepaso = !!c.UltimoRepaso;
+        let html = "";
+        [0, 4, 3, 2, 1].forEach(k => { 
+            const pct = total > 0 ? (counts[k] / total) * 100 : 0;
+            let deltaHtml = '<span class="diff-delta neutral">—</span>';
+            if (prevSnap) {
+                const diff = counts[k] - (prevSnap[k] || 0);
+                if (diff > 0) deltaHtml = `<span class="diff-delta up">+${diff}</span>`;
+                else if (diff < 0) deltaHtml = `<span class="diff-delta down">${diff}</span>`;
+                else deltaHtml = `<span class="diff-delta neutral">·</span>`;
+            }
+            html += `
+                <div class="diff-bar-row">
+                    <div class="diff-label">${labels[k]}</div>
+                    <div class="diff-track">
+                        <div class="diff-fill" style="width:${pct}%; background:${colors[k]}; transition: width 0.3s ease;"></div>
+                    </div>
+                    <div class="diff-val">${counts[k]}</div>
+                    ${deltaHtml}
+                </div>`;
+        });
+        
+        const containerBars = document.getElementById('dist-bars');
+        if(containerBars) containerBars.innerHTML = html;
+    }
+    function updateGlobalStats(streak, totalDiasActivos, avg) {
+        const elStreak = document.getElementById('stat-streak');
+        const elTotal = document.getElementById('stat-total-days'); 
+        const elAvg = document.getElementById('stat-avg'); 
+        const elMsg = document.getElementById('streak-msg');
 
-        if (dif === 2 && !tieneRepaso && etapa === 0) {
-            counts[0]++;
-        } else {
-            if (counts[dif] !== undefined) counts[dif]++;
-            else counts[3]++;
+        if(elStreak) {
+            elStreak.innerText = streak;
+            elTotal.innerText = totalDiasActivos;
+            elAvg.innerText = avg;
+            elStreak.style.color = streak > 0 ? "#FFC107" : "#666";
+            
+            if (streak === 0) elMsg.innerText = "No has empezado aún...";
+            else if (streak === 1) elMsg.innerText = "¡Sigue así!";
+            else elMsg.innerText = `${streak} días de racha. Bien hecho.`;
         }
-
-        if (c.ProximoRepaso && fechaValor(c.ProximoRepaso) <= todayVal) pendientesHoy++;
-    });
-
-    const elTotal = document.getElementById('total-cards-count');
-    const elHoy = document.getElementById('today-cards-count');
-    if(elTotal) elTotal.innerText = total;
-    if(elHoy) elHoy.innerText = pendientesHoy;
-
-    const labels = { 0: "Nuevas", 1: "Fáciles", 2: "Bien", 3: "Difíciles", 4: "Críticas" };
-    const colors = { 0: "#9e9e9e", 1: "#2196F3", 2: "#4CAF50", 3: "#FF9800", 4: "#f44336" };
-
-    let html = "";
-    [0, 4, 3, 2, 1].forEach(k => { 
-        const pct = total > 0 ? (counts[k] / total) * 100 : 0;
-        let deltaHtml = '<span class="diff-delta neutral">—</span>';
-        if (prevSnap) {
-            const diff = counts[k] - (prevSnap[k] || 0);
-            if (diff > 0) deltaHtml = `<span class="diff-delta up">+${diff}</span>`;
-            else if (diff < 0) deltaHtml = `<span class="diff-delta down">${diff}</span>`;
-            else deltaHtml = `<span class="diff-delta neutral">·</span>`;
-        }
-        html += `
-            <div class="diff-bar-row">
-                <div class="diff-label">${labels[k]}</div>
-                <div class="diff-track">
-                    <div class="diff-fill" style="width:${pct}%; background:${colors[k]}; transition: width 0.3s ease;"></div>
-                </div>
-                <div class="diff-val">${counts[k]}</div>
-                ${deltaHtml}
-            </div>`;
-    });
-    
-    const containerBars = document.getElementById('dist-bars');
-    if(containerBars) containerBars.innerHTML = html;
-    return counts;  // el wrapper persiste el snapshot
-}
+    }
 
     function updateCalendarHeatmap(bib, asigActual, fechas, viewDate) {
         const container = document.getElementById('calendar-heatmap');
@@ -1424,6 +1387,22 @@ function abrirFechasModal(bib, asigActual) {
             }
         }
     }
+    function renderControlesModoEstudio(isSecuencial) {
+        // Usa los selectores originales de tu HTML
+        const btnPrev = document.getElementById('btn-prev') || document.querySelector('[onclick*="anteriorTarjeta"]');
+        const btnNextText = document.getElementById('btn-next-text');
+        const nextShortcut = document.getElementById('next-shortcut');
+
+        if (isSecuencial) {
+            if(btnPrev) btnPrev.classList.remove('hidden');
+            if(btnNextText) btnNextText.innerText = "Siguiente"; 
+            if(nextShortcut) nextShortcut.innerText = "[→]"; 
+        } else {
+            if(btnPrev) btnPrev.classList.add('hidden');
+            if(btnNextText) btnNextText.innerText = "Siguiente (Random)";
+            if(nextShortcut) nextShortcut.innerText = "[→]"; 
+        }
+    }
 
     function renderHorarioGrid(horario, bib, diaSeleccionado) {
         const contenedor = document.getElementById('schedule-grid-container');
@@ -1463,49 +1442,63 @@ function abrirFechasModal(bib, asigActual) {
             contenedor.appendChild(box);
         });
     }
+    function toggleDashboardVisibility(isVisible) {
+        const dashboardCol = document.getElementById('dashboard-col');
+        if (dashboardCol) {
+            if (isVisible) dashboardCol.classList.remove('hidden');
+            else dashboardCol.classList.add('hidden');
+        }
+    }
+
+    function updateWeeklyViewButtons(mode) {
+        const btn7 = document.getElementById('btn-week-7');
+        const btn28 = document.getElementById('btn-week-28');
+        if (btn7) btn7.classList.toggle('active', mode === '7d');
+        if (btn28) btn28.classList.toggle('active', mode === '28d');
+    }
+
+    function cerrarResumenSesion() {
+        const modal = document.getElementById('resumen-sesion-modal');
+        if (modal) modal.classList.remove('visible');
+    }
 
 function renderRecursos(asigActual, recursos, slots) {
-    const contenedor = document.getElementById('lista-recursos-slots');
-    if(!contenedor) return;
-    contenedor.innerHTML = "";
+        const contenedor = document.getElementById('lista-recursos-slots');
+        if(!contenedor) return;
+        contenedor.innerHTML = "";
 
-    if (!asigActual) return;
-    
-    // Inicializar array si no existe
-    if (!recursos[asigActual]) {
-        recursos[asigActual] = [];
+        if (!asigActual) return;
+        
+        // Uso de fallback inmutable. Cero mutación de dependencias externas.
+        const lista = recursos[asigActual] || [];
+        
+        if(lista.length === 0) {
+            contenedor.innerHTML = "<span style='font-size:0.8em; color:#444; font-style:italic;'>Sin libros. Añade uno a la derecha.</span>";
+            return;
+        }
+
+        lista.forEach((nombreLibro, index) => {
+            const key = `${asigActual}_${index}`;
+            const isLoaded = !!slots[key]; 
+            
+            const div = document.createElement('div');
+            let classes = "slot-chip";
+            if(isLoaded) classes += " loaded";
+            
+            div.className = classes;
+            div.title = isLoaded ? "Ver libro" : "Haga clic para cargar el archivo PDF";
+            div.onclick = () => { if(typeof window.clickEnSlot === 'function') window.clickEnSlot(index); };
+            
+            const icon = isLoaded ? '📖' : '📥';
+            const safeNombre = window.escapeHtml ? window.escapeHtml(nombreLibro) : nombreLibro;
+            
+            div.innerHTML = `
+                <span>${icon} ${safeNombre}</span>
+                <button class="slot-del-btn" data-action="borrarSlot" data-idx=${index} title="Olvidar referencia">✕</button>
+            `;
+            contenedor.appendChild(div);
+        });
     }
-
-    const lista = recursos[asigActual];
-    
-    if(lista.length === 0) {
-        contenedor.innerHTML = "<span style='font-size:0.8em; color:#444; font-style:italic;'>Sin libros. Añade uno a la derecha.</span>";
-        return;
-    }
-
-    lista.forEach((nombreLibro, index) => {
-        const key = `${asigActual}_${index}`;
-        const isLoaded = !!slots[key]; 
-        
-        // Crear el Chip
-        const div = document.createElement('div');
-        let classes = "slot-chip";
-        if(isLoaded) classes += " loaded";
-        
-        div.className = classes;
-        div.title = isLoaded ? "Ver libro" : "Haga clic para cargar el archivo PDF";
-        div.onclick = () => clickEnSlot(index);
-        
-        // Icono de estado
-        const icon = isLoaded ? 'ðŸ“–' : 'ðŸ“¥';
-        
-        div.innerHTML = `
-            <span>${icon} ${nombreLibro}</span>
-            <button class="slot-del-btn" data-action="borrarSlot" data-idx=${index} title="Olvidar referencia">í—</button>
-        `;
-        contenedor.appendChild(div);
-    });
-}
 function cambiarPestanaAjustes(tabId) {
         // 1. Recorrer todos los botones de pestaña declarados
         document.querySelectorAll('.stab').forEach(btn => {
@@ -1574,6 +1567,13 @@ function cambiarPestanaAjustes(tabId) {
         renderHorarioGrid,
         renderRecursos,
         cambiarPestanaAjustes,
+        getEstadoFiltros,
+        renderEstadoFiltros,
+        updateGlobalStats,
+        toggleDashboardVisibility,
+        updateWeeklyViewButtons,
+        cerrarResumenSesion,
+        renderControlesModoEstudio,
     };
 })();
 

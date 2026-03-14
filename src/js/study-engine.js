@@ -4,12 +4,7 @@
 // y el procesamiento de la lógica SRS (FSRS).
 // ════════════════════════════════════════════════════════════════
 
-
 const StudyEngine = (() => {
-
-    /** 
-     * La comunicación  es vía EventBus y State Reactor.
-     */
 
     function _parsearListaNumeros(str) {
         const result = new Set();
@@ -27,10 +22,6 @@ const StudyEngine = (() => {
         return result;
     }
 
-    /**
-     * Sanea el filtrado. No toca clases CSS. 
-     * El cambio en 'colaEstudio' disparará el Reactor de UI.
-     */
     function aplicarFiltros() {
         const asigActual = State.get('nombreAsignaturaActual');
         if (!asigActual) return;
@@ -39,50 +30,88 @@ const StudyEngine = (() => {
         const todos = biblioteca[asigActual] || [];
         let filtrados = [...todos];
 
-        const soloNuevas = document.getElementById('check-filtro-nuevas')?.checked;
-        if (soloNuevas) filtrados = filtrados.filter(c => !c.UltimoRepaso);
+        const f = UI.getEstadoFiltros();
 
-        const filtroTema = document.getElementById('check-filtro-tema')?.checked;
-        if (filtroTema) {
-            const val = document.getElementById('filtro-tema-val')?.value;
-            const temasPermitidos = _parsearListaNumeros(val);
-            if (temasPermitidos.size > 0) filtrados = filtrados.filter(c => temasPermitidos.has(c.Tema));
+        // 1. Filtrado Matemático
+        if (f.hoy) filtrados = filtrados.filter(c => !c.ProximoRepaso || window.esVencido(c.ProximoRepaso));
+        if (f.nuevas) filtrados = filtrados.filter(c => !c.UltimoRepaso);
+        if (f.tema) {
+            const temasSet = _parsearListaNumeros(f.temaVal);
+            if (temasSet.size > 0) filtrados = filtrados.filter(c => temasSet.has(parseInt(c.Tema)));
         }
-
-        const filtroRango = document.getElementById('check-filtro-rango')?.checked;
-        if (filtroRango) {
-            const val = document.getElementById('filtro-rango-val')?.value;
-            const rangoPermitido = _parsearListaNumeros(val);
-            if (rangoPermitido.size > 0) filtrados = filtrados.filter((_, i) => rangoPermitido.has(i + 1));
-        }
-
-        State.batch(() => {
-            if (State.get('modoSecuencial')) {
-                filtrados.sort((a, b) => window.fechaValor(a.ProximoRepaso) - window.fechaValor(b.ProximoRepaso));
-                State.set('indiceNavegacion', 0); // Fijo al inicio si es secuencial
+        if (f.rango) {
+            const idxSet = _parsearListaNumeros(f.rangoVal);
+            if (idxSet.size > 0) {
+                filtrados = filtrados.filter(c => idxSet.has(c.IndiceGlobal !== undefined ? c.IndiceGlobal : 0));
             } else {
-                // Aleatoriedad pura si no es secuencial
-                const randomIdx = filtrados.length > 0 ? Math.floor(Math.random() * filtrados.length) : 0;
-                State.set('indiceNavegacion', randomIdx);
+                const m = f.rangoVal.trim().match(/^(\d+)\s*[-–]\s*(\d+)$/);
+                if (m) {
+                    const desde = parseInt(m[1]), hasta = parseInt(m[2]);
+                    filtrados = filtrados.filter(c => {
+                        const idx = c.IndiceGlobal !== undefined ? c.IndiceGlobal : 0;
+                        return idx >= desde && idx <= hasta;
+                    });
+                }
             }
+        }
+        if (f.tipo && f.tiposSeleccionados.length > 0) {
+            filtrados = filtrados.filter(c => f.tiposSeleccionados.some(t => (c.Apartado || '').toLowerCase().startsWith(t)));
+        }
+        if (f.dificultad && f.difsActivas.length > 0) {
+            const REGLAS_DIFICULTAD = {
+                '1': c => c.fsrs_state === 'review' && (c.fsrs_difficulty || 5) <= 4.0,
+                '2': c => c.fsrs_state === 'review' && (c.fsrs_difficulty || 5) >  4.0 && (c.fsrs_difficulty || 5) <= 7.0,
+                '3': c => c.fsrs_state === 'review' && (c.fsrs_difficulty || 5) >  7.0,
+                '4': c => c.fsrs_state === 'learning',
+            };
+            filtrados = filtrados.filter(c => f.difsActivas.some(d => REGLAS_DIFICULTAD[d](c)));
+        }
+
+        // 2. Lógica de Ordenación y Barajado
+        const isSecuencial = State.get('modoSecuencial');
+        if (isSecuencial) {
+            filtrados.sort((a, b) => {
+                const valA = a.ProximoRepaso ? window.fechaValor(a.ProximoRepaso) : 0;
+                const valB = b.ProximoRepaso ? window.fechaValor(b.ProximoRepaso) : 0;
+                return valA - valB;
+            });
+        } else {
+            // Algoritmo Fisher-Yates estricto para modo Random
+            for (let i = filtrados.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [filtrados[i], filtrados[j]] = [filtrados[j], filtrados[i]];
+            }
+        }
+
+        // 3. Notificación a la Interfaz de Usuario
+        const nFiltros = [f.hoy, f.nuevas, f.tema, f.rango, f.tipo, f.dificultad].filter(Boolean).length;
+        if (typeof UI !== 'undefined') {
+            if (UI.renderEstadoFiltros) UI.renderEstadoFiltros(nFiltros, filtrados.length);
+            if (UI.renderControlesModoEstudio) UI.renderControlesModoEstudio(isSecuencial);
+        }
+
+        // 4. Inyección Atómica en el Estado (Batch)
+        State.batch(() => {
             State.set('colaEstudio', filtrados);
+            State.set('indiceNavegacion', 0);
+            if (filtrados.length > 0) {
+                State.set('conceptoActual', structuredClone(filtrados[0]));
+            } else {
+                State.set('conceptoActual', null);
+            }
         });
 
-        EventBus.emit('DATA_REQUIRES_SAVE');
-        siguienteTarjeta(false); 
+        if (filtrados.length === 0 && typeof UI !== 'undefined' && UI.renderTarjetaVacia) {
+            UI.renderTarjetaVacia();
+        }
     }
 
-    function siguienteTarjeta(incrementar = true) {
+    function siguienteTarjeta() {
         const cola = State.get('colaEstudio') || [];
-        if (cola.length === 0) {
-            State.set('conceptoActual', null);
-            return;
-        }
-
+        if (cola.length === 0) return;
+        
         let idx = State.get('indiceNavegacion');
-        if (incrementar) {
-            idx = State.get('modoSecuencial') ? (idx + 1) % cola.length : Math.floor(Math.random() * cola.length);
-        }
+        idx = (idx + 1) % cola.length;
 
         State.batch(() => {
             State.set('indiceNavegacion', idx);
@@ -103,54 +132,62 @@ const StudyEngine = (() => {
         });
     }
 
-    /**
-     * Procesamiento FSRS con Batching.
-     */
     function procesarRepaso(calidad) {
         const concepto = State.get('conceptoActual');
         const asigActual = State.get('nombreAsignaturaActual');
         if (!concepto || !asigActual) return;
 
-        // 1. Cálculo matemático (Dominio Puro)
         const result = Domain.calcularSiguienteRepaso(concepto, calidad);
         const tarjetaActualizada = result.tarjeta;
 
-        // 2. Actualización de persistencia en State
         const biblioteca = State.get('biblioteca');
         const idxOriginal = biblioteca[asigActual].findIndex(c => c.id === concepto.id || (c.Titulo === concepto.Titulo && c.Contenido === concepto.Contenido));
 
         if (idxOriginal !== -1) {
             State.batch(() => {
-                // Actualizar biblioteca global
+                // Actualizar DB en memoria
                 biblioteca[asigActual][idxOriginal] = tarjetaActualizada;
                 State.set('biblioteca', biblioteca);
 
-                // Actualizar estadísticas de sesión
+                // Stats de Sesión
                 const stats = State.get('sessionData') || {};
                 stats.tarjetas = (stats.tarjetas || 0) + 1;
                 if (calidad === 1) stats.faciles = (stats.faciles || 0) + 1;
                 if (calidad === 4) stats.criticas = (stats.criticas || 0) + 1;
                 State.set('sessionData', stats);
+
+                // EXTRACCIÓN de la tarjeta de la cola viva
+                let cola = State.get('colaEstudio') || [];
+                const currentIdx = State.get('indiceNavegacion');
+                cola.splice(currentIdx, 1);
+                State.set('colaEstudio', cola);
+
+                // Mover puntero automáticamente sin avanzar el índice
+                if (cola.length === 0) {
+                    State.set('indiceNavegacion', 0);
+                    State.set('conceptoActual', null);
+                } else {
+                    const nextIdx = currentIdx % cola.length; // Si borramos la última, salta a la 0
+                    State.set('indiceNavegacion', nextIdx);
+                    State.set('conceptoActual', structuredClone(cola[nextIdx]));
+                }
             });
 
-            // 3. Persistencia y siguiente paso
             EventBus.emit('DATA_REQUIRES_SAVE');
-            siguienteTarjeta(true);
+            if (typeof window.updateDashboard === 'function') window.updateDashboard();
+            if (State.get('colaEstudio').length === 0 && typeof UI !== 'undefined' && UI.renderTarjetaVacia) {
+                UI.renderTarjetaVacia();
+            }
         }
     }
 
-    function toggleModoSecuencial() {
-        const isSeq = document.getElementById('check-secuencial')?.checked || false;
-        State.set('modoSecuencial', isSeq);
+    function toggleModoSecuencial(isSeq) {
+        State.set('modoSecuencial', !!isSeq);
         aplicarFiltros();
     }
 
-    function toggleModoLectura() {
-        const isLec = document.getElementById('check-lectura')?.checked || false;
-        State.set('modoLectura', isLec);
-        /** * ELIMINADO: UI.revelar(). 
-         * El Reactor en app.js debe escuchar 'modoLectura' y llamar a UI.revelar().
-         */
+    function toggleModoLectura(isLec) {
+        State.set('modoLectura', !!isLec);
     }
 
     return {
@@ -163,10 +200,26 @@ const StudyEngine = (() => {
     };
 })();
 
-// Proxies de compatibilidad DOM
-window.aplicarFiltros = () => StudyEngine.aplicarFiltros();
+// ════════════════════════════════════════════════════════════════
+// Proxies de compatibilidad DOM (Capa de Controlador)
+// ════════════════════════════════════════════════════════════════
+window.aplicarFiltros = (isManual = true) => StudyEngine.aplicarFiltros(isManual);
 window.anteriorTarjeta = () => StudyEngine.anteriorTarjeta();
-window.siguienteTarjeta = (b) => StudyEngine.siguienteTarjeta(b);
+window.siguienteTarjeta = () => StudyEngine.siguienteTarjeta();
 window.procesarRepaso = (c) => StudyEngine.procesarRepaso(c);
-window.toggleModoSecuencial = () => StudyEngine.toggleModoSecuencial();
-window.toggleModoLectura = () => StudyEngine.toggleModoLectura();
+
+window.toggleModoSecuencial = (event) => {
+    // Lee el estado directamente del evento, o usa el DOM como fallback estricto
+    const isSeq = (event && event.target) ? event.target.checked : !!document.getElementById('check-secuencial')?.checked;
+    StudyEngine.toggleModoSecuencial(isSeq);
+};
+
+window.toggleModoLectura = (event) => {
+    const isLec = (event && event.target) ? event.target.checked : !!document.getElementById('check-lectura')?.checked;
+    StudyEngine.toggleModoLectura(isLec);
+    
+    // El controlador orquesta la interfaz si se activa la lectura
+    if (isLec && typeof UI !== 'undefined' && UI.revelar) {
+        UI.revelar();
+    }
+};

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Estudiador Pro v 1.17.6</title>
+    <title>Estudiador Pro v 1.18.5</title>
     <script>
     MathJax = {
     loader: { load: ['[tex]/amscd'] }, // <--- CARGAMOS EL MÓDULO AMSCD y xypic
@@ -106,7 +106,7 @@
     <div id="sidebar-toggle">◀</div>
     
     <div style="margin-bottom: 10px; display:flex; justify-content:space-between; align-items:center;">
-        <h2 style="font-size: 1.1em; color: rgb(251, 196, 0); margin:0; letter-spacing:-0.5px;"><i class="fa-solid fa-horse-head"></i> ESTUDIADOR <span style="font-size:0.6em; opacity:0.5">1.17.6</span></h2>
+        <h2 style="font-size: 1.1em; color: rgb(251, 196, 0); margin:0; letter-spacing:-0.5px;"><i class="fa-solid fa-horse-head"></i> ESTUDIADOR <span style="font-size:0.6em; opacity:0.5">1.18.5</span></h2>
         <button id="btn-abrirajustes" 
         style="background:none; border:none; color:#666; cursor:pointer; font-size:1.2em; transition:color 0.3s, transform 0.3s;" 
         title="Ajustes">
@@ -686,7 +686,7 @@
 </div>
 
 
-<div id="settings-modal" class="hidden">
+<div id="ajustes-modal" class="hidden">
     <div class="modal-content" style="max-width:520px; width:95%;">
         <div class="modal-header">
             <h3>Ajustes</h3>
@@ -749,7 +749,7 @@
             </div>
             <div style="margin-top: 15px; border-top: 1px solid #333; padding-top: 15px;">
                 <h4 style="margin-top: 0; color: var(--accent);">Gestión de Interfaz</h4>
-                <button class="btn-modern" onclick="restaurarWidgets(); document.getElementById('settings-modal').classList.add('hidden');" style="width: 100%; padding: 10px; background: #2a2a2a; border: 1px solid #444; color: #e0e0e0; border-radius: 4px; cursor: pointer;">
+                <button class="btn-modern" onclick="restaurarWidgets(); document.getElementById('ajustes-modal').classList.add('hidden');" style="width: 100%; padding: 10px; background: #2a2a2a; border: 1px solid #444; color: #e0e0e0; border-radius: 4px; cursor: pointer;">
                     <i class="fa-solid fa-rotate-left"></i> Restaurar diseño de Widgets por defecto
                 </button>
             </div>
@@ -1290,6 +1290,12 @@
         <i class="fa-regular fa-eye"></i>
         <span>EL OMNISCIENTE ESCUCHA</span>
     </div>
+    <select id="selector-modelo-ia" onchange="window.cambiarModeloIA(this.value)" style="background: var(--card-bg); color: #fff; border: 1px solid var(--border); border-radius: 4px; padding: 2px;">
+    <option value="llama-3.3-70b-versatile">Llama 3.3 70B (Mejor razonamiento)</option>
+    <option value="llama-3.1-8b-instant">Llama 3.1 8B (Más rápido/económico)</option>
+    <option value="gemma2-9b-it">Gemma 2 9B (Alternativa de Google)</option>
+    <option value="mixtral-8x7b-32768">Mixtral 8x7B (Contexto largo)</option>
+    </select>
     <button id="btn-togglechat" style="background:none; border:none; color:#fff; cursor:pointer; font-size: 1.2em;">&times;</button>
     </div>
     <div id="chat-messages">
@@ -1412,6 +1418,7 @@
 
 
 <!-- Módulos cargados en orden de dependencias -->
+<script src="src/js/event-bus.js"></script>
 <script src="src/js/state.js"></script>
 <script src="src/js/db.js" defer></script>
 <script src="src/js/domain.js" defer></script>

@@ -95,7 +95,7 @@
 
     <link rel="stylesheet" href="src/css/styles.css">
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
- 
+    
 </head>
 
 <body>
@@ -106,7 +106,7 @@
     <div id="sidebar-toggle">◀</div>
     
     <div style="margin-bottom: 10px; display:flex; justify-content:space-between; align-items:center;">
-        <h2 style="font-size: 1.1em; color: rgb(251, 196, 0); margin:0; letter-spacing:-0.5px;"><i class="fa-solid fa-horse-head"></i> ESTUDIADOR <span style="font-size:0.6em; opacity:0.5">1.18.5</span></h2>
+        <h2 class="sidebar-title"><i class="fa-solid fa-horse-head"></i> ESTUDIADOR <span id="app-version-badge" class="sidebar-version"></span></h2>
         <button id="btn-abrirajustes" 
         style="background:none; border:none; color:#666; cursor:pointer; font-size:1.2em; transition:color 0.3s, transform 0.3s;" 
         title="Ajustes">
@@ -138,13 +138,11 @@
         </div>
     </button>
 
-    <button id="btn-abrirexamen" class="btn-modern btn-reveal" title="Modo Examen" 
-            style="min-width: 0; width: 45px; height: 45px; padding: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+    <button id="btn-abrirexamen" class="btn-modern btn-reveal btn-icon-sm" title="Modo Examen">
         <i class="fa-solid fa-skull-crossbones"></i>
     </button>
 
-    <button id="btn-togglepizarra" class="btn-modern btn-reveal" title="Activar Pizarra" 
-            style="min-width: 0; width: 45px; height: 45px; padding: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+    <button id="btn-togglepizarra" class="btn-modern btn-reveal btn-icon-sm" title="Activar Pizarra">
         <i class="fa-solid fa-chalkboard-user"></i>
     </button>
     </div>
@@ -169,12 +167,12 @@
 
             <div id="study-card" class="card hidden">
                 <div class="card-header">
-                    <span id="meta-tema" style="font-size: 0.8em; color: #888;">Tema -</span>
-                    <span id="meta-fecha" style="font-size: 0.8em; font-weight: bold; color: #ffab40;">HOY</span>
-                    <button id="btn-modoedicionjson" title= "Modificar tarjeta actual/JSON asignatura" style="background:none; border:1px solid #444; color: #aaa; cursor:pointer; font-size:0.7em; padding:2px 6px; border-radius:4px;"><i class="fa-solid fa-wand-magic-sparkles"></i> Mod</button>
+                    <span id="meta-tema" class="meta-tema">Tema -</span>
+                    <span id="meta-fecha" class="meta-fecha">HOY</span>
+                    <button id="btn-modoedicionjson" class="btn-card-edit" title="Modificar tarjeta actual/JSON asignatura"><i class="fa-solid fa-wand-magic-sparkles"></i> Mod</button>
                 </div>
                 <h2 id="concepto-titulo">Titulo</h2>
-                <div id="area-revelar" style="margin-top: 30px; display:flex; justify-content:center;">
+                <div id="area-revelar" class="area-revelar">
                     <button id="btn-main-revelar" title="Atajo: Enter;" class="btn-modern btn-reveal">
                         <div class="btn-content">
                             <span class="btn-text">Ver Respuesta</span>
@@ -183,9 +181,9 @@
                     </button>
                 </div>
                 
-                <div id="concepto-contenido" class="hidden" style="margin: 20px 0;"></div>
+                <div id="concepto-contenido" class="hidden concepto-contenido"></div>
                 
-                <div id="controles-respuesta" class="controls hidden" style="flex-wrap: wrap; justify-content: center;">
+                <div id="controles-respuesta" class="controls hidden controles-respuesta">
                     <div style="display: flex; width: 100%;">
                         <button id="btn-procesarrepaso" title="Atajo: Tecla 1;" class="btn-dif btn-dif-1">1<br><span style="font-size:0.7em">Fácil</span></button>
                         <button id="btn-procesarrepaso-2" title="Atajo: Tecla 2;" class="btn-dif btn-dif-2">2<br><span style="font-size:0.7em">Bien</span></button>
@@ -220,20 +218,20 @@
                     </div>
 
                     <div style="display:flex; align-items:center; gap:8px;">
-                        <button id="btn-filtros-dropdown" style="background:transparent; border:1px solid #555; border-radius:12px; color:#aaa; font-size:0.75em; padding:2px 8px; cursor:pointer; display:flex; align-items:center; gap:4px; transition:all 0.2s;">
-                            <i id="filtros-icon" class="fa-solid fa-filter" style="font-size:0.9em; color:#e53935; transition:color 0.2s;"></i>
+                        <button id="btn-filtros-dropdown" class="btn-filtros-dropdown">
+                            <i id="filtros-icon" class="fa-solid fa-filter filtros-icon"></i>
                             Filtros
                         </button>
-                        <label title="Atajo: Tecla S" style="margin:0; cursor:pointer; font-size:0.75em; color:#aaa; display:flex; align-items:center;">
-                            <input type="checkbox" id="check-secuencial" style="margin-right:4px;"> 
-                            Sec. <span style="font-size:0.8em; opacity:0.5; margin-left:4px;">(S)</span>
+                        <label class="study-check-label" title="Atajo: Tecla S">
+                            <input type="checkbox" id="check-secuencial"> 
+                            Sec. <span class="study-check-shortcut">(S)</span>
                         </label>
                         
-                        <label title="Atajo: Tecla L" style="margin:0; font-size:0.75em; display:flex; align-items:center; cursor:pointer; color:#aaa;">
-                            <input type="checkbox" id="check-lectura" style="margin-right:4px;"> 
-                            Lectura <span style="font-size:0.8em; opacity:0.5; margin-left:4px;">(L)</span>
+                        <label class="study-check-label" title="Atajo: Tecla L">
+                            <input type="checkbox" id="check-lectura"> 
+                            Lectura <span class="study-check-shortcut">(L)</span>
                         </label>
-                        <span id="contador-filtro" style="font-size:0.7em; color:#666; font-family:monospace; white-space:nowrap;"></span>
+                        <span id="contador-filtro" class="contador-filtro"></span>
                     </div>
                 </div>
             </div>
@@ -275,30 +273,30 @@
 
 
             <div id="editor-card" class="card hidden">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; border-bottom: 1px solid #333; padding-bottom: 15px;">
+                <div class="panel-header">
                     <div>
-                        <h3 style="margin: 0; font-size: 1.3em; color: var(--accent);">Editar Tarjeta</h3>
+                        <h3 style="color: var(--accent);">Editar Tarjeta</h3>
                         <div id="edit-idx-label" style="font-size: 0.85em; color: #888; margin-top: 4px;"></div>
                     </div>
-                    <button id="btn-ir-json" style="background: rgba(37,108,165,0.15); color: #4da6e8; border: 1px solid #256ca5; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.85em; font-weight: bold; transition: all 0.2s;">
+                    <button id="btn-ir-json" class="btn-modern btn-info" style="padding: 8px 14px; font-size: 0.85em; font-weight: bold;">
                         <i class="fa-solid fa-code"></i> Modo JSON
                     </button>
                 </div>
 
-                <label style="color: #aaa; font-size: 0.85em; margin-bottom: 6px; display: block;">Título <strong style="color:var(--status-yellow); font-weight:normal;">(Nombres únicos para evitar solapamientos)</strong></label>
-                <input type="text" id="edit-titulo" placeholder="Ej: Teorema de Bolzano-Weierstrass" style="margin-bottom: 18px; width: 100%; background: #151515; border: 1px solid #333; color: #eee; padding: 10px 12px; border-radius: 6px; box-sizing: border-box;">
+                <label class="form-label">Título <strong style="color:var(--status-yellow); font-weight:normal;">(Nombres únicos para evitar solapamientos)</strong></label>
+                <input type="text" id="edit-titulo" placeholder="Ej: Teorema de Bolzano-Weierstrass" class="form-input" style="margin-bottom: 18px;">
                 
-                <label style="color: #aaa; font-size: 0.85em; margin-bottom: 6px; display: block;">Contenido (Reverso) - Admite LaTeX completo</label>
+                <label class="form-label">Contenido (Reverso) - Admite LaTeX completo</label>
                 <textarea id="edit-contenido" placeholder="Sea $f$ una función..." style="height: 220px; width: 100%; font-family: monospace; font-size: 0.95em; background: #111; border: 1px solid #333; border-radius: 8px; padding: 12px; color: #ddd; resize: vertical; box-sizing: border-box; line-height: 1.5;"></textarea>
                 
                 <div style="display:flex; gap:15px; margin-top: 15px;">
                     <div style="flex:1;">
-                        <label style="color: #aaa; font-size: 0.85em; margin-bottom: 6px; display: block;">Tema</label>
-                        <input type="number" id="edit-tema" value="1" style="width: 100%; background: #151515; border: 1px solid #333; color: #eee; padding: 8px; border-radius: 6px; box-sizing: border-box;">
+                        <label class="form-label">Tema</label>
+                        <input type="number" id="edit-tema" value="1" class="form-input sm">
                     </div>
                     <div style="flex:1;">
-                        <label style="color: #aaa; font-size: 0.85em; margin-bottom: 6px; display: block;">Tipo</label>
-                        <select id="edit-apartado" style="width: 100%; background: #151515; border: 1px solid #333; color: #eee; padding: 8px; border-radius: 6px; box-sizing: border-box;">
+                        <label class="form-label">Tipo</label>
+                        <select id="edit-apartado" class="form-input sm">
                             <option value="Definición">Definición</option>
                             <option value="Teorema">Teorema</option>
                             <option value="Proposición">Proposición</option>
@@ -314,46 +312,52 @@
                     </div>
                 </div>
 
-                <div style="margin-top:25px; display:flex; justify-content:space-between; align-items:center; border-top: 1px solid #333; padding-top: 15px;">
-                    <div style="display:flex; gap: 10px;">
-                        <button id="btn-edit-prev" class="btn-modern btn-reveal" style="padding: 8px 14px; border-radius: 6px; min-height: auto;" title="Atajo: Alt + Flecha Izq / A">
-                            <div class="btn-content" style="display:flex; align-items:center; gap:6px; flex-direction:row;">
-                                <i class="fa-solid fa-arrow-left" style="font-size: 0.85em;"></i>
-                                <span style="font-size: 0.9em; font-weight: 500;">Ant</span>
-                            </div>
-                        </button>
-                        
-                        <button id="btn-edit-next" class="btn-modern btn-reveal" style="padding: 8px 14px; border-radius: 6px; min-height: auto;" title="Atajo: Alt + Flecha Der / D">
-                            <div class="btn-content" style="display:flex; align-items:center; gap:6px; flex-direction:row;">
-                                <span style="font-size: 0.9em; font-weight: 500;">Sig</span>
-                                <i class="fa-solid fa-arrow-right" style="font-size: 0.85em;"></i>
+                <div style="margin-top: 30px; display: flex; flex-direction: column; gap: 15px; border-top: 1px solid #333; padding-top: 20px;">
+    
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                        <div style="display: flex; gap: 10px;">
+                            <button id="btn-edit-prev" class="btn-modern btn-reveal" title="Atajo: Alt + Flecha Izq / A">
+                                <div class="btn-content" style="display:flex; align-items:center; gap:6px;">
+                                    <i class="fa-solid fa-arrow-left"></i>
+                                    <span style="font-weight: 500;">Ant</span>
+                                </div>
+                            </button>
+                            <button id="btn-edit-next" class="btn-modern btn-reveal" title="Atajo: Alt + Flecha Der / D">
+                                <div class="btn-content" style="display:flex; align-items:center; gap:6px;">
+                                    <span style="font-weight: 500;">Sig</span>
+                                    <i class="fa-solid fa-arrow-right"></i>
+                                </div>
+                            </button>
+                        </div>
+
+                        <button id="btn-fragmentar-ia" class="btn-modern btn-reveal btn-info" data-action="fragmentarTarjetaActualIA" style="flex-grow: 1; max-width: 250px;">
+                            <div class="btn-content" style="display:flex; align-items:center; justify-content:center; gap:8px;">
+                                <i class="fa-solid fa-scissors"></i>
+                                <span class="btn-text" style="font-weight:bold;">Fragmentar con IA</span>
                             </div>
                         </button>
                     </div>
-                    <div style="display:flex; gap: 8px;">
-                        <button id="btn-cancelaredicion-1" 
-                                style="background: transparent; border: 1px solid #444; color: #888; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.9em; transition: all 0.2s;"
-                                onmouseover="this.style.borderColor='#888'; this.style.color='#eee';"
-                                onmouseout="this.style.borderColor='#444'; this.style.color='#888';">
-                            Volver
+
+                    <div style="display: flex; justify-content: flex-end; gap: 12px; border-top: 1px dashed #222; padding-top: 15px;">
+                        <button id="btn-cancelaredicion" class="btn-modern btn-neutral">
+                            <div class="btn-content"><i class="fa-solid fa-ban"></i> <span>Cancelar</span></div>
                         </button>
 
-                        <button id="btn-guardar-edicion-amigable" 
-                                class="btn-modern btn-save" 
-                                style="padding: 8px 16px; border-radius: 6px; min-height: auto; font-size: 0.9em; display: flex; align-items: center; gap: 6px;">
-                            <i class="fa-solid fa-floppy-disk"></i> Guardar
+                        <button id="btn-guardarnuevoconcepto" class="btn-modern btn-success">
+                            <div class="btn-content"><i class="fa-solid fa-floppy-disk"></i> <span>Guardar</span></div>
                         </button>
                     </div>
+                    
                 </div>
             </div>
 
             <div id="json-editor-card" class="card hidden">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; border-bottom: 1px solid #333; padding-bottom: 15px;">
+                <div class="panel-header">
                     <div>
-                        <h3 style="margin: 0; font-size: 1.3em; color: #4da6e8;">Editor JSON Crudo</h3>
-                        <p style="font-size:0.85em; color:#888; margin: 4px 0 0 0;">Modifica la estructura base de esta asignatura bajo tu propio riesgo</p>
+                        <h3 style="color: #4da6e8;">Editor JSON Crudo</h3>
+                        <p>Modifica la estructura base de esta asignatura bajo tu propio riesgo</p>
                     </div>
-                    <button id="btn-volver-visual" style="background: rgba(76,175,80,0.15); color: #4CAF50; border: 1px solid #4CAF50; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.85em; font-weight: bold; transition: all 0.2s;">
+                    <button id="btn-volver-visual" class="btn-modern btn-success" style="padding: 8px 14px; font-size: 0.85em; font-weight: bold;">
                         <i class="fa-solid fa-wand-magic-sparkles"></i> Modo Visual
                     </button>
                 </div>
@@ -361,13 +365,17 @@
                 <textarea id="json-editor-area" style="height:450px; width:100%; font-family: 'Courier New', Courier, monospace; font-size: 0.9em; background: #0a0a0a; border: 1px solid #2a2a2a; border-radius: 8px; padding: 12px; color: #a9b7c6; resize: vertical; box-sizing: border-box;"></textarea>
                 
                 <div style="margin-top:20px; display:flex; justify-content:space-between; align-items:center; border-top: 1px solid #333; padding-top: 15px;">
-                    <button id="btn-descargarasignaturaactual" style="background:transparent; border:1px solid #444; color:#aaa; padding:8px 15px; border-radius:6px; cursor:pointer; font-size:0.9em; display:flex; align-items:center; gap:8px; transition: 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
+                    <button id="btn-descargarasignaturaactual" class="btn-ghost" style="display:flex; align-items:center; gap:8px;">
                         <i class="fa-solid fa-download"></i> Copia local
                     </button>
 
                     <div style="display:flex; gap: 8px;">
-                        <button id="btn-cancelaredicion-2" class="btn-cancel" style="border-radius: 6px;">Cancelar</button>
-                        <button id="btn-guardaredicionjson" class="btn-save" style="border-radius: 6px;"><i class="fa-solid fa-floppy-disk"></i> Guardar JSON</button>
+                        <button id="btn-cancelaredicion-2" class="btn-modern btn-neutral">
+                            <div class="btn-content"><i class="fa-solid fa-ban"></i> <span>Cancelar</span></div>
+                        </button>
+                        <button id="btn-guardaredicionjson" class="btn-modern btn-success">
+                            <div class="btn-content"><i class="fa-solid fa-floppy-disk"></i> <span>Guardar JSON</span></div>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -585,7 +593,7 @@
             <div class="stat-widget" data-widget-id="widget-calendario">
                 <div class="stat-title" style="display:flex; justify-content:space-between; align-items:center;">
                     <button id="btn-cambiarmes" style="background:none; border:none; color:#888; cursor:pointer;">&#9668;</button>
-                    <span id="calendar-month-title">FEBRERO 2026</span>
+                    <span id="calendar-month-title">Cargando...</span>
                     <div style="display:flex; align-items:center; gap:6px;">
                         <button id="btn-add-fecha" title="Añadir fecha clave"><i class="fa-regular fa-calendar-plus"></i></button>
                         <button id="btn-cambiarmes-2" style="background:none; border:none; color:#888; cursor:pointer;">&#9658;</button>
@@ -647,7 +655,9 @@
         </div>
         <div id="rsm-breakdown" class="resumen-breakdown"></div>
         <div id="rsm-mensaje" style="font-size:0.8em; color:#888; font-style:italic; margin-bottom:8px;"></div>
-        <button id="btn-cerrarresumensesion" class="resumen-close">Continuar <i class="fa-solid fa-circle-arrow-right"></i></button>
+        <button id="btn-cerrarresumensesion" class="btn-modern btn-danger">
+            <div class="btn-content"><i class="fa-solid fa-xmark"></i> <span>Cerrar Resumen</span></div>
+        </button>
     </div>
 </div>
 
@@ -656,7 +666,9 @@
     <div class="fechas-card">
         <div style="display:flex; justify-content:space-between; align-items:center;">
             <span style="font-size:1em; font-weight:bold; color:#eee;"><i class="fa-solid fa-calendar-days"></i> Fechas Clave</span>
-            <button id="btn-cerrarfechasmodal" style="background:none; border:none; color:#888; cursor:pointer; font-size:1.1em;">✕</button>
+            <button id="btn-cerrarfechasmodal" class="btn-modern btn-danger">
+                <div class="btn-content"><i class="fa-solid fa-xmark"></i> <span>Cerrar</span></div>
+            </button>
         </div>
 
         <!-- Formulario de nueva fecha -->
@@ -673,7 +685,9 @@
             <select id="fk-asig">
                 <option value="">— Todas las asignaturas —</option>
             </select>
-            <button id="btn-guardarfechaclave">Añadir evento</button>
+            <button id="btn-guardarfechaclave" class="btn-modern btn-success">
+                <div class="btn-content"><i class="fa-solid fa-floppy-disk"></i> <span>Guardar Fecha</span></div>
+            </button>
         </div>
 
         <!-- Lista de eventos guardados -->
@@ -690,20 +704,20 @@
     <div class="modal-content" style="max-width:520px; width:95%;">
         <div class="modal-header">
             <h3>Ajustes</h3>
-            <button id="btn-cerrarajustes" class="btn-modern btn-reveal" style="padding: 4px 4px; min-width:14px; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: rgba(33, 150, 243, 0.1); color: var(--status-blue, #2196F3); border: 1px solid rgba(33, 150, 243, 0.3); font-size: 1em; font-weight: bold; line-height: 1; cursor: pointer; transition: all 0.2s;">
-                ✕
+            <button id="btn-cerrarajustes" class="btn-modern btn-danger">
+                <div class="btn-content"><i class="fa-solid fa-xmark"></i> <span>Cerrar</span></div>
             </button>
         </div>
 
         <!-- ── Tab bar ── -->
         <div id="settings-tabs" style="display:flex; border-bottom:1px solid #2a2a2a; margin-bottom:18px; gap:2px; flex-wrap:wrap;">
-            <button class="stab stab-active" data-stab="tab-horario" onclick="cambiarPestanaAjustes('tab-horario')"><i class="fa-regular fa-calendar" style="color: rgb(120, 53, 187); "></i> Horario</button>
-            <button class="stab" data-stab="tab-apariencia" onclick="cambiarPestanaAjustes('tab-apariencia')"><i class="fa-solid fa-palette" style="color: rgb(120, 53, 187); font-size: 1.2em;"></i> Apariencia</button>
+            <button class="stab stab-active" data-stab="tab-horario" onclick="cambiarPestanaAjustes('tab-horario')"><i class="fa-regular fa-calendar stab-icon"></i> Horario</button>
+            <button class="stab" data-stab="tab-apariencia" onclick="cambiarPestanaAjustes('tab-apariencia')"><i class="fa-solid fa-palette stab-icon"></i> Apariencia</button>
             <button class="stab" data-stab="tab-pomodoro" onclick="cambiarPestanaAjustes('tab-pomodoro')">🍅 Pomodoro</button>
-            <button class="stab" data-stab="tab-ia" onclick="cambiarPestanaAjustes('tab-ia')"><i class="fa-solid fa-eye-low-vision" style="color: rgb(120, 53, 187); font-size: 1.2em;"></i> IA</button>
-            <button class="stab" data-stab="tab-cuenta" onclick="cambiarPestanaAjustes('tab-cuenta')"><i class="fa-solid fa-house-user" style="color: rgb(120, 53, 187); font-size: 1.2em;"></i> Cuenta</button>
-            <button class="stab" data-stab="tab-datos" onclick="cambiarPestanaAjustes('tab-datos')"><i class="fa-solid fa-floppy-disk" style="color: rgb(120, 53, 187); font-size: 1.2em;"></i> Datos</button>
-            <button class="stab" data-stab="tab-info" onclick="cambiarPestanaAjustes('tab-info')"><i class="fa-solid fa-circle-info" style="color: rgb(120, 53, 187); font-size: 1.2em;"></i> Sobre el programa</button>
+            <button class="stab" data-stab="tab-ia" onclick="cambiarPestanaAjustes('tab-ia')"><i class="fa-solid fa-eye-low-vision stab-icon"></i> IA</button>
+            <button class="stab" data-stab="tab-cuenta" onclick="cambiarPestanaAjustes('tab-cuenta')"><i class="fa-solid fa-house-user stab-icon"></i> Cuenta</button>
+            <button class="stab" data-stab="tab-datos" onclick="cambiarPestanaAjustes('tab-datos')"><i class="fa-solid fa-floppy-disk stab-icon"></i> Datos</button>
+            <button class="stab" data-stab="tab-info" onclick="cambiarPestanaAjustes('tab-info')"><i class="fa-solid fa-circle-info stab-icon"></i> Sobre el programa</button>
         </div>
 
         <!-- ══════════════════════════════════════════════
@@ -733,23 +747,65 @@
             <h5 style="color:var(--accent); border-bottom:1px solid #333; margin-bottom:12px;">Estilo visual</h5>
             <div class="setting-row">
                 <label>Estilo Visual de Botones</label>
-                <select id="set-visual-theme" style="width:140px; text-align:left;">
+                <select id="set-visual-theme" style="width:190px; text-align:left;">
                     <option value="style-glass">Glassmorphism</option>
                     <option value="style-cyber">Cyberpunk</option>
                     <option value="style-skeuo">Skeuomorphic</option>
+                    <option value="style-nord">Nord</option>
+                    <option value="style-abyss">Abyss</option>
+                    <option value="style-terminal">Terminal</option>
                 </select>
             </div>
             <div class="setting-row">
                 <label>Animación de Pulsado</label>
-                <select id="set-click-effect" style="width:140px; text-align:left;">
+                <select id="set-click-effect" style="width:190px; text-align:left;">
                     <option value="click-skeuo">Táctil (Skeuo)</option>
                     <option value="click-cyber">Luminosa (Cyber)</option>
+                    <option value="click-liquid">Líquida</option>
                     <option value="click-none">Ninguna</option>
                 </select>
             </div>
+            <div class="setting-row">
+                <label>Tema Base</label>
+                <select id="set-color-preset" style="width:190px; text-align:left;">
+                    <option value="default">Oscuro Clásico</option>
+                    <option value="nord">Nordic Night</option>
+                    <option value="abyss">OLED Abyss</option>
+                    <option value="terminal">Retro Terminal</option>
+                    <option value="custom">Personalizado...</option>
+                </select>
+            </div>
+                <h5 style="color:var(--accent); border-bottom:1px solid #333; margin-bottom:12px;"><i class="fa-solid fa-palette"></i> Personalización atómica</h5>
+                <div style="background:rgba(0,0,0,0.2); padding:15px; border-radius:6px; border: 1px solid var(--border); max-height: 400px; overflow-y: auto;">
+                    <h4 style="margin: 0 0 10px 0; color: var(--accent); font-size: 0.85em; text-transform: uppercase;">Base del Sistema</h4>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom: 20px;">
+                        <label style="display:flex; justify-content:space-between; align-items:center; font-size:0.85em; color:#ccc;">Fondo App <input type="color" class="color-picker-dinamico" data-var="--bg-color"></label>
+                        <label style="display:flex; justify-content:space-between; align-items:center; font-size:0.85em; color:#ccc;">Menú Lateral <input type="color" class="color-picker-dinamico" data-var="--menu-color"></label>
+                        <label style="display:flex; justify-content:space-between; align-items:center; font-size:0.85em; color:#ccc;">Tarjetas/Paneles <input type="color" class="color-picker-dinamico" data-var="--card-bg"></label>
+                        <label style="display:flex; justify-content:space-between; align-items:center; font-size:0.85em; color:#ccc;">Texto <input type="color" class="color-picker-dinamico" data-var="--text-main"></label>
+                        <label style="display:flex; justify-content:space-between; align-items:center; font-size:0.85em; color:#ccc;">Bordes <input type="color" class="color-picker-dinamico" data-var="--border"></label>
+                        <label style="display:flex; justify-content:space-between; align-items:center; font-size:0.85em; color:#ccc;">Acento Global <input type="color" class="color-picker-dinamico" data-var="--accent"></label>
+                    </div>
+
+                    <h4 style="margin: 0 0 10px 0; color: var(--accent); font-size: 0.85em; text-transform: uppercase;">Temporizador</h4>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px; margin-bottom: 20px;">
+                        <label style="display:flex; flex-direction:column; align-items:center; font-size:0.8em; color:#ccc; gap:5px;">Trabajo <input type="color" class="color-picker-dinamico" data-var="--pomo-work"></label>
+                        <label style="display:flex; flex-direction:column; align-items:center; font-size:0.8em; color:#ccc; gap:5px;">C. Corto <input type="color" class="color-picker-dinamico" data-var="--pomo-short"></label>
+                        <label style="display:flex; flex-direction:column; align-items:center; font-size:0.8em; color:#ccc; gap:5px;">C. Largo <input type="color" class="color-picker-dinamico" data-var="--pomo-long"></label>
+                    </div>
+
+                    <h4 style="margin: 0 0 10px 0; color: var(--accent); font-size: 0.85em; text-transform: uppercase;">Feedback de Estudio</h4>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                        <label style="display:flex; justify-content:space-between; align-items:center; font-size:0.85em; color:#ccc;">Bien / Éxito <input type="color" class="color-picker-dinamico" data-var="--status-green"></label>
+                        <label style="display:flex; justify-content:space-between; align-items:center; font-size:0.85em; color:#ccc;">Crítica / Error <input type="color" class="color-picker-dinamico" data-var="--status-red"></label>
+                        <label style="display:flex; justify-content:space-between; align-items:center; font-size:0.85em; color:#ccc;">Difícil / Aviso <input type="color" class="color-picker-dinamico" data-var="--status-yellow"></label>
+                        <label style="display:flex; justify-content:space-between; align-items:center; font-size:0.85em; color:#ccc;">Fácil / Info <input type="color" class="color-picker-dinamico" data-var="--status-blue"></label>
+                    </div>
+                
+            </div>
             <div style="margin-top: 15px; border-top: 1px solid #333; padding-top: 15px;">
                 <h4 style="margin-top: 0; color: var(--accent);">Gestión de Interfaz</h4>
-                <button class="btn-modern" onclick="restaurarWidgets(); document.getElementById('ajustes-modal').classList.add('hidden');" style="width: 100%; padding: 10px; background: #2a2a2a; border: 1px solid #444; color: #e0e0e0; border-radius: 4px; cursor: pointer;">
+                <button id="btn-restaurar-widgets" class="btn-modern btn-neutral" style="width: 100%; padding: 10px;">
                     <i class="fa-solid fa-rotate-left"></i> Restaurar diseño de Widgets por defecto
                 </button>
             </div>
@@ -763,7 +819,8 @@
                 <label style="margin:0; cursor:pointer;" for="check-auto-start">Iniciar siguiente temporizador automáticamente</label>
                 <input type="checkbox" id="check-auto-start" style="width: 20px;">
             </div>
-            <p style="font-size:0.85em; color:#666; margin: 14px 0 10px; text-decoration: underline; text-underline-offset: 4px;">Ajustar tiempo:</p>
+            <h5 style="font-size:0.85em;">Ajustar intervalos</h5>
+            
             <div class="setting-row">
                 <label style="margin:0">Pomodoro (minutos)</label>
                 <input type="number" id="set-work" value="35">
@@ -773,8 +830,13 @@
                 <input type="number" id="set-short" value="5">
             </div>
             <div class="setting-row">
-                <label style="margin:0">Descanso Largo (cada 4 pomodoros)</label>
+                <label style="margin:0">Descanso Largo (cada n pomodoros)</label>
                 <input type="number" id="set-long" value="15">
+            </div>
+            <hr style="border: 0; border-top: 1px solid #2a2a2a; margin: 20px 0;">
+            <div class="setting-row">
+                <label style="margin:0">Pomodoros para descanso largo (los n de antes, defecto n=4)</label>
+                <input type="number" id="set-cycles" min="1" max="12" value="4">
             </div>
         </div>
 
@@ -918,7 +980,7 @@
                 </h5>
             </div>
 
-            <div style="background: #181818; padding: 15px; border-radius: 8px; border: 1px solid #333; margin-top: 20px;">
+            <div style="background: --menu-color; padding: 15px; border-radius: 8px; border: 1px solid #333; margin-top: 20px;">
             <h4 style="margin: 0 0 10px 0; color: var(--accent); display: flex; align-items: center; gap: 8px;">
                 <span style="font-size: 1.2em;"><i class="fa-solid fa-hexagon-nodes"></i></span> Motor de Retención: FSRS-6
             </h4>
@@ -963,13 +1025,11 @@
         
         <!-- BOTÓN DE GUARDAR; LO PONEMOS SIN TAB Y APARECE EN TODAS LAS PESTAÑAS -->
         <div style="display:flex; justify-content:center; margin-top:18px;">
-            <button id="btn-guardarajustes" class="btn-modern btn-reveal" style="padding: 8px 45px; background: rgba(39, 146, 176, 0.1); color: var(--status-blue, #2196F3); border: 1px solid var(--status-blue, #2196F3); border-radius: 4px; font-weight: bold; cursor: pointer; transition: all 0.2s;">
-                Guardar ajustes
+            <button id="btn-guardarajustes" class="btn-modern btn-success">
+                <div class="btn-content"><i class="fa-solid fa-floppy-disk"></i> <span>Guardar Ajustes</span></div>
             </button>
         </div>
 
-
-        <audio id="alarm-audio" src="data:audio/mp3;base64,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"></audio>
     </div>
 </div>
 
@@ -977,8 +1037,8 @@
     <div class="modal-content" style="max-width:600px; width:95%; border:1px solid #444; background:var(--card-bg);">
         <div class="modal-header">
             <h3>Gestión Pomodoro</h3>
-            <button id="btn-cerrarmodalpomodoro" class="btn-modern btn-reveal" style="padding: 4px 4px; min-width:14px; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: rgba(33, 150, 243, 0.1); color: var(--status-blue, #2196F3); border: 1px solid rgba(33, 150, 243, 0.3); font-size: 1em; font-weight: bold; line-height: 1; cursor: pointer; transition: all 0.2s;">
-                ✕
+            <button id="btn-cerrarmodalpomodoro" class="btn-modern btn-danger">
+                <div class="btn-content"><i class="fa-solid fa-xmark"></i> <span>Cerrar</span></div>
             </button>
         </div>
         
@@ -998,18 +1058,44 @@
             
             <ul id="task-list" class="task-list" style="max-height:200px; overflow-y:auto;"></ul>
             <div id="add-task-trigger" class="add-task-btn"><i class="fa-solid fa-star"></i> Nueva tarea</div>
-            <div id="finish-time-display" style="margin-top: 15px; color: var(--accent);"></div>
+            <div id="finish-time-display" style="margin-top: 15px;">
+                <div id="pomo-empty-msg" style="display: none; color: #666; text-align: center; padding: 10px;">
+                    Todo al día
+                </div>
+
+                <div id="pomo-status-content" style="display: block;">
+                    <div style="display:flex; justify-content:space-between; border-bottom:1px solid #444; padding-bottom:5px; margin-bottom:5px; font-size:0.9em;">
+                        <span>Restan: <strong id="pomo-remain-count" style="color:#eee">--</strong></span>
+                        <span>Tiempo: <strong id="pomo-remain-time" style="color:#eee">--</strong></span>
+                    </div>
+
+                    <div style="background: linear-gradient(145deg, rgba(76,175,80,0.1) 0%, rgba(76,175,80,0.05) 100%); border-radius: 12px; padding: 10px 15px; margin-top: 8px; display: flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid rgba(76,175,80,0.2);">
+                        <div style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: #2dbdbd; border-radius: 8px;">
+                            <i class="fa-solid fa-plane-arrival" style="font-size: 16px; color: #121212;"></i>
+                        </div>
+                        <span style="color: #e0e0e0; font-weight: 500;">
+                            Fin estimado: <strong id="pomo-eta-value" style="color: var(--accent); font-size: 1.1em;">--:--</strong>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
             
             <div id="task-form-panel" class="hidden">
                 <input type="text" id="new-task-title" placeholder="¿Qué vamos a hacer?">
                 <div class="est-pomo-container">
                     <input type="number" id="new-task-est" value="1" class="est-pomo-input">
-                    <button id="btn-adjpomo">&#9650;</button><button>&#9660;</button>
+                    <button id="btn-adjpomo" class="btn-mini-control">▲</button>
+                    <button id="btn-adjpomo-2" class="btn-mini-control">▼</button>
                 </div>
                 <select id="new-task-project"></select>
                 <div class="form-actions">
-                    <button id="btn-hidetaskform" class="btn-cancel">Cancelar</button>
-                    <button id="btn-savenewtask" class="btn-save">Guardar</button>
+                    <button id="btn-hidetaskform" class="btn-modern btn-neutral">
+                        <div class="btn-content"><i class="fa-solid fa-ban"></i> <span>Cancelar</span></div>
+                    </button>
+                    <button id="btn-savenewtask" class="btn-modern btn-success">
+                        <div class="btn-content"><i class="fa-solid fa-check"></i> <span>Guardar Tarea</span></div>
+                    </button>
                 </div>
             </div>
         </div>
@@ -1030,25 +1116,20 @@
             <button onclick="cerrarExamen()" class="btn-cerrar-modal" style="background: transparent; border: none; color: #888; font-size: 1.2em; cursor: pointer; padding: 5px; transition: color 0.2s;" onmouseover="this.style.color='var(--status-red)'" onmouseout="this.style.color='#888'">✕</button>
         </div>
 
-        <!-- Selector de modo -->
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:18px;">
-            <label id="ex-mode-btn-flash" style="
-                display:flex; flex-direction:column; align-items:center; gap:5px;
-                padding:12px; border:2px solid var(--accent); border-radius:10px;
-                cursor:pointer; background:rgba(76,175,80,0.12);">
-                <span style="font-size:1.5em;"><i class="fa-solid fa-jet-fighter-up"></i> <i class="fa-solid fa-jet-fighter-up"></i> <i class="fa-solid fa-jet-fighter-up"></i></span>
-                <strong style="color:#eee; font-size:0.9em;">Repaso rápido</strong>
-                <span style="font-size:0.7em; color:#888; text-align:center;">Revela y valórate 1-4</span>
-                <input type="radio" name="ex-mode" value="flash" checked style="display:none;">
+        <div class="exam-mode-selector">
+            <label id="ex-mode-btn-flash" class="exam-mode-card" data-action="setModoExamen" data-modo="flash">
+                <span class="exam-mode-icon"><i class="fa-solid fa-jet-fighter-up"></i></span>
+                <strong>Flash</strong>
             </label>
-            <label id="ex-mode-btn-real" style="
-                display:flex; flex-direction:column; align-items:center; gap:5px;
-                padding:12px; border:2px solid #333; border-radius:10px;
-                cursor:pointer; background:transparent;">
-                <span style="font-size:1.5em;"><i class="fa-solid fa-person-military-rifle"></i><i class="fa-solid fa-person-military-rifle"></i><i class="fa-solid fa-person-military-rifle"></i></span>
-                <strong style="color:#eee; font-size:0.9em;">Examen real</strong>
-                <span style="font-size:0.7em; color:#888; text-align:center;">Escribe, navega, entrega</span>
-                <input type="radio" name="ex-mode" value="real" style="display:none;">
+
+            <label id="ex-mode-btn-real" class="exam-mode-card" data-action="setModoExamen" data-modo="real">
+                <span class="exam-mode-icon"><i class="fa-solid fa-person-military-rifle"></i></span>
+                <strong>Real</strong>
+            </label>
+
+            <label id="ex-mode-btn-feynman" class="exam-mode-card" data-action="setModoExamen" data-modo="feynman">
+                <span class="exam-mode-icon"><i class="fa-solid fa-brain"></i></span>
+                <strong>Feynman</strong>
             </label>
         </div>
 
@@ -1409,7 +1490,7 @@
 
         <!-- Footer fijo -->
         <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 14px; border-top:1px solid #333; flex-shrink:0;">
-            <button id="btn-limpiarfiltros" style="background:transparent; border:1px solid #444; color:#888; font-size:0.78em; cursor:pointer; padding:4px 10px; border-radius:4px;">✕ Limpiar</button>
+            <button id="btn-limpiarfiltros" class="btn-ghost">✕ Resetear</button>
             <span id="contador-filtro-modal" style="font-size:0.78em; color:#666; font-family:monospace;"></span>
             <button id="btn-cerrarmodalfiltros-2" style="background:rgba(143, 47, 162,0.15); border:1px solid #AE39C6; color:#AE39C6; font-size:0.8em; cursor:pointer; padding:5px 14px; border-radius:6px; font-weight:bold;">Aplicar</button>
         </div>
@@ -1433,5 +1514,16 @@
 <script src="src/js/data-io.js" defer></script> <script src="src/js/pizarra.js" defer></script>
 <script src="src/js/firebase.js" defer></script>
 <script src="src/js/widget-manager.js"></script>
+<script src="src/js/colors.js"></script>
+<script src="src/js/agenda.js"></script>
+<script src="src/js/asignaturas.js"></script>
+<script src="src/js/editor.js"></script>
+<script src="src/js/ia-service.js"></script>
+<script src="src/js/settings.js"></script>
+<script src="src/js/filters.js"></script>
+<script src="src/js/mobile.js"></script>
 <script src="src/js/app.js" defer></script>
+
+
+<audio id="alarm-audio" src="data:audio/mp3;base64,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"></audio>
 </body>

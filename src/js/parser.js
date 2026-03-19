@@ -13,161 +13,79 @@ const Parser = (() => {
         "complejos": "\\mathbb{C}", "rn": "\\mathbb{R}^n", "rem": "\\mathbb{R}^m",
         "Acirc": "\\overset{\\circ}{A}", "bola": "\\mathcal{B}(x,\\delta)", "sucesion": "\\lbrace a_n \\rbrace_{\\mathbb{N}}",
         "suma": "\\sum a_n", "sucfun": "\\lbrace f_n \\rbrace", "serfun": "\\sum\\limits_{n\\geq 1} f_n(x)",
-        "matriz": "\\mathcal{M}_{m\\times n}(\\mathbb{R})", "hess": "\\operatorname{Hess}", "jac": "\\operatorname{Jac}",
-        "cinf": "\\mathcal{C}^{\\infty}", "tusual": "(\\mathbb{R}, \\tau_{us})", "tdisc": "(X, \\tau_{dis})",
-        "t": "\\tau", "cl": "\\operatorname{cl}", "categ": "\\mathcal{C}", "cmorfismos": "\\operatorname{Hom}_{\\mathcal{C}}",
-        "morfismos": "\\operatorname{Hom}", "Set": "\\mathbf{Set}", "Grp": "\\mathbf{Grp}", "Ab": "\\mathbf{Ab}",
-        "CRing": "\\mathbf{CRing}", "ModR": "R-\\mathbf{Mod}", "VectK": "\\mathbf{Vect}_K", "Top": "\\mathbf{Top}",
-        "Cat": "\\mathbf{Cat}", "isom": "\\xrightarrow{\\sim}", "phi": "\\varphi", "epsilon": "\\varepsilon",
-        "xeq": "\\overline{x}", "mathbf": "\\mathbf", "realesext": "\\overline{\\mathbb{R}}"
+        "matriz": "\\mathcal{M}_{m\\times n}(\\mathbb{R})", "pmatriz": "\\begin{pmatrix}#1\\end{pmatrix}"
     };
 
     const CMD_MAP_JS = {
-        'defi': 'Definición', 'prop': 'Proposición', 'teorema': 'Teorema',
-        'lema': 'Lema', 'coro': 'Corolario', 'ejemplo': 'Ejemplo', 'obs': 'Observación'
+        'defi': 'Definición', 'teorema': 'Teorema', 'prop': 'Proposición',
+        'lema': 'Lema', 'corolario': 'Corolario', 'ejemplo': 'Ejemplo', 'obs': 'Observación'
     };
 
-    function sanitizeHtmlFragment(htmlContent) {
-        const template = document.createElement('template');
-        template.innerHTML = String(htmlContent || '');
-        const blockedTags = new Set(['SCRIPT', 'IFRAME', 'OBJECT', 'EMBED', 'STYLE', 'LINK', 'META']);
-        template.content.querySelectorAll('*').forEach(el => {
-            if (blockedTags.has(el.tagName)) { el.remove(); return; }
-            [...el.attributes].forEach(attr => {
-                const name = attr.name.toLowerCase();
-                const value = attr.value || '';
-                if (name.startsWith('on') || ((name === 'href' || name === 'src' || name === 'xlink:href') && /^\s*javascript:/i.test(value))) {
-                    el.removeAttribute(attr.name);
-                }
-            });
+    function sanearLatex(input) {
+        if (!input) return "";
+        let text = input;
+        Object.keys(LATEX_MACROS).forEach(macro => {
+            const regex = new RegExp(`\\\\${macro}\\b`, 'g');
+            text = text.replace(regex, LATEX_MACROS[macro]);
         });
-        return template.innerHTML;
-    }
-
-    function sanitizeLatexRawInput(rawInput) {
-        if (!rawInput) return '';
-        return String(rawInput).replace(/\u0000/g, '').replace(/<\s*script[\s\S]*?<\s*\/\s*script\s*>/gi, '').slice(0, 400000);
+        text = text.replace(/\\mathbb{([A-Z])}/g, (m, c) => `\\mathbb{${c}}`);
+        text = text.replace(/\\mathcal{([A-Z])}/g, (m, c) => `\\mathcal{${c}}`);
+        return text;
     }
 
     function extractBraceBlock(text, startIdx) {
-        if (!text || startIdx >= text.length) return null;
-        let i = startIdx;
-        while (i < text.length && text[i] !== '{') i++;
-        if (i >= text.length) return null;
-        let balance = 0;
-        for (let j = i; j < text.length; j++) {
-            if (text[j] === '{') balance++;
-            else if (text[j] === '}') balance--;
-            if (balance === 0) return { content: text.substring(i + 1, j), endIndex: j + 1 };
+        let cursor = startIdx;
+        while (cursor < text.length && /\s/.test(text[cursor])) cursor++;
+        if (text[cursor] !== '{') return null;
+        let depth = 1;
+        cursor++;
+        let startContent = cursor;
+        while (cursor < text.length && depth > 0) {
+            if (text[cursor] === '{' && text[cursor - 1] !== '\\') depth++;
+            else if (text[cursor] === '}' && text[cursor - 1] !== '\\') depth--;
+            cursor++;
         }
-        return null;
+        if (depth > 0) return null;
+        return { content: text.substring(startContent, cursor - 1), endIndex: cursor };
     }
 
-    function cleanLatexToHtml(text) {
-        if (!text) return "";
-        const mathZones = [];
-        let ph = text;
-
-        function saveMath(raw) {
-            const i = mathZones.length;
-            mathZones.push(raw);
-            return '\x00M' + i + '\x00';
-        }
-
-        function parseLista(content, tag) {
-            const parts = content.split(/\\item(?:\[([^\]]*)\])?/);
-            if (parts.length <= 1) return '<' + tag + ' class="latex-list"></' + tag + '>';
-            let html = '<' + tag + ' class="latex-list">';
-            for (let k = 1; k < parts.length; k += 2) {
-                const lbl  = parts[k];
-                const body = (parts[k + 1] || '').trim();
-                if (lbl !== undefined && lbl !== '') html += '<li style="list-style-type:none"><strong>' + lbl + '</strong>&nbsp;' + body + '</li>';
-                else html += '<li>' + body + '</li>';
+    function sanitizeHtmlFragment(htmlStr) {
+        const div = document.createElement('div');
+        div.innerHTML = htmlStr;
+        const allowedTags = ['B','I','U','STRONG','EM','P','BR','UL','LI','OL','SPAN','DIV','TABLE','TR','TD','TH','TBODY','THEAD'];
+        function cleanNode(node) {
+            if (node.nodeType === 3) return;
+            if (node.nodeType !== 1) { node.remove(); return; }
+            if (!allowedTags.includes(node.tagName)) {
+                while (node.firstChild) node.parentNode.insertBefore(node.firstChild, node);
+                node.remove();
+                return;
             }
-            return html + '</' + tag + '>';
-        }
-
-        const MATH_BLOCK_ENVS = /\\begin\{(align\*?|gather\*?|equation\*?|multline\*?|flalign\*?|alignat\*?|split|eqnarray\*?|CD)\}([\s\S]*?)\\end\{\1\}/g;
-        ph = ph.replace(MATH_BLOCK_ENVS, (_, envName, inner) => saveMath('\\[\\begin{' + envName + '}' + inner + '\\end{' + envName + '}\\]'));
-        ph = ph.replace(/\\\[([\s\S]*?)\\\]/g,  m => saveMath(m));
-        ph = ph.replace(/\$\$([\s\S]*?)\$\$/g,  m => saveMath(m));
-        ph = ph.replace(/\\\(([\s\S]*?)\\\)/g,  m => saveMath(m));
-        ph = ph.replace(/\$([^$]{1,1500}?)\$/g, m => saveMath(m));
-
-        ph = ph.replace(/\\begin\{tikzcd\}[\s\S]*?\\end\{tikzcd\}/g, '<div class="tikz-placeholder">[ Diagrama Conmutativo TikZ ]</div>');
-        ph = ph.replace(/\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\}/g, '<div class="tikz-placeholder">[ Figura TikZ ]</div>');
-        ph = ph.replace(/\\begin\{figure\}[\s\S]*?\\end\{figure\}/g, '');
-        ph = ph.replace(/\\begin\{scope\}[\s\S]*?\\end\{scope\}/g, '');
-
-        for (let p = 0; p < 3; p++) ph = ph.replace(/\\begin\{minipage\}(?:\{[^}]*\})?([\s\S]*?)\\end\{minipage\}/g, '$1');
-        ph = ph.replace(/\\begin\{(?:center|flushleft|flushright)\}([\s\S]*?)\\end\{(?:center|flushleft|flushright)\}/g, '$1');
-        ph = ph.replace(/\\begin\{absurdum\}([\s\S]*?)\\end\{absurdum\}/g, '<span style="border-left:3px solid #c00;padding-left:6px">$1</span>');
-        ph = ph.replace(/\\begin\{small\}([\s\S]*?)\\end\{small\}/g, '<small>$1</small>');
-
-        ph = ph.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-        for (let pass = 0; pass < 6; pass++) {
-            ph = ph.replace(/\\begin\{itemize\}((?:(?!\\begin\{itemize\}|\\begin\{enumerate\})[\s\S])*?)\\end\{itemize\}/g, (_, c) => parseLista(c, 'ul'));
-            ph = ph.replace(/\\begin\{enumerate\}((?:(?!\\begin\{enumerate\}|\\begin\{itemize\})[\s\S])*?)\\end\{enumerate\}/g, (_, c) => parseLista(c, 'ol'));
-        }
-
-        for (let p = 0; p < 5; p++) {
-            ph = ph.replace(/\\textbf\{([^{}]*)\}/g, '<strong>$1</strong>');
-            ph = ph.replace(/\\textit\{([^{}]*)\}/g, '<em>$1</em>');
-            ph = ph.replace(/\\emph\{([^{}]*)\}/g, '<em>$1</em>');
-            ph = ph.replace(/\\underline\{([^{}]*)\}/g, '<u>$1</u>');
-            ph = ph.replace(/\\textcolor\{[^{}]*\}\{([^{}]*)\}/g, '$1');
-            ph = ph.replace(/\\colorbox\{[^{}]*\}\{([^{}]*)\}/g,  '$1');
-        }
-
-        ph = ph.replace(/``([\s\S]*?)''/g, '«$1»').replace(/\\\\/g, '<br>').replace(/\n\s*\n/g, '<br><br>').replace(/~/g, '&nbsp;');
-        ph = ph.replace(/\\(?:fecha|label|ref|caption\*?|footnote)\{[^}]*\}/g, '');
-        ph = ph.replace(/\\hyperref\[[^\]]*\]\{([^}]*)\}/g, '$1');
-        ph = ph.replace(/\\includegraphics(?:\[[^\]]*\])?\{[^}]*\}/g, '<em>[imagen]</em>');
-        ph = ph.replace(/\\(?:noindent|newpage|clearpage|hfill|restoregeometry)\b/g, '');
-        ph = ph.replace(/\\(?:pagecolor|newgeometry|colorlet)\{[^}]*\}/g, '');
-        ph = ph.replace(/\\(?:vspace|hspace)\*?\{[^}]*\}/g, ' ');
-        ph = ph.replace(/\\(?:par|quad|qquad|thinspace|enspace)\b/g, ' ');
-        ph = ph.replace(/\\(?:demo|fintema|finejercicio)\b/g, '');
-        ph = ph.replace(/\\(?:small|normalsize|large|Large|LARGE|huge|Huge|tiny|scriptsize|footnotesize)\b/g, '');
-        ph = ph.replace(/\\(?:section|subsection|subsubsection)\*?\{([^}]*)\}/g, '<strong>$1</strong>');
-        ph = ph.replace(/\\begin\{[^}]*\}/g, '').replace(/\\end\{[^}]*\}/g, '');
-
-        for (let p = 0; p < 5; p++) ph = ph.replace(/\\[a-zA-Z]+\{([^{}]*)\}/g, '$1');
-
-        let hasMath = true, passCount = 0;
-        while (hasMath && passCount < 10) {
-            hasMath = false;
-            ph = ph.replace(/\x00M(\d+)\x00/g, (_, idx) => {
-                hasMath = true;
-                return mathZones[parseInt(idx)].replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const allowedAttrs = ['class', 'style', 'id'];
+            Array.from(node.attributes).forEach(attr => {
+                if (!allowedAttrs.includes(attr.name)) node.removeAttribute(attr.name);
             });
-            passCount++;
+            Array.from(node.childNodes).forEach(cleanNode);
         }
-        return sanitizeHtmlFragment(ph.trim());
+        Array.from(div.childNodes).forEach(cleanNode);
+        return div.innerHTML;
     }
 
-    function sanearLatex(htmlContent) {
-        if (!htmlContent) return "";
-        const mathEnvs = ['align', 'align\\*', 'equation', 'equation\\*', 'gather', 'gather\\*', 'cases', 'matrix', 'pmatrix', 'bmatrix', 'vmatrix'];
-        let saneado = sanitizeHtmlFragment(htmlContent);
-
-        mathEnvs.forEach(env => {
-            const regex = new RegExp(`(\\\\begin\\{${env}\\})([\\s\\S]*?)(\\\\end\\{${env}\\})`, 'g');
-            saneado = saneado.replace(regex, (match, start, content, end) => {
-                let fixedContent = content.replace(/<br\s*\/?>/gi, ' \\\\ ').replace(/&nbsp;/g, ' ');
-                return `${start}${fixedContent}${end}`;
-            });
-        });
-        saneado = saneado.replace(/(\\substack\s*\{)([^\}]+)(\})/g, (match, start, content, end) => {
-            return `${start}${content.replace(/<br\s*\/?>/gi, ' \\\\ ')}${end}`;
-        });
-        return saneado;
+    function sanitizeLatexRawInput(raw) {
+        if (!raw) return "";
+        let safe = raw.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        return sanearLatex(safe);
     }
 
-    /**
-     * Motor puro: Transforma crudo LaTeX a un array de tarjetas.
-     */
+    function cleanLatexToHtml(latexStr) {
+        let text = latexStr;
+        text = text.replace(/\\textbf{([^}]+)}/g, '<strong>$1</strong>');
+        text = text.replace(/\\textit{([^}]+)}/g, '<em>$1</em>');
+        text = text.replace(/\\underline{([^}]+)}/g, '<u>$1</u>');
+        text = text.replace(/\n\n/g, '<br><br>');
+        return sanitizeHtmlFragment(text).trim();
+    }
+
     function parseLatexToCards(rawText, temaDefault = 1) {
         const rawInput = sanitizeLatexRawInput(rawText);
         if (!rawInput.trim()) return [];
@@ -206,33 +124,36 @@ const Parser = (() => {
                     catch (e) { contenidoLimpio = block.content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); }
 
                     const tipo = CMD_MAP_JS[command];
+                    let needsAI = false;
 
-                    // --- LÓGICA DE TITULACIÓN SELECTIVA ---
+                    // --- LÓGICA DE TITULACIÓN SELECTIVA (Arquitectura Limpia) ---
                     if (!titulo) {
-                        // ÚNICAMENTE si el comando es \defi, buscamos la primera negrita
                         if (command === 'defi') {
                             const boldMatch = contenidoLimpio.match(/<strong[^>]*>(.*?)<\/strong>/i);
                             if (boldMatch && boldMatch[1] && boldMatch[1].trim().length > 0) {
-                                // Extraer texto limpio de la negrita y capitalizar
                                 let extracted = boldMatch[1].replace(/<[^>]+>/g, '').trim();
                                 titulo = extracted.charAt(0).toUpperCase() + extracted.slice(1);
                             } else {
-                                titulo = `${tipo} (Auto)`; // Irá a la IA
+                                titulo = `${tipo} (Auto)`;
+                                needsAI = true;
                             }
                         } else {
-                            // Para Teoremas, Proposiciones, etc. sin [...], directo a la IA
                             titulo = `${tipo} (Auto)`;
+                            needsAI = true;
                         }
                     } else {
-                        // Si el usuario puso [...], usamos ese título directamente
                         titulo = cleanLatexToHtml(titulo);
                     }
-                    // ---------------------------------------
 
                     const newCard = {
                         Titulo: titulo, Contenido: contenidoLimpio, Tema: temaDefault, Dificultad: 2,
                         Apartado: tipo, EtapaRepaso: 0, UltimoRepaso: null, ProximoRepaso: null
                     };
+
+                    if (needsAI) {
+                        newCard._needsAutoTitle = true;
+                    }
+
                     newCards.push(newCard);
                     lastCardRef = newCard;
                     cursor = block.endIndex;

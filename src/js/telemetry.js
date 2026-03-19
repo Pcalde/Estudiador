@@ -8,13 +8,12 @@ const Telemetry = (() => {
 
     function updateDashboard() {
         const asig = State.get('nombreAsignaturaActual');
-        const dashboardCol = document.getElementById('dashboard-col');
         
-        if (!asig) {
-            if (dashboardCol) dashboardCol.classList.add('hidden');
-            return;
+        if (typeof UI !== 'undefined' && UI.toggleDashboardVisibility) {
+            UI.toggleDashboardVisibility(!!asig);
         }
-        if (dashboardCol) dashboardCol.classList.remove('hidden');
+        
+        if (!asig) return;
 
         const _hidden = (State.get('widgetConfig') || {}).hidden || {};
         const _run = (wid, fn) => { if (!_hidden[wid]) fn(); };
@@ -33,13 +32,50 @@ const Telemetry = (() => {
         if (typeof window.renderUpcomingEvents === 'function') window.renderUpcomingEvents();
     }
 
+    function setWeeklyView(mode) {
+        window.weeklyViewMode = mode; 
+        if (typeof UI !== 'undefined' && UI.updateWeeklyViewButtons) {
+            UI.updateWeeklyViewButtons(mode);
+        }
+        updateWeeklyWidget();
+    }
+
+    function cerrarResumenSesion() {
+        if (typeof UI !== 'undefined' && UI.cerrarResumenSesion) {
+            UI.cerrarResumenSesion();
+        }
+    }
+    
+
     function updateDifficultyStats() {
         const asig = State.get('nombreAsignaturaActual');
-        if (!asig) return;
+        const bib = State.get('biblioteca');
+        if (!asig || !bib[asig]) return;
+
+        const cards = bib[asig];
         const snapKey = `dist_snap_${asig}`;
         const prevSnap = JSON.parse(localStorage.getItem(snapKey) || 'null');
-        const counts = UI.updateDifficultyStats(State.get('biblioteca'), asig, prevSnap);
-        if (counts) localStorage.setItem(snapKey, JSON.stringify(counts));
+        
+        // CÁLCULO ESTRICTO EN TELEMETRÍA
+        let counts = { 0:0, 1:0, 2:0, 3:0, 4:0 };
+        let pendientesHoy = 0;
+        const todayVal = window.fechaValor(window.getFechaHoy());
+
+        cards.forEach(c => {
+            const dif = (c.Dificultad === null || c.Dificultad === undefined) ? 2 : parseInt(c.Dificultad);
+            const etapa = c.EtapaRepaso || 0;
+            const tieneRepaso = !!c.UltimoRepaso;
+
+            if (dif === 2 && !tieneRepaso && etapa === 0) counts[0]++;
+            else if (counts[dif] !== undefined) counts[dif]++;
+            else counts[3]++;
+
+            if (c.ProximoRepaso && window.fechaValor(c.ProximoRepaso) <= todayVal) pendientesHoy++;
+        });
+
+        // Almacenar y delegar renderizado
+        localStorage.setItem(snapKey, JSON.stringify(counts));
+        UI.updateDifficultyStats(counts, prevSnap, cards.length, pendientesHoy);
     }
 
     function updateCalendarHeatmap() {
@@ -100,6 +136,17 @@ const Telemetry = (() => {
         
         updatePomoStats();
         updateWeeklyWidget();
+        updateGlobalStats();
+    }
+    function registrarExamen(payload) {
+        let historial = JSON.parse(localStorage.getItem('estudiador_historial_examenes') || '[]');
+        historial.push(payload);
+        
+        // Mantenemos una ventana móvil de los últimos 100 exámenes para no saturar memoria
+        if (historial.length > 100) historial.shift();
+        
+        localStorage.setItem('estudiador_historial_examenes', JSON.stringify(historial));
+        if (typeof Logger !== 'undefined') Logger.info("Historial de examen persistido.");
     }
 
     function editarProgresoManual() {
@@ -169,25 +216,13 @@ const Telemetry = (() => {
 
         if (doneMap[todayStr]) streak++;
 
-        const elStreak = document.getElementById('stat-streak');
-        const elTotal = document.getElementById('stat-total-days'); 
-        const elAvg = document.getElementById('stat-avg'); 
-        const elMsg = document.getElementById('streak-msg');
+        const totalDiasActivos = Object.keys(doneMap).length;
+        const totalCards = cards.filter(c => c.UltimoRepaso).length;
+        const avg = totalDiasActivos > 0 ? (totalCards / totalDiasActivos).toFixed(1) : 0;
 
-        if(elStreak) {
-            elStreak.innerText = streak;
-            const totalDiasActivos = Object.keys(doneMap).length;
-            elTotal.innerText = totalDiasActivos;
-            
-            const totalCards = cards.filter(c => c.UltimoRepaso).length;
-            const avg = totalDiasActivos > 0 ? (totalCards / totalDiasActivos).toFixed(1) : 0;
-            elAvg.innerText = avg;
-
-            elStreak.style.color = streak > 0 ? "#FFC107" : "#666";
-            
-            if (streak === 0) elMsg.innerText = "No has empezado aún...";
-            else if (streak === 1) elMsg.innerText = "Sigue así!";
-            else elMsg.innerText = `${streak} días de racha. Bien hecho.`;
+        // Delegación estricta a la Vista
+        if (typeof UI !== 'undefined' && UI.updateGlobalStats) {
+            UI.updateGlobalStats(streak, totalDiasActivos, avg);
         }
     }
 
@@ -212,36 +247,68 @@ const Telemetry = (() => {
         );
     }
 
-    function calcularDeuda() {
-        const asig = State.get('nombreAsignaturaActual');
-        const biblio = State.get('biblioteca');
-        if (!asig || !biblio[asig]) return 0;
-        
-        const tarjetas = biblio[asig];
-        const todayVal = window.fechaValor(window.getFechaHoy());
-        let deuda = 0;
 
-        for (const c of tarjetas) {
-            if (!c.ProximoRepaso || window.fechaValor(c.ProximoRepaso) > todayVal) continue;
-            
-            if (c.fsrs_state === 'new') {
-                deuda += 1.0; 
-            } else if (c.fsrs_state === 'learning') {
-                deuda += 4.0; 
-            } else {
-                const elapsed = c.UltimoRepaso ? Math.max(0, window.diffDiasCalendario(c.UltimoRepaso, window.getFechaHoy())) : 0;
-                const R = c.fsrs_stability ? Math.pow(0.9, elapsed / c.fsrs_stability) : 0.9;
-                const probOlvido = 1 - R; 
-                const D = c.fsrs_difficulty || 5; 
-                let pesoDinamico = Math.max(0.5, probOlvido * D);
-                deuda += pesoDinamico;
-            }
+    function updatePronostico() {
+        const asigActual = State.get('nombreAsignaturaActual');
+        const bib = State.get('biblioteca');
+        if (!asigActual || !bib[asigActual]) {
+            UI.updatePronostico([], 1);
+            return;
         }
-        return Math.round(deuda * 10) / 10;
-    }
 
-    function updatePronostico() { UI.updatePronostico(State.get('biblioteca'), State.get('nombreAsignaturaActual')); }
-    function updateDeudaEstudio() { UI.updateDeudaEstudio(State.get('biblioteca'), State.get('nombreAsignaturaActual')); }
+        const cards = bib[asigActual];
+        const dayLabels = ["D","L","M","X","J","V","S"];
+        let counts = [];
+
+        for (let i = 0; i < 7; i++) {
+            const d = new Date(); d.setDate(d.getDate() + i);
+            const dStr = window.formatearFecha(d);
+            const dayLabel = dayLabels[d.getDay()];
+            const isToday = i === 0;
+            const count = cards.filter(c => c.ProximoRepaso === dStr).length
+                        + (isToday ? cards.filter(c => c.ProximoRepaso && window.fechaValor(c.ProximoRepaso) < window.fechaValor(dStr)).length : 0);
+            counts.push({ dayLabel, count, isToday });
+        }
+
+        const maxCount = Math.max(...counts.map(c => c.count), 1);
+        UI.updatePronostico(counts, maxCount);
+    }
+    function updateDeudaEstudio() {
+        const asigActual = State.get('nombreAsignaturaActual');
+        const bib = State.get('biblioteca');
+        if (!asigActual || !bib[asigActual]) {
+            UI.updateDeudaEstudio(0, { nuevas:0, learning:0, repasoNormal:0, criticas:0 }, { nuevas:0, learning:0, repasoNormal:0, criticas:0 });
+            return;
+        }
+
+        const todayVal = window.fechaValor(window.getFechaHoy());
+        let deudaTotal = 0;
+        let contadores = { nuevas: 0, learning: 0, repasoNormal: 0, criticas: 0 };
+        let deudaDesglose = { nuevas: 0, learning: 0, repasoNormal: 0, criticas: 0 };
+
+        bib[asigActual].forEach(c => {
+            if (c.ProximoRepaso && window.fechaValor(c.ProximoRepaso) <= todayVal) {
+                const isNew = c.fsrs_state === 'new' || (!c.fsrs_state && !c.UltimoRepaso);
+                if (isNew) {
+                    deudaTotal += 1.0; contadores.nuevas++; deudaDesglose.nuevas += 1.0;
+                } else if (c.fsrs_state === 'learning') {
+                    deudaTotal += 4.0; contadores.learning++; deudaDesglose.learning += 4.0;
+                } else {
+                    const elapsed = c.UltimoRepaso ? Math.max(0, window.diffDiasCalendario(c.UltimoRepaso, window.getFechaHoy())) : 0;
+                    const stability = c.fsrs_stability || 1;
+                    const R = Math.pow(0.9, elapsed / stability);
+                    const D = c.fsrs_difficulty || 5;
+                    const peso = Math.max(0.5, (1 - R) * D);
+                    
+                    deudaTotal += peso;
+                    if (R < 0.8) { contadores.criticas++; deudaDesglose.criticas += peso; } 
+                    else { contadores.repasoNormal++; deudaDesglose.repasoNormal += peso; }
+                }
+            }
+        });
+
+        UI.updateDeudaEstudio(deudaTotal, contadores, deudaDesglose);
+    }
     
     function updateEficienciaWidget() {
         const pomoLogHoy = JSON.parse(localStorage.getItem('pomo_log_today') || '{"count":0,"details":{}}');
@@ -259,57 +326,12 @@ const Telemetry = (() => {
         }
 
         const sessionData = State.get('sessionData') || { tarjetas: 0, faciles: 0, dificiles: 0, criticas: 0, deudaInicial: 0 };
-        const tarjetas = sessionData.tarjetas;
-        const pctFacil = tarjetas > 0 ? Math.round((sessionData.faciles / tarjetas) * 100) : 0;
-        const deudaAhora = calcularDeuda();
-        const deltaDeuda = sessionData.deudaInicial - deudaAhora;
-
-        const elTarjetas = document.getElementById('rsm-tarjetas');
-        if(elTarjetas) elTarjetas.innerText = tarjetas;
+        const asig = State.get('nombreAsignaturaActual');
+        const biblio = State.get('biblioteca');
+        const deudaAhora = typeof window.calcularDeuda === 'function' ? window.calcularDeuda(asig, biblio) : 0; 
         
-        const elFacilidad = document.getElementById('rsm-facilidad');
-        if(elFacilidad) elFacilidad.innerText = tarjetas > 0 ? pctFacil + '%' : '-';
-        
-        const deudaEl = document.getElementById('rsm-deuda');
-        if(deudaEl) {
-            if (deltaDeuda > 0) {
-                deudaEl.innerText = '-' + deltaDeuda;
-                deudaEl.style.color = '#4CAF50';
-            } else if (deltaDeuda < 0) {
-                deudaEl.innerText = '+' + Math.abs(deltaDeuda);
-                deudaEl.style.color = '#f44336';
-            } else {
-                deudaEl.innerText = '=';
-                deudaEl.style.color = '#888';
-            }
-        }
-
-        let breakdownHtml = '';
-        if (tarjetas > 0) {
-            const parts = [];
-            if (sessionData.faciles > 0) parts.push(`🟢 Fáciles: <strong>${sessionData.faciles}</strong>`);
-            const bien = tarjetas - sessionData.faciles - sessionData.dificiles - sessionData.criticas;
-            if (bien > 0) parts.push(`🟡 Bien: <strong>${bien}</strong>`);
-            if (sessionData.dificiles > 0) parts.push(`🟠 Difíciles: <strong>${sessionData.dificiles}</strong>`);
-            if (sessionData.criticas > 0) parts.push(`🔴 Críticas: <strong>${sessionData.criticas}</strong>`);
-            breakdownHtml = parts.join(' &nbsp;·&nbsp; ');
-        }
-        const elBreakdown = document.getElementById('rsm-breakdown');
-        if(elBreakdown) elBreakdown.innerHTML = breakdownHtml;
-
-        const mensajes = [
-            [0, "Pomodoro completado. ¡Descansa!"],
-            [5, "Sesión ligera. Cada tarjeta cuenta."],
-            [15, "Buena sesión. ¡Sigue el ritmo!"],
-            [30, "Sesión intensa. Mereces el descanso."],
-            [Infinity, "¡Bestia! Sesión excepcional."]
-        ];
-        const msg = mensajes.find(([limit]) => tarjetas <= limit) || mensajes[mensajes.length-1];
-        const elMensaje = document.getElementById('rsm-mensaje');
-        if(elMensaje) elMensaje.innerText = msg[1];
-
-        const modal = document.getElementById('resumen-sesion-modal');
-        if(modal) modal.classList.add('visible');
+        // Delegación estricta a la capa de UI.
+        UI.showResumenSesion(sessionData, deudaAhora);
     }
 
     function cerrarResumenSesion() {
@@ -324,9 +346,9 @@ const Telemetry = (() => {
     return {
         updateDashboard, updateDifficultyStats, updateCalendarHeatmap,
         updatePomoStats, registrarPomoCompletado, editarProgresoManual,
-        updateGlobalStats, setWeeklyView, updateWeeklyWidget, calcularDeuda,
+        updateGlobalStats, setWeeklyView, updateWeeklyWidget,
         updatePronostico, updateDeudaEstudio, updateEficienciaWidget,
-        updateMapaHoras, showResumenSesion, cerrarResumenSesion, updatePendingWindow
+        updateMapaHoras, showResumenSesion, cerrarResumenSesion, updatePendingWindow, registrarExamen
     };
 })();
 
@@ -340,7 +362,6 @@ window.editarProgresoManual    = () => Telemetry.editarProgresoManual();
 window.updateGlobalStats       = () => Telemetry.updateGlobalStats();
 window.setWeeklyView           = (m) => Telemetry.setWeeklyView(m);
 window.updateWeeklyWidget      = () => Telemetry.updateWeeklyWidget();
-window.calcularDeuda           = () => Telemetry.calcularDeuda();
 window.updatePronostico        = () => Telemetry.updatePronostico();
 window.updateDeudaEstudio      = () => Telemetry.updateDeudaEstudio();
 window.updateEficienciaWidget  = () => Telemetry.updateEficienciaWidget();
@@ -348,3 +369,4 @@ window.updateMapaHoras         = () => Telemetry.updateMapaHoras();
 window.showResumenSesion       = () => Telemetry.showResumenSesion();
 window.cerrarResumenSesion     = () => Telemetry.cerrarResumenSesion();
 window.updatePendingWindow     = (f) => Telemetry.updatePendingWindow(f);
+window.registrarExamen         = (p) => Telemetry.registrarExamen(p);

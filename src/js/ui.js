@@ -63,10 +63,9 @@ const UI = (() => {
     }
 
 function cerrarFechasModal() {
-    document.getElementById('fechas-modal').classList.remove('visible');
-    updateCalendarHeatmap();
-    renderUpcomingEvents();
-}
+        const modal = document.getElementById('fechas-modal');
+        if (modal) modal.classList.remove('visible');
+    }
 
     function abrirAjustes(apiKey, isLocal, proxyUrl, fbConfig, currentModel) { // <--- Nuevo parámetro
         ocultarTodo();
@@ -111,35 +110,45 @@ function cerrarFechasModal() {
         }
     }
 
-    function showResumenSesion(sesion) {
-        const tarjetas = sesion.tarjetas;
-        const pctFacil = tarjetas > 0 ? Math.round((sesion.faciles / tarjetas) * 100) : 0;
-        const deudaAhora = calcularDeuda();
-        const deltaDeuda = sesion.deudaInicial - deudaAhora;
+    /**
+     * @function showResumenSesion
+     * @description Despliega el modal de fin de sesión con métricas. 
+     * Erradica colores fijos delegando en variables CSS y asegura el casting estricto a String para prevenir excepciones en escapeHtml.
+     */
+    function showResumenSesion(sesion, deudaAhora) {
+        const tarjetas = Number(sesion.tarjetas) || 0;
+        const pctFacil = tarjetas > 0 ? Math.round((Number(sesion.faciles) / tarjetas) * 100) : 0;
+        const deltaDeuda = Number(sesion.deudaInicial) - Number(deudaAhora);
 
-        document.getElementById('rsm-tarjetas').innerText = tarjetas;
-        document.getElementById('rsm-facilidad').innerText = tarjetas > 0 ? pctFacil + '%' : '-';
+        document.getElementById('rsm-tarjetas').innerText = escapeHtml(String(tarjetas));
+        document.getElementById('rsm-facilidad').innerText = tarjetas > 0 ? escapeHtml(String(pctFacil)) + '%' : '-';
         
         const deudaEl = document.getElementById('rsm-deuda');
-        if (deltaDeuda > 0) {
-            deudaEl.innerText = '-' + deltaDeuda;
-            deudaEl.style.color = '#4CAF50';
-        } else if (deltaDeuda < 0) {
-            deudaEl.innerText = '+' + Math.abs(deltaDeuda);
-            deudaEl.style.color = '#f44336';
-        } else {
-            deudaEl.innerText = '=';
-            deudaEl.style.color = '#888';
+        if (deudaEl) { 
+            if (deltaDeuda > 0) {
+                deudaEl.innerText = '-' + escapeHtml(String(deltaDeuda));
+                deudaEl.style.color = 'var(--status-green, #4CAF50)';
+            } else if (deltaDeuda < 0) {
+                deudaEl.innerText = '+' + escapeHtml(String(Math.abs(deltaDeuda)));
+                deudaEl.style.color = 'var(--status-red, #f44336)';
+            } else {
+                deudaEl.innerText = '=';
+                deudaEl.style.color = 'var(--text-muted, #888)';
+            }
         }
 
         let breakdownHtml = '';
         if (tarjetas > 0) {
             const parts = [];
-            if (sesion.faciles > 0) parts.push(` Fáciles: <strong>${sesion.faciles}</strong>`);
-            const bien = tarjetas - sesion.faciles - sesion.dificiles - sesion.criticas;
-            if (bien > 0) parts.push(`ðŸŸ¡ Bien: <strong>${bien}</strong>`);
-            if (sesion.dificiles > 0) parts.push(`ðŸŸ  Difíciles: <strong>${sesion.dificiles}</strong>`);
-            if (sesion.criticas > 0) parts.push(`ðŸ”´ Críticas: <strong>${sesion.criticas}</strong>`);
+            const f = Number(sesion.faciles) || 0;
+            const d = Number(sesion.dificiles) || 0;
+            const c = Number(sesion.criticas) || 0;
+            const b = tarjetas - f - d - c;
+
+            if (f > 0) parts.push(`🟢 Fáciles: <strong>${escapeHtml(String(f))}</strong>`);
+            if (b > 0) parts.push(`🟡 Bien: <strong>${escapeHtml(String(b))}</strong>`);
+            if (d > 0) parts.push(`🟠 Difíciles: <strong>${escapeHtml(String(d))}</strong>`);
+            if (c > 0) parts.push(`🔴 Críticas: <strong>${escapeHtml(String(c))}</strong>`);
             breakdownHtml = parts.join(' &nbsp;·&nbsp; ');
         }
         document.getElementById('rsm-breakdown').innerHTML = breakdownHtml;
@@ -152,46 +161,96 @@ function cerrarFechasModal() {
             [Infinity, "¡Bestia! Sesión excepcional."]
         ];
         const msg = mensajes.find(([limit]) => tarjetas <= limit) || mensajes[mensajes.length-1];
-        document.getElementById('rsm-mensaje').innerText = msg[1];
+        document.getElementById('rsm-mensaje').innerText = escapeHtml(msg[1]);
 
-        document.getElementById('resumen-sesion-modal').classList.add('visible');
+        const modal = document.getElementById('resumen-sesion-modal');
+        if(modal) modal.classList.add('visible');
     }
 
 
 // ── Grupo 2: Renderizado con inyección de dependencias ───────
 
+    function getEstadoFiltros() {
+        return {
+            hoy: document.getElementById('check-filtro-hoy')?.checked,
+            nuevas: document.getElementById('check-filtro-nuevas')?.checked,
+            tema: document.getElementById('check-filtro-tema')?.checked,
+            rango: document.getElementById('check-filtro-rango')?.checked,
+            tipo: document.getElementById('check-filtro-tipo')?.checked,
+            dificultad: document.getElementById('check-filtro-dificultad')?.checked,
+            temaVal: document.getElementById('filtro-tema-val')?.value || '',
+            rangoVal: document.getElementById('filtro-rango-val')?.value || '',
+            tiposSeleccionados: [...document.querySelectorAll('#filtro-tipo-grid input:checked')].map(cb => cb.value.toLowerCase()),
+            difsActivas: ['1','2','3','4'].filter(n => document.getElementById(`check-dif-${n}`)?.checked)
+        };
+    }
 
+    /**
+     * @function renderEstadoFiltros
+     * @description Refleja visualmente si hay filtros activos en la vista de estudio.
+     */
+    function renderEstadoFiltros(activos, isSecuencial) {
+        const icon = document.getElementById('icon-filtro');
+        const count = document.getElementById('contador-filtro');
+        if(!icon || !count) return;
 
-    function renderizarConceptoActual(tarjeta, modoLec) {
-        if(!tarjeta) return;
+        let nFiltros = 0;
+        if (activos.temas && activos.temas.length > 0) nFiltros++;
+        if (activos.dificultades && activos.dificultades.length > 0) nFiltros++;
+        if (activos.tipos && activos.tipos.length > 0) nFiltros++;
 
-        const tipo = tarjeta.Apartado || 'Definición';
+        // FIX ARQUITECTÓNICO: Uso estricto de la paleta semántica del sistema
+        icon.style.color = nFiltros > 0 ? 'var(--status-green, #4caf50)' : 'var(--status-red, #e53935)';
+        
+        count.innerText = nFiltros > 0 ? `${nFiltros} filtros` : 'Off';
+        
+        const btnSeq = document.getElementById('btn-modo-secuencial');
+        if (btnSeq) {
+            btnSeq.style.color = isSecuencial ? 'var(--status-green, #4caf50)' : 'var(--text-muted, #666)';
+            btnSeq.style.borderColor = isSecuencial ? 'var(--status-green, #4caf50)' : 'var(--border, #444)';
+        }
+    }
+
+    /**
+     * @function renderizarConceptoActual
+     * @description Renderiza la tarjeta de estudio activa en el DOM, gestionando la visibilidad
+     * según el modo de lectura y resolviendo los colores desde la ontología inyectada.
+     * Respeta la inmutabilidad y no posee efectos secundarios sobre el estado global.
+     * * @param {Object} tarjeta - Objeto de dominio que representa la flashcard actual.
+     * @param {boolean} modoLec - Indica si el modo de lectura está activo (true) o no (false).
+     * @param {Object} [tiposConfig={}] - Diccionario de configuración visual de tipos de tarjeta (Inyectado por el controlador).
+     * @returns {void}
+     */
+    function renderizarConceptoActual(tarjeta, modoLec, tiposConfig = {}) {
+        if (!tarjeta) return;
+
+        const tipo = tarjeta.Apartado || 'Concepto';
         const tit = document.getElementById('concepto-titulo');
         
-        // Asignamos la clase de color al contenedor
-        tit.className = `color-${tipo}`; 
+        // Resolución de color inyectada (Arquitectura Limpia - Cero lecturas a State)
+        const colorTipo = tiposConfig[tipo]?.color || 'var(--accent)'; 
         
+        tit.style.color = colorTipo;
         tit.innerHTML = `<span style="font-size:0.6em; opacity:0.8; text-transform:uppercase; display:block; margin-bottom:5px;">${escapeHtml(tipo)}</span>${escapeHtml(tarjeta.Titulo || '')}`;
         
-        // FIX CRÍTICO: Referencia explícita al módulo Parser
         document.getElementById('concepto-contenido').innerHTML = typeof Parser !== 'undefined' ? Parser.sanearLatex(tarjeta.Contenido) : tarjeta.Contenido;
-        
+
         document.getElementById('meta-tema').innerText = `Tema ${tarjeta.Tema}`;
         
-        // Cálculo de fechas
+        // Cálculo de fechas y asignación de colores semánticos (Eliminación de hardcoding)
         const fElem = document.getElementById('meta-fecha');
         const hoyVal = fechaValor(getFechaHoy());
         const proxVal = fechaValor(tarjeta.ProximoRepaso);
 
         if (proxVal < hoyVal) {
             fElem.innerText = "Retraso: " + formatDateForUI(tarjeta.ProximoRepaso);
-            fElem.style.color = "#ff5252"; 
+            fElem.style.color = "var(--status-red)"; 
         } else if (proxVal === hoyVal) {
             fElem.innerText = "Hoy"; 
-            fElem.style.color = "#ffab40";
+            fElem.style.color = "var(--status-yellow)";
         } else {
             fElem.innerText = "Adelanto: " + formatDateForUI(tarjeta.ProximoRepaso);
-            fElem.style.color = "#888";
+            fElem.style.color = "var(--text-muted, #888)";
         }
 
         // Gestión de visibilidad (Modo Lectura)
@@ -208,58 +267,72 @@ function cerrarFechasModal() {
             if (btnOcultar) btnOcultar.classList.add('hidden');
         }
 
-        // REPROCESADO MATHJAX:
-        if(typeof MathJax !== 'undefined') {
-            MathJax.typesetPromise([document.getElementById('study-card')]).catch(err => Logger.error(err));
+        // REPROCESADO MATHJAX
+        if (typeof MathJax !== 'undefined') {
+            const target = document.getElementById('study-card');
+            if (target) {
+                // 1. Limpiamos cualquier intento de renderizado previo sobre este nodo
+                MathJax.typesetClear([target]); 
+
+                // 2. Iniciamos la promesa con captura de error específica
+                MathJax.typesetPromise([target]).catch(err => {
+                    // Si el error es porque el nodo ya no existe (común en navegación rápida), 
+                    // lo ignoramos para no ensuciar el log ni romper el hilo.
+                    if (err && (err.message?.includes('replaceChild') || err.stack?.includes('replaceChild'))) {
+                        return; 
+                    }
+                    // Solo registramos errores que no sean por interrupción del DOM
+                    Logger.error("Error crítico MathJax:", err);
+                });
+            }
         }
     }
 
     function actualizarMenuLateral(bib, asigActual) {
         const lista = document.getElementById('lista-asignaturas'); 
+        if (!lista) return;
         lista.innerHTML = "";
+        
+        const fragment = document.createDocumentFragment();
         
         Object.keys(bib).forEach(nombre => {
             const li = document.createElement('li'); 
             li.className = 'asig-item';
-            
-            // --- INYECCIÓN DE COLOR DINÁMICO ---
-            // Obtenemos el color configurado o generado por hash
-            const colorAsignatura = getColorAsignatura(nombre);
-            // Lo asignamos a una variable CSS local para este elemento
-            li.style.setProperty('--dynamic-color', colorAsignatura);
+            li.style.setProperty('--dynamic-color', getColorAsignatura(nombre));
             
             if(nombre === asigActual) li.classList.add('active');
             
-            // Renderizado del contenido
             li.innerHTML = `
                 <span style="flex-grow:1; display:flex; align-items:center; gap:8px;">
-                    ${nombre}
+                    ${escapeHtml(nombre)}
                 </span>
                 <div class="asig-actions">
-                    <button class="btn-mini" data-action="renombrarAsignatura" data-nombre=${nombre} title="Renombrar"><i class="fa-regular fa-pen-to-square"></i></button>
-                    <button class="btn-mini" data-action="borrarAsignatura" data-nombre=${nombre} title="Borrar">✕</button>
+                    <button class="btn-mini" data-action="renombrarAsignatura" data-nombre="${escapeHtml(nombre)}" title="Renombrar"><i class="fa-regular fa-pen-to-square"></i></button>
+                    <button class="btn-mini" data-action="borrarAsignatura" data-nombre="${escapeHtml(nombre)}" title="Borrar">✕</button>
                 </div>
             `;
             
             li.onclick = () => cargarAsignatura(nombre);
-            lista.appendChild(li);
+            fragment.appendChild(li);
         });
+        
+        lista.appendChild(fragment); // Único reflow
     }
 
     function actualizarListaProyectos(projects) {
         const l = document.getElementById('lista-proyectos');
         const sel = document.getElementById('new-task-project');
-        
         if(!l || !sel) return; 
         
         l.innerHTML = "";
         sel.innerHTML = '<option value="">Sin proyecto (General)</option>';
         
+        const fragmentL = document.createDocumentFragment();
+        const fragmentSel = document.createDocumentFragment();
+        
         projects.forEach((p, i) => {
             const pNombre = typeof p === 'string' ? p : p.nombre;
             const pAsig = (typeof p === 'object' && p.asignatura) ? p.asignatura : "";
-            
-            // Usamos window.getColorAsignatura porque estamos en UI
             const color = pAsig ? window.getColorAsignatura(pAsig) : window.getColorAsignatura(pNombre);
 
             const li = document.createElement('li'); 
@@ -268,76 +341,112 @@ function cerrarFechasModal() {
             
             li.innerHTML = `
                 <span style="font-size:0.9em">
-                    ${pNombre} 
-                    <i style="color:#666;font-size:0.8em">${pAsig ? '['+pAsig+']' : ''}</i>
+                    ${escapeHtml(pNombre)} 
+                    <i style="color:#666;font-size:0.8em">${pAsig ? '['+escapeHtml(pAsig)+']' : ''}</i>
                 </span> 
                 <div class="asig-actions">
-                <button class="btn-mini" data-action="borrarProyecto" data-idx=${i}>x</button>
+                    <button class="btn-mini" data-action="borrarProyecto" data-idx=${i}>✕</button>
                 </div>
             `;
-            l.appendChild(li);
+            fragmentL.appendChild(li);
             
-            // El formato compuesto crucial para el backend
             const valorGuardado = pAsig ? `${pNombre} : ${pAsig}` : pNombre;
             const textoVisible = pAsig ? `${pNombre} (de ${pAsig})` : pNombre;
             
-            sel.innerHTML += `<option value="${valorGuardado}">${textoVisible}</option>`;
+            const opt = document.createElement('option');
+            opt.value = valorGuardado;
+            opt.textContent = textoVisible;
+            fragmentSel.appendChild(opt);
         });
+        
+        l.appendChild(fragmentL);
+        sel.appendChild(fragmentSel);
     }
 
-    function renderTasks(lista) {
-        const l = document.getElementById('task-list'); 
-        l.innerHTML = "";
-        
-        lista.forEach((t, i) => {
-            // 1. DETECCIÓN INTELIGENTE DE COLOR (Misma lógica robusta)
-            let colorTema = "#666"; 
-            const match = t.text.match(/\[(.*?)\]/);
+    /**
+     * @function renderTasks
+     * @description Dibuja la lista de tareas restaurando el diseño visual original (barras de progreso, tags), 
+     * pero manteniendo la inyección de dependencias estricta en los botones.
+     */
+    function renderTasks(tasks, callbacks = {}) {
+        try {
+            // FIX ARQUITECTÓNICO: ID correcto del DOM
+            const list = document.getElementById('task-list'); 
+            if (!list) return;
             
-            if (match) {
-                let rawTag = match[1].replace(/#/g, '').trim();
-                if (rawTag.includes(':')) {
-                    const partes = rawTag.split(':');
-                    rawTag = partes[partes.length - 1].trim();
-                }
-                colorTema = getColorAsignatura(rawTag);
+            list.innerHTML = '';
+            if (!tasks || !Array.isArray(tasks) || tasks.length === 0) {
+                list.innerHTML = '<li style="text-align:center; color:var(--text-muted, #888); padding:10px; font-size:0.9em;">Sin tareas</li>';
+                if (typeof updateFinishTime === 'function') updateFinishTime();
+                return;
             }
 
-            const li = document.createElement('li'); 
+            const fragment = document.createDocumentFragment();
             
-            // 2. INYECCIÓN DE LA VARIABLE CSS
-            // Esto permite que el CSS controle todas las animaciones hover/active
-            li.style.setProperty('--task-color', colorTema);
-            
-            li.className = `task-item ${t.active ? 'active-task' : ''} ${t.done ? 'done' : ''}`;
-            
-            // Evento Click
-            li.onclick = (e) => { 
-                if(e.target.tagName !== 'BUTTON') toggleActive(i); 
-                updatePomoStats();
-            };
-            
-            // 3. RENDERIZADO
-            // Nota: Usamos 'colorTema' para los textos y barra, pero el contenedor usa la variable CSS
-            li.innerHTML = `
-                <div style="flex-grow:1; display:flex; flex-direction:column;">
-                    <span style="color:${t.done ? '#888' : '#e0e0e0'}; font-weight:500;">${t.text}</span>
-                    <div class="task-progress-bg">
-                        <div style="height:100%; background:${colorTema}; width:${Math.min(100, (t.completed/t.est)*100)}%; transition: width 0.3s;"></div>
-                    </div>
-                </div>
+            tasks.forEach((t, i) => {
+                let colorTema = "var(--text-muted, #666)"; 
+                const match = t.text.match(/\[(.*?)\]/);
                 
-                <div style="display:flex; flex-direction:column; align-items:flex-end; margin-left:15px;">
-                    <span class="pomo-count" style="color:${colorTema}; font-weight:bold; font-size:0.9em;">${t.completed}/${t.est}</span>
-                    <div style="display:flex; gap:5px; margin-top:4px; opacity:0.6; transition:opacity 0.2s;" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0.6">
-                        <button data-action="editTask" data-idx=${i} style="background:none;border:none;color:#aaa;cursor:pointer; font-size:1.1em;" title="Modificar"><i class="fa-regular fa-pen-to-square"></i></button>
-                        <button data-action="toggleDone" data-idx=${i} style="background:none;border:none;color:${t.done ? 'var(--accent)' : '#aaa'};cursor:pointer; font-size:1.1em;">&check;</button>
-                        <button data-action="deleteTask" data-idx=${i} style="background:none;border:none;color:#d32f2f;cursor:pointer; font-size:1.1em;">✕</button>
+                if (match) {
+                    let rawTag = match[1].replace(/#/g, '').trim();
+                    if (rawTag.includes(':')) {
+                        const partes = rawTag.split(':');
+                        rawTag = partes[partes.length - 1].trim();
+                    }
+                    if (typeof window.getColorAsignatura === 'function') {
+                        colorTema = window.getColorAsignatura(rawTag);
+                    }
+                }
+
+                const li = document.createElement('li'); 
+                li.style.setProperty('--task-color', colorTema);
+                li.className = `task-item ${t.active ? 'active-task' : ''} ${t.done ? 'done' : ''}`;
+                
+                const rawText = String(t.text || 'Sin título');
+                const safeText = (typeof window.escapeHtml === 'function') ? window.escapeHtml(rawText) : rawText;
+                
+                const comp = Number(t.completed) || 0;
+                const est = Number(t.est) || 1; // FIX: Mapeo correcto de propiedad
+
+                li.innerHTML = `
+                    <div style="flex-grow:1; display:flex; flex-direction:column; pointer-events:none;">
+                        <span style="color:${t.done ? '#888' : '#e0e0e0'}; font-weight:500;">${safeText}</span>
+                        <div class="task-progress-bg" style="width:100%; height:4px; background:rgba(255,255,255,0.1); margin-top:5px; border-radius:2px; overflow:hidden;">
+                            <div style="height:100%; background:${colorTema}; width:${Math.min(100, (comp/est)*100)}%; transition: width 0.3s;"></div>
+                        </div>
                     </div>
-                </div>
-            `;
-            l.appendChild(li);
-        });
+                    
+                    <div style="display:flex; flex-direction:column; align-items:flex-end; margin-left:15px; z-index:2;">
+                        <span class="pomo-count" style="color:${colorTema}; font-weight:bold; font-size:0.9em;">${comp}/${est}</span>
+                        <div style="display:flex; gap:5px; margin-top:4px; opacity:0.6; transition:opacity 0.2s;" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0.6">
+                            <button data-action="editTask" style="background:none;border:none;color:var(--text-muted,#aaa);cursor:pointer; font-size:1.1em;" title="Modificar"><i class="fa-regular fa-pen-to-square"></i></button>
+                            <button data-action="toggleDone" style="background:none;border:none;color:${t.done ? 'var(--status-green,#4caf50)' : 'var(--text-muted,#aaa)'};cursor:pointer; font-size:1.1em;">&check;</button>
+                            <button data-action="deleteTask" style="background:none;border:none;color:var(--status-red,#d32f2f);cursor:pointer; font-size:1.1em;">✕</button>
+                        </div>
+                    </div>
+                `;
+
+                // Delegación de eventos pura
+                li.onclick = (e) => {
+                    const btn = e.target.closest('button');
+                    if (btn) {
+                        e.stopPropagation();
+                        const action = btn.dataset.action;
+                        if (action === 'deleteTask' && callbacks.onDelete) callbacks.onDelete(i);
+                        else if (action === 'toggleDone' && callbacks.onToggleDone) callbacks.onToggleDone(i);
+                        else if (action === 'editTask' && callbacks.onEdit) callbacks.onEdit(i);
+                    } else {
+                        if (callbacks.onToggleActive) callbacks.onToggleActive(i);
+                    }
+                };
+                
+                fragment.appendChild(li);
+            });
+            
+            list.appendChild(fragment);
+        } catch (error) {
+            if (typeof Logger !== 'undefined') Logger.error("Error crítico en UI.renderTasks:", error);
+        }
     }
 
     function updateTimerDisplay(segsLeft, mode) { 
@@ -357,142 +466,87 @@ function cerrarFechasModal() {
         document.title = `${timeStr} - ${mode === 'work' ? 'Work' : 'Break'}`;
     }
 
-function updateFinishTime(lista, config) {
-    let pomosRestantes = 0; 
-    
-    // Calcular carga
-    lista.forEach(t => {
-        if (!t.done) pomosRestantes += Math.max(0, t.est - t.completed);
-    });
 
-    // --- CÁLCULO DE TIEMPO (Lógica existente) ---
-    const tWork = config.work;
-    const tShort = config.short;
-    const tLong = config.long;
-    
-    let minutosTotales = 0;
-    for (let i = 1; i <= pomosRestantes; i++) {
-        minutosTotales += tWork;
-        if (i < pomosRestantes) {
-            if (i % 4 === 0) minutosTotales += tLong;
-            else minutosTotales += tShort;
+    /**
+     * @function updateFinishTime
+     * @description Actualiza la vista de la estimación sin destruir el DOM.
+     * Solo renderiza, la capa de controlador (pomodoro.js) es la que inyecta la hora final calculada.
+     */
+    function updateFinishTime(remainingPomos, horaStr, tiempoStr) {
+        const emptyMsg     = document.getElementById('pomo-empty-msg');
+        const statusContent = document.getElementById('pomo-status-content');
+        const remainCount  = document.getElementById('pomo-remain-count');
+        const tiempoEl     = document.getElementById('pomo-remain-time');  // añadido
+        const etaValue     = document.getElementById('pomo-eta-value');
+        const faltan = Number(remainingPomos) || 0;
+        if (faltan <= 0) {
+            if (emptyMsg) emptyMsg.style.display = 'block';
+            if (statusContent) statusContent.style.display = 'none';
+        } else {
+            if (emptyMsg) emptyMsg.style.display = 'none';
+            if (statusContent) statusContent.style.display = 'block';
+            if (remainCount) remainCount.textContent = `${faltan}🍅`;
+            if (tiempoEl) tiempoEl.textContent = tiempoStr || '--';   // añadido
+            if (etaValue) etaValue.textContent = horaStr || '--:--';
         }
     }
 
-    const now = new Date();
-    now.setMinutes(now.getMinutes() + minutosTotales);
-    const endH = String(now.getHours()).padStart(2, '0');
-    const endM = String(now.getMinutes()).padStart(2, '0');
-    const finishString = `${endH}:${endM}`;
 
-    // --- 1. ACTUALIZAR MODAL GRANDE ---
-    const displayBig = document.getElementById('finish-time-display');
-    if(displayBig) {
-        if (pomosRestantes === 0) {
-            displayBig.innerHTML = "<span style='color:#666'>Todo al día</span>";
-        } else {
-            const durH = Math.floor(minutosTotales / 60);
-            const durM = minutosTotales % 60;
-            displayBig.innerHTML = `
-                <div style="display:flex; justify-content:space-between; border-bottom:1px solid #444; padding-bottom:5px; margin-bottom:5px; font-size:0.9em;">
-                    <span>Restan: <strong style="color:#eee">${pomosRestantes}🍅</strong></span>
-                    <span>Tiempo: <strong style="color:#eee">${durH}h ${durM}m</strong></span>
+    /**
+     * @function renderFechasList
+     * @description Dibuja la lista del modal de agenda. Verifica la existencia de contenedores
+     * antes de inyectar fragmentos.
+     */
+    function renderFechasList(fechas) {
+        const list = document.getElementById('fechas-list');
+        const emptyMsg = document.getElementById('fechas-empty');
+        
+        // FIX ARQUITECTÓNICO: Guardia contra derreferencia nula
+        if (!list || !emptyMsg) return;
+
+        list.innerHTML = '';
+        if (!fechas || fechas.length === 0) {
+            emptyMsg.style.display = 'block';
+            return;
+        }
+        emptyMsg.style.display = 'none';
+
+        const fragment = document.createDocumentFragment();
+        fechas.forEach((fc, i) => {
+            const li = document.createElement('li');
+            li.style.cssText = "display:flex; justify-content:space-between; align-items:center; padding:8px; border-bottom:1px solid var(--border);";
+            
+            const safeFecha = escapeHtml(formatDateForUI(fc.fecha));
+            const safeNombre = escapeHtml(fc.nombre);
+            const safeTipo = escapeHtml(fc.tipo);
+            const colorTipo = TIPOS_EVENTO[fc.tipo]?.color || '#888';
+
+            li.innerHTML = `
+                <div>
+                    <strong>${safeFecha}</strong> - ${safeNombre} 
+                    <span style="font-size:0.8em; color:${colorTipo}; border:1px solid ${colorTipo}; padding:2px 4px; border-radius:3px; margin-left:6px;">${safeTipo}</span>
                 </div>
-
-
-                
-                <div style="background: linear-gradient(145deg, rgba(76,175,80,0.1) 0%, rgba(76,175,80,0.05) 100%); border-radius: 12px; padding: 10px 15px; margin-top: 8px; display: flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid rgba(76,175,80,0.2);">
-                    <div style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: #2dbdbd; border-radius: 8px;">
-                        <i class="fa-solid fa-plane-arrival" style="font-size: 16px; color: #121212;"></i>
-                    </div>
-                    <span style="color: #e0e0e0; font-weight: 500;">Fin estimado: <strong style="color: var(--accent); font-size: 1.1em;">${finishString}</strong></span>
-                </div>
+                <button class="btn-icon" data-idx="${i}" style="color:var(--status-red);"><i class="fa-solid fa-trash"></i></button>
             `;
-        }
+            // Delegación de eventos temporal (hasta que extraigamos la lógica al controlador)
+            li.querySelector('button').onclick = () => {
+                if(typeof window.eliminarFecha === 'function') window.eliminarFecha(i);
+            };
+            fragment.appendChild(li);
+        });
+        list.appendChild(fragment);
     }
 
-    // --- 2. ACTUALIZAR MINI WIDGET (REQUERIMIENTO 1) ---
-    const miniCount = document.getElementById('mini-pomo-count');
-    const miniTime = document.getElementById('mini-finish-time');
-    
-    if(miniCount && miniTime) {
-        if(pomosRestantes > 0) {
-            miniCount.innerText = `${pomosRestantes}🍅`;
-            miniTime.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 12px;">
-                <div style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; background: var(--accent); border-radius: 4px;">
-                    <i class="fa-solid fa-plane-arrival" style="font-size: 10px; color: #121212;"></i>
-                </div>
-                <span style="color: var(--accent); font-weight: bold;">${finishString}</span>
-            </div>`
-        } else {
-            miniCount.innerText = "";
-            miniTime.innerText = ""; // Ocultar si no hay tareas
-        }
-    }
-}
-
-function renderFechasList(fechas) {
-    const container = document.getElementById('fechas-list-container');
-    const emptyMsg  = document.getElementById('fechas-empty-msg');
-    if (!container) return;
-
-    container.querySelectorAll('.fecha-item').forEach(el => el.remove());
-
-    if (fechas.length === 0) {
-        emptyMsg.style.display = 'block';
-        return;
-    }
-    emptyMsg.style.display = 'none';
-
-    fechas.forEach(ev => {
-        const tipo = TIPOS_EVENTO[ev.tipo] || TIPOS_EVENTO.otro;
-        const color = getColorEvento(ev);
-        const diffDays = diffDiasCalendario(getFechaHoy(), ev.fecha);
-        const eventDateUI = formatDateForUI(ev.fecha);
-        const safeNombre = escapeHtml(ev.nombre || '');
-        const safeAsig = escapeHtml(ev.asig || '');
-        const safeColor = escapeHtml(color);
-        const safeId = Number(ev.id) || 0;
-
-        let diffLabel = '';
-        if      (diffDays < 0)  diffLabel = `hace ${Math.abs(diffDays)}d`;
-        else if (diffDays === 0) diffLabel = 'HOY';
-        else                     diffLabel = `en ${diffDays}d`;
-
-        let iconHtml = '';
-        if (tipo.iconClass) {
-            iconHtml = `<i class="${tipo.iconClass}"></i>`;
-        } else if (tipo.icon) {
-            iconHtml = tipo.icon;
-        }
-
-        const item = document.createElement('div');
-        item.className = 'fecha-item';
-        if (diffDays < 0) item.style.opacity = '0.45';
-
-        item.innerHTML = `
-            <span style="width:10px; height:10px; border-radius:50%; background:${safeColor}; flex-shrink:0;"></span>
-            <span class="fi-label">
-                <strong>${safeNombre}</strong>
-                ${ev.asig ? `<span style="color:#666; font-size:0.85em;"> · ${safeAsig}</span>` : ''}
-                <span style="color:#555; font-size:0.8em;"> ${iconHtml}</span>
-            </span>
-            <span class="fi-date">${eventDateUI}</span>
-            <span style="color:#888; font-size:0.8em; min-width:48px; text-align:right;">${diffLabel}</span>
-            <button class="fi-del" data-action="eliminarFechaClave" data-id=${safeId} title="Eliminar">✕</button>
-        `;
-        container.appendChild(item);
-    });
-}
-
+    /**
+     * @function renderUpcomingEvents
+     * @description Renderiza la lista de eventos inminentes. Implementa paleta semántica
+     * y sanitización estricta para evitar la inyección de atributos HTML en los tooltips.
+     */
     function renderUpcomingEvents(fechas) {
         const container = document.getElementById('upcoming-events-list');
         if (!container) return;
         
         container.innerHTML = '';
-        
-        // 1. Filtrado de eventos caducados mediante TimeStamps absolutos
         const hoyTs = parseDateSafe(new Date()).getTime();
         
         let futuros = fechas.filter(fc => {
@@ -500,44 +554,40 @@ function renderFechasList(fechas) {
             return fechaVal && fechaVal.getTime() >= hoyTs;
         });
         
-        // 2. Ordenación cronológica pura
         futuros.sort((a, b) => parseDateSafe(a.fecha).getTime() - parseDateSafe(b.fecha).getTime());
         
         if (futuros.length === 0) {
-            container.innerHTML = '<div class="empty-msg" style="color: #888; text-align: center; padding: 10px;">No hay eventos próximos</div>';
+            container.innerHTML = '<div class="empty-msg" style="color: var(--text-muted, #888); text-align: center; padding: 10px;">No hay eventos próximos</div>';
             return;
         }
         
-        // 3. Renderizado seguro del DOM
         futuros.slice(0, 5).forEach(ev => {
             const el = document.createElement('div');
             el.className = 'event-item';
-            // Estilos base para asegurar la estructura (puedes moverlos a tu CSS)
-            el.style.display = 'flex';
-            el.style.alignItems = 'center';
-            el.style.marginBottom = '10px';
+            el.style.cssText = 'display:flex; align-items:center; margin-bottom:10px;';
             
-            // Selección de icono Font Awesome
             let iconHtml = '<i class="fas fa-calendar-alt" style="color: var(--accent);"></i>';
-            if (ev.tipo === 'examen') iconHtml = '<i class="fas fa-file-alt" style="color: #d95550;"></i>';
-            if (ev.tipo === 'entrega') iconHtml = '<i class="fas fa-tasks" style="color: #4CAF50;"></i>';
+            if (ev.tipo === 'examen') iconHtml = '<i class="fas fa-file-alt" style="color: var(--status-red, #d95550);"></i>';
+            if (ev.tipo === 'entrega') iconHtml = '<i class="fas fa-tasks" style="color: var(--status-green, #4CAF50);"></i>';
             
-            // REGLA DE ORO: Atributo title SIEMPRE en texto plano
-            el.title = `${ev.nombre} - ${ev.tipo ? ev.tipo.toUpperCase() : 'EVENTO'}`;
+            const safeTipo = escapeHtml(String(ev.tipo || 'EVENTO')).toUpperCase();
+            const safeNombre = escapeHtml(String(ev.nombre || ''));
             
-            const fechaUI = formatDateForUI(ev.fecha);
+            el.title = `${safeNombre} - ${safeTipo}`;
+            
+            const fechaUI = escapeHtml(formatDateForUI(ev.fecha));
             const diasFaltantes = diffDiasCalendario(new Date(), ev.fecha);
             
             let badgeHtml = '';
-            if (diasFaltantes === 0) badgeHtml = '<span class="badge" style="background:#d95550; padding:2px 6px; border-radius:4px; font-size:0.8em;">HOY</span>';
-            else if (diasFaltantes === 1) badgeHtml = '<span class="badge" style="background:#e67e22; padding:2px 6px; border-radius:4px; font-size:0.8em;">Mañana</span>';
-            else badgeHtml = `<span class="badge" style="background:#256ca5; padding:2px 6px; border-radius:4px; font-size:0.8em;">Faltan ${diasFaltantes}d</span>`;
+            if (diasFaltantes === 0) badgeHtml = '<span class="badge" style="background:var(--status-red, #d95550); padding:2px 6px; border-radius:4px; font-size:0.8em; color:#fff;">HOY</span>';
+            else if (diasFaltantes === 1) badgeHtml = '<span class="badge" style="background:var(--status-yellow, #e67e22); padding:2px 6px; border-radius:4px; font-size:0.8em; color:#fff;">Mañana</span>';
+            else badgeHtml = `<span class="badge" style="background:var(--status-blue, #256ca5); padding:2px 6px; border-radius:4px; font-size:0.8em; color:#fff;">Faltan ${escapeHtml(String(diasFaltantes))}d</span>`;
 
             el.innerHTML = `
                 <div class="event-icon" style="margin-right: 12px; font-size: 1.2em;">${iconHtml}</div>
                 <div class="event-details" style="flex: 1;">
-                    <div class="event-name" style="font-weight: bold; color: var(--text-main);">${ev.nombre}</div>
-                    <div class="event-date" style="font-size: 0.85em; color: #aaa;">${fechaUI} ${badgeHtml}</div>
+                    <div class="event-name" style="font-weight: bold; color: var(--text-main);">${safeNombre}</div>
+                    <div class="event-date" style="font-size: 0.85em; color: var(--text-muted, #aaa);">${fechaUI} ${badgeHtml}</div>
                 </div>
             `;
             
@@ -545,27 +595,26 @@ function renderFechasList(fechas) {
         });
     }
 
-function abrirFechasModal(bib, asigActual) {
-    const sel = document.getElementById('fk-asig');
-    sel.innerHTML = '';
-    const allOption = document.createElement('option');
-    allOption.value = '';
-    allOption.textContent = '— Todas las asignaturas —';
-    sel.appendChild(allOption);
-    Object.keys(bib).forEach(a => {
-        const opt = document.createElement('option');
-        opt.value = a;
-        opt.textContent = a;
-        sel.appendChild(opt);
-    });
-    if (asigActual) sel.value = asigActual;
-
-    document.getElementById('fk-fecha').value = appDateToInput(getFechaHoy());
-    document.getElementById('fk-nombre').value = '';
-
-    renderFechasList();
-    document.getElementById('fechas-modal').classList.add('visible');
-}
+    function abrirFechasModal(bib, asigActual) {
+        const sel = document.getElementById('fk-asig');
+        if (sel) {
+            sel.innerHTML = '';
+            const allOption = document.createElement('option');
+            allOption.value = '';
+            allOption.textContent = '— Todas las asignaturas —';
+            sel.appendChild(allOption);
+            Object.keys(bib || {}).forEach(a => {
+                const opt = document.createElement('option');
+                opt.value = a;
+                opt.textContent = a;
+                sel.appendChild(opt);
+            });
+            if (asigActual) sel.value = asigActual;
+        }
+        
+        const modal = document.getElementById('fechas-modal');
+        if (modal) modal.classList.add('visible');
+    }
 
     function actualizarDesplegableMini(lista, colores) {
         const select = document.getElementById('mini-task-select');
@@ -656,106 +705,98 @@ function abrirFechasModal(bib, asigActual) {
         });
     }
 
-    function updatePronostico(bib, asigActual) {
-        const container = document.getElementById('forecast-container');
-        if (!container || !asigActual || !bib[asigActual]) return;
+    /**
+     * @function updatePronostico
+     * @description Renderiza el gráfico de barras del pronóstico de repasos para los próximos 7 días.
+     * Implementa saneamiento XSS y respeta la jerarquía de variables de color del sistema.
+     * @param {Array} counts - Array de objetos conteniendo la carga por día { dayLabel, count, isToday }.
+     * @param {number} maxCount - Valor máximo para el escalado proporcional de las barras.
+     * @returns {void}
+     */
+    function updatePronostico(counts, maxCount) {
+        const container = document.getElementById('pronostico-bars');
+        if (!container) return;
+
         container.innerHTML = "";
-
-        const cards = bib[asigActual];
-        const dayLabels = ["D","L","M","X","J","V","S"];
-
-        // Contar tarjetas por día para los próximos 7 días
-        let counts = [];
-        for (let i = 0; i < 7; i++) {
-            const d = new Date(); d.setDate(d.getDate() + i);
-            const dStr = formatearFecha(d);
-            const dayLabel = dayLabels[d.getDay()];
-            const isToday = i === 0;
-            const count = cards.filter(c => c.ProximoRepaso === dStr).length
-                        + (i === 0 ? cards.filter(c => c.ProximoRepaso && fechaValor(c.ProximoRepaso) < fechaValor(dStr)).length : 0);
-            counts.push({ dStr, dayLabel, count, isToday });
+        if (!counts || counts.length === 0) {
+            container.innerHTML = "<div style='color:var(--text-muted, #888); font-size:0.85em; text-align:center;'>Sin datos para pronóstico</div>";
+            return;
         }
 
-        const maxCount = Math.max(...counts.map(c => c.count), 1);
+        const fragment = document.createDocumentFragment();
 
-        counts.forEach(({ dStr, dayLabel, count, isToday }) => {
-            const pct = (count / maxCount) * 100;
-            const color = isToday ? 'var(--accent)' : count > 20 ? '#f44336' : count > 10 ? '#FF9800' : '#256ca5';
+        counts.forEach(c => {
+            // Altura mínima garantizada de 2% para visualización de barras vacías
+            const h = Math.max((c.count / maxCount) * 100, 2);
+            
+            // Resolución de color arquitectónica
+            let barColor = "var(--border, #444)";
+            if (c.isToday) barColor = "var(--accent)";
+            else if (c.count > 20) barColor = "var(--status-red, #f44336)";
+            else if (c.count > 0) barColor = "var(--status-blue, #2196F3)";
 
-            const row = document.createElement('div');
-            row.className = 'forecast-row';
-            row.innerHTML = `
-                <span class="forecast-day-label" style="${isToday ? 'color:white;font-weight:bold;' : ''}">${isToday ? 'HOY' : dayLabel}</span>
-                <div class="forecast-track">
-                    <div class="forecast-fill" style="width:${pct}%; background:${color};"></div>
-                </div>
-                <span class="forecast-count" style="${isToday ? 'color:white;' : ''}">${count}</span>
+            const col = document.createElement('div');
+            col.style.cssText = "display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; flex:1;";
+            
+            const safeLabel = escapeHtml(c.dayLabel);
+            const safeCount = escapeHtml(c.count);
+
+            col.innerHTML = `
+                <span style="font-size:0.65em; margin-bottom:4px; color:var(--text-muted, #888);">${safeCount > 0 ? safeCount : ''}</span>
+                <div style="width:60%; height:${h}%; background:${barColor}; border-radius:3px 3px 0 0; min-height:4px; transition: height 0.3s ease;"></div>
+                <span style="font-size:0.6em; margin-top:4px; color:${c.isToday ? 'var(--text-main, #eee)' : 'var(--text-muted, #888)'}; font-weight:${c.isToday ? 'bold' : 'normal'};">${safeLabel}</span>
             `;
-            container.appendChild(row);
+            fragment.appendChild(col);
         });
+
+        container.appendChild(fragment);
     }
 
-    function updateDeudaEstudio(bib, asigActual) {
+    /**
+     * @function updateDeudaEstudio
+     * @description Renderiza el widget de deuda FSRS. Elimina el CSS-in-JS hardcodeado 
+     * delegando la responsabilidad visual a variables CSS semánticas (--status-green, --status-red).
+     * @param {number} deudaTotal - Valor numérico total de la carga cognitiva pendiente.
+     * @param {Object} contadores - Desglose absoluto de tarjetas por estado (nuevas, learning, etc.).
+     * @param {Object} deudaDesglose - Desglose ponderado de la deuda por estado.
+     * @returns {void}
+     */
+    function updateDeudaEstudio(deudaTotal, contadores, deudaDesglose) {
         const scoreEl = document.getElementById('deuda-score');
-        const breakdownEl = document.getElementById('deuda-breakdown');
-        if (!scoreEl || !asigActual || !bib[asigActual]) return;
+        const listEl = document.getElementById('deuda-list');
+        if (!scoreEl || !listEl) return;
 
-        const todayVal = window.fechaValor(window.getFechaHoy());
-        let deudaTotal = 0;
-        
-        let contadores = { nuevas: 0, learning: 0, repasoNormal: 0, criticas: 0 };
-        let deudaDesglose = { nuevas: 0, learning: 0, repasoNormal: 0, criticas: 0 };
+        // Formateo seguro a 1 decimal
+        const dt = Math.round((deudaTotal || 0) * 10) / 10;
+        scoreEl.innerText = dt;
 
-        bib[asigActual].forEach(c => {
-            if (c.ProximoRepaso && window.fechaValor(c.ProximoRepaso) <= todayVal) {
-                // DETECCIÓN INTELIGENTE: Si no tiene fsrs_state ni UltimoRepaso, es Nueva
-                const isNew = c.fsrs_state === 'new' || (!c.fsrs_state && !c.UltimoRepaso);
-                
-                if (isNew) {
-                    deudaTotal += 1.0;
-                    contadores.nuevas++;
-                    deudaDesglose.nuevas += 1.0;
-                } else if (c.fsrs_state === 'learning') {
-                    deudaTotal += 4.0;
-                    contadores.learning++;
-                    deudaDesglose.learning += 4.0;
-                } else {
-                    const elapsed = c.UltimoRepaso ? Math.max(0, window.diffDiasCalendario(c.UltimoRepaso, window.getFechaHoy())) : 0;
-                    const stability = c.fsrs_stability || 1;
-                    const R = Math.pow(0.9, elapsed / stability);
-                    const D = c.fsrs_difficulty || 5;
-                    const peso = Math.max(0.5, (1 - R) * D);
-                    
-                    deudaTotal += peso;
-                    if (R < 0.8) {
-                        contadores.criticas++;
-                        deudaDesglose.criticas += peso;
-                    } else {
-                        contadores.repasoNormal++;
-                        deudaDesglose.repasoNormal += peso;
-                    }
-                }
-            }
-        });
+        // Uso estricto de variables CSS del tema activo
+        if (dt === 0) {
+            scoreEl.style.color = 'var(--status-green, #4CAF50)';
+        } else if (dt < 10) {
+            scoreEl.style.color = 'var(--status-yellow, #FFC107)';
+        } else {
+            scoreEl.style.color = 'var(--status-red, #f44336)';
+        }
 
-        deudaTotal = Math.round(deudaTotal);
-        scoreEl.innerText = deudaTotal;
-        scoreEl.style.color = deudaTotal === 0 ? '#4CAF50' : deudaTotal < 15 ? '#FFC107' : deudaTotal < 40 ? '#FF9800' : '#f44336';
-
-        let html = '';
-        const addItem = (label, count, val, color) => {
-            if (count > 0) {
-                html += `<div class="deuda-item"><span>${label}</span><span style="color:#aaa;">${count} tarj. <strong style="color:${color}; margin-left:8px;">${Math.round(val)}</strong> pts</span></div>`;
-            }
-        };
-
-        addItem("Re-aprendizajes", contadores.learning, deudaDesglose.learning, "#f44336");
-        addItem("Peligro de olvido", contadores.criticas, deudaDesglose.criticas, "#FF9800");
-        addItem("Tarjetas Nuevas", contadores.nuevas, deudaDesglose.nuevas, "#2196F3");
-        addItem("Repasos normales", contadores.repasoNormal, deudaDesglose.repasoNormal, "#4CAF50");
-
-        if (!html) html = '<div style="text-align:center; color:#4CAF50; padding:8px;"> &check; Sin deuda pendiente</div>';
-        breakdownEl.innerHTML = html;
+        listEl.innerHTML = `
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <span style="color:var(--text-muted, #888);"><i class="fa-solid fa-leaf" style="color:var(--status-green)"></i> Nuevas (${escapeHtml(contadores.nuevas || 0)})</span>
+                <span style="font-weight:bold; color:var(--text-main);">${(Math.round((deudaDesglose.nuevas || 0) * 10) / 10).toFixed(1)}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <span style="color:var(--text-muted, #888);"><i class="fa-solid fa-book-open" style="color:var(--status-blue)"></i> Aprendizaje (${escapeHtml(contadores.learning || 0)})</span>
+                <span style="font-weight:bold; color:var(--text-main);">${(Math.round((deudaDesglose.learning || 0) * 10) / 10).toFixed(1)}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <span style="color:var(--text-muted, #888);"><i class="fa-solid fa-rotate-right" style="color:var(--text-main)"></i> Repaso (${escapeHtml(contadores.repasoNormal || 0)})</span>
+                <span style="font-weight:bold; color:var(--text-main);">${(Math.round((deudaDesglose.repasoNormal || 0) * 10) / 10).toFixed(1)}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between;">
+                <span style="color:var(--text-muted, #888);"><i class="fa-solid fa-triangle-exclamation" style="color:var(--status-red)"></i> Críticas (${escapeHtml(contadores.criticas || 0)})</span>
+                <span style="font-weight:bold; color:var(--status-red, #f44336);">${(Math.round((deudaDesglose.criticas || 0) * 10) / 10).toFixed(1)}</span>
+            </div>
+        `;
     }
 
     function updateEficienciaWidget(bib, asigActual, pomoLogHoy) {
@@ -821,71 +862,96 @@ function abrirFechasModal(bib, asigActual) {
 
 // ── Grupo 3: Renderizado con I/O extraída al wrapper ─────────
 
-    function updateDifficultyStats(bib, asigActual, prevSnap) {
-    if(!asigActual || !bib[asigActual]) return;
+    /**
+     * @function updateDifficultyStats
+     * @description Renderiza la barra de distribución de fases FSRS.
+     * Desvincula el CSS de la lógica JS e implementa coerción de tipos segura.
+     */
+    function updateDifficultyStats(counts, prevSnap, total, pendientesHoy) {
+        const elTotal = document.getElementById('total-cards-count');
+        const elHoy = document.getElementById('today-cards-count');
+        if(elTotal) elTotal.innerText = escapeHtml(String(total || 0));
+        if(elHoy) elHoy.innerText = escapeHtml(String(pendientesHoy || 0));
 
-    const cards = bib[asigActual];
-    const total = cards.length;
-    
-    // Contadores: 0:Nueva, 1:Fácil, 2:Bien, 3:Difícil, 4:Crítica
-    let counts = { 0:0, 1:0, 2:0, 3:0, 4:0 };
-    let pendientesHoy = 0;
-    const todayVal = fechaValor(getFechaHoy());
+        const labels = { 0: "Nuevas", 1: "Fáciles", 2: "Bien", 3: "Difíciles", 4: "Críticas" };
+        const colors = { 
+            0: "var(--border, #9e9e9e)", 
+            1: "var(--status-blue, #2196F3)", 
+            2: "var(--status-green, #4CAF50)", 
+            3: "var(--status-yellow, #FF9800)", 
+            4: "var(--status-red, #f44336)" 
+        };
 
-    cards.forEach(c => {
-        const dif = (c.Dificultad === null || c.Dificultad === undefined) ? 2 : parseInt(c.Dificultad);
-        const etapa = c.EtapaRepaso || 0;
-        const tieneRepaso = !!c.UltimoRepaso;
+        let html = "";
+        [0, 4, 3, 2, 1].forEach(k => { 
+            const val = counts[k] || 0;
+            const pct = total > 0 ? (val / total) * 100 : 0;
+            let deltaHtml = '<span class="diff-delta neutral">—</span>';
+            
+            if (prevSnap) {
+                const diff = val - (prevSnap[k] || 0);
+                if (diff > 0) deltaHtml = `<span class="diff-delta up">+${escapeHtml(String(diff))}</span>`;
+                else if (diff < 0) deltaHtml = `<span class="diff-delta down">${escapeHtml(String(diff))}</span>`;
+                else deltaHtml = `<span class="diff-delta neutral">·</span>`;
+            }
+            html += `
+                <div class="diff-bar-row">
+                    <div class="diff-label">${labels[k]}</div>
+                    <div class="diff-track">
+                        <div class="diff-fill" style="width:${pct}%; background:${colors[k]}; transition: width 0.3s ease;"></div>
+                    </div>
+                    <div class="diff-val">${escapeHtml(String(val))}</div>
+                    ${deltaHtml}
+                </div>`;
+        });
+        
+        const containerBars = document.getElementById('dist-bars');
+        if(containerBars) containerBars.innerHTML = html;
+    }
 
-        if (dif === 2 && !tieneRepaso && etapa === 0) {
-            counts[0]++;
-        } else {
-            if (counts[dif] !== undefined) counts[dif]++;
-            else counts[3]++;
-        }
+    /**
+     * @function updateGlobalStats
+     * @description Renderiza las estadísticas globales. Implementa Null-Checks estrictos
+     * para evitar excepciones silenciosas si el layout muta.
+     */
+    function updateGlobalStats(streak, totalDiasActivos, msgActividad) {
+        const elStreak = document.getElementById('global-streak');
+        const elTotal = document.getElementById('global-total-days');
+        const elMsg = document.getElementById('global-activity-msg');
 
-        if (c.ProximoRepaso && fechaValor(c.ProximoRepaso) <= todayVal) pendientesHoy++;
-    });
+        if (elStreak) elStreak.innerText = escapeHtml(String(streak || 0));
+        if (elTotal) elTotal.innerText = escapeHtml(String(totalDiasActivos || 0));
+        if (elMsg) elMsg.innerText = escapeHtml(String(msgActividad || ''));
+    }
 
-    const elTotal = document.getElementById('total-cards-count');
-    const elHoy = document.getElementById('today-cards-count');
-    if(elTotal) elTotal.innerText = total;
-    if(elHoy) elHoy.innerText = pendientesHoy;
-
-    const labels = { 0: "Nuevas", 1: "Fáciles", 2: "Bien", 3: "Difíciles", 4: "Críticas" };
-    const colors = { 0: "#9e9e9e", 1: "#2196F3", 2: "#4CAF50", 3: "#FF9800", 4: "#f44336" };
-
-    let html = "";
-    [0, 4, 3, 2, 1].forEach(k => { 
-        const pct = total > 0 ? (counts[k] / total) * 100 : 0;
-        let deltaHtml = '<span class="diff-delta neutral">—</span>';
-        if (prevSnap) {
-            const diff = counts[k] - (prevSnap[k] || 0);
-            if (diff > 0) deltaHtml = `<span class="diff-delta up">+${diff}</span>`;
-            else if (diff < 0) deltaHtml = `<span class="diff-delta down">${diff}</span>`;
-            else deltaHtml = `<span class="diff-delta neutral">·</span>`;
-        }
-        html += `
-            <div class="diff-bar-row">
-                <div class="diff-label">${labels[k]}</div>
-                <div class="diff-track">
-                    <div class="diff-fill" style="width:${pct}%; background:${colors[k]}; transition: width 0.3s ease;"></div>
-                </div>
-                <div class="diff-val">${counts[k]}</div>
-                ${deltaHtml}
-            </div>`;
-    });
-    
-    const containerBars = document.getElementById('dist-bars');
-    if(containerBars) containerBars.innerHTML = html;
-    return counts;  // el wrapper persiste el snapshot
-}
-
+    /**
+     * @function updateCalendarHeatmap
+     * @description Dibuja el mapa de calor del mes actual. Implementa delegación de eventos 
+     * (onmouseover/onmouseout) para el panel de pendientes, erradicando los closures anidados por día.
+     * @param {Object} bib - Biblioteca completa de asignaturas.
+     * @param {string} asigActual - Nombre de la asignatura seleccionada.
+     * @param {Array} fechas - Array de eventos de la agenda.
+     * @param {Date} viewDate - Fecha de referencia para el mes renderizado.
+     * @returns {void}
+     */
     function updateCalendarHeatmap(bib, asigActual, fechas, viewDate) {
         const container = document.getElementById('calendar-heatmap');
         const title = document.getElementById('calendar-month-title');
         if(!container) return;
+        
         container.innerHTML = "";
+
+        // 1. Delegación de Eventos Estricta
+        container.onmouseleave = () => {
+            if(typeof updatePendingWindow === 'function') updatePendingWindow(null);
+        };
+
+        container.onmouseover = (e) => {
+            const dayDiv = e.target.closest('.heatmap-day[data-interactive="true"]');
+            if (!dayDiv) return;
+            const dStr = dayDiv.getAttribute('data-date');
+            if (dStr && typeof updatePendingWindow === 'function') updatePendingWindow(dStr);
+        };
 
         const year  = viewDate.getFullYear();
         const month = viewDate.getMonth();
@@ -898,31 +964,23 @@ function abrirFechasModal(bib, asigActual) {
         if (startDay === -1) startDay = 6;
         const numDays  = lastDay.getDate();
         
-        // Uso estricto del motor ISO
         const todayStr = getFechaHoy();
         const todayVal = fechaValor(todayStr);
 
-        let doneCount   = {};
-        let missedCount = {};
-        let futureCount = {};
+        let doneCount = {}, missedCount = {}, futureCount = {};
 
         if (asigActual && bib[asigActual]) {
             bib[asigActual].forEach(c => {
-                // Blindaje ISO: Forzamos la normalización in-situ para evitar desajustes de RAM
                 if (c.UltimoRepaso) {
                     const ultISO = toISODateString(c.UltimoRepaso);
                     doneCount[ultISO] = (doneCount[ultISO] || 0) + 1;
                 }
-
                 if (c.ProximoRepaso) {
                     const pISO = toISODateString(c.ProximoRepaso);
                     const pVal = fechaValor(c.ProximoRepaso);
-
                     if (pVal < todayVal) {
                         const fueRepasadaDespues = c.UltimoRepaso && fechaValor(c.UltimoRepaso) >= pVal;
-                        if (!fueRepasadaDespues) {
-                            missedCount[pISO] = (missedCount[pISO] || 0) + 1;
-                        }
+                        if (!fueRepasadaDespues) missedCount[pISO] = (missedCount[pISO] || 0) + 1;
                     } else if (pVal > todayVal) {
                         futureCount[pISO] = (futureCount[pISO] || 0) + 1;
                     }
@@ -937,15 +995,13 @@ function abrirFechasModal(bib, asigActual) {
             eventMap[evISO].push(ev);
         });
 
-        container.onmouseleave = () => {
-            if(typeof updatePendingWindow === 'function') updatePendingWindow(null);
-        };
+        const fragment = document.createDocumentFragment();
 
         for (let i = 0; i < startDay; i++) {
             const pad = document.createElement('div');
             pad.className = 'heatmap-day';
             pad.style.cssText = 'background:transparent; border:none; pointer-events:none;';
-            container.appendChild(pad);
+            fragment.appendChild(pad);
         }
 
         for (let i = 1; i <= numDays; i++) {
@@ -954,8 +1010,10 @@ function abrirFechasModal(bib, asigActual) {
             const div  = document.createElement('div');
             div.className = 'heatmap-day';
             div.innerText = i;
+            // Injectamos meta-data para la delegación
+            div.setAttribute('data-date', dStr);
 
-            const done   = doneCount[dStr]   || 0;
+            const done   = doneCount[dStr] || 0;
             const missed = missedCount[dStr] || 0;
             const future = futureCount[dStr] || 0;
 
@@ -971,28 +1029,17 @@ function abrirFechasModal(bib, asigActual) {
             }
 
             switch (estado) {
-                case 'done':
-                    div.classList.add('day-past-done');
+                case 'done': div.classList.add('day-past-done'); break;
+                case 'missed': div.classList.add('day-past-missed'); break;
+                case 'mixed': 
+                    div.classList.add('day-past-done'); 
+                    div.style.boxShadow = 'inset 0 -3px 0 var(--status-red, #bb0e02)'; 
                     break;
-                case 'missed':
-                    div.classList.add('day-past-missed');
-                    break;
-                case 'mixed':
-                    div.classList.add('day-past-done');
-                    div.style.boxShadow = 'inset 0 -3px 0 #bb0e02';
-                    break;
-                case 'today':
-                    div.classList.add('day-today-indicator');
-                    break;
-                case 'today-done':
-                    div.classList.add('day-today-indicator', 'day-today-active');
-                    break;
-                case 'future':
-                    div.classList.add('day-future-pending');
-                    break;
+                case 'today': div.classList.add('day-today-indicator'); break;
+                case 'today-done': div.classList.add('day-today-indicator', 'day-today-active'); break;
+                case 'future': div.classList.add('day-future-pending'); break;
             }
 
-            // TOOLTIP TEXTO PLANO ESTRICTO
             let tipLines = [formatDateForUI(dStr)];
             if (done > 0)   tipLines.push(`✓ ${done} repasadas`);
             if (missed > 0) tipLines.push(`⚠ ${missed} pendientes`);
@@ -1002,54 +1049,45 @@ function abrirFechasModal(bib, asigActual) {
             const eventos = eventMap[dStr] || [];
             if (eventos.length > 0) {
                 const weights = { dominant: 3, strong: 2, subtle: 1 };
-                const ev   = eventos.reduce((a, b) =>
-                    (weights[TIPOS_EVENTO[a.tipo]?.weight] || 0) >= (weights[TIPOS_EVENTO[b.tipo]?.weight] || 0) ? a : b
-                );
-                const tipo  = TIPOS_EVENTO[ev.tipo] || TIPOS_EVENTO.otro;
+                const ev = eventos.reduce((a, b) => (weights[TIPOS_EVENTO[a.tipo]?.weight] || 0) >= (weights[TIPOS_EVENTO[b.tipo]?.weight] || 0) ? a : b);
+                const tipo = TIPOS_EVENTO[ev.tipo] || TIPOS_EVENTO.otro;
                 const color = getColorEvento(ev);
 
                 if (tipo.weight === 'dominant') {
                     div.className = 'heatmap-day'; 
-                    div.style.background  = color;
-                    div.style.color       = '#fff';
-                    div.style.fontWeight  = 'bold';
-                    div.style.boxShadow   = `0 0 8px ${color}99`;
-                    div.style.outline     = `2px solid ${color}`;
+                    div.style.background = color;
+                    div.style.color = '#fff';
+                    div.style.fontWeight = 'bold';
+                    div.style.boxShadow = `0 0 8px ${color}99`;
+                    div.style.outline = `2px solid ${color}`;
                     div.style.outlineOffset = '-2px';
                 } else if (tipo.weight === 'strong') {
-                    const existingBg = window.getComputedStyle(div).background;
                     div.style.background = color;
-                    div.style.color      = '#fff';
+                    div.style.color = '#fff';
                     div.style.fontWeight = 'bold';
-                    if (estado === 'missed' || estado === 'mixed') {
-                        div.style.boxShadow = `inset 0 -4px 0 #bb0e02`;
-                    } else if (estado === 'done' || estado === 'today-done') {
-                        div.style.boxShadow = `inset 0 -4px 0 var(--status-blue)`;
-                    } else {
-                        div.style.boxShadow = `0 0 5px ${color}88`;
-                    }
+                    if (estado === 'missed' || estado === 'mixed') div.style.boxShadow = `inset 0 -4px 0 var(--status-red, #bb0e02)`;
+                    else if (estado === 'done' || estado === 'today-done') div.style.boxShadow = `inset 0 -4px 0 var(--status-blue)`;
+                    else div.style.boxShadow = `0 0 5px ${color}88`;
                 } else {
                     const dot = document.createElement('span');
                     dot.className = 'event-dot';
                     dot.style.background = color;
                     div.appendChild(dot);
                 }
-
-                eventos.forEach(e => {
-                    tipLines.push(`★ ${e.nombre}${e.asig ? ' · ' + e.asig : ''}`);
-                });
+                eventos.forEach(e => tipLines.push(`★ ${escapeHtml(e.nombre)}${e.asig ? ' · ' + escapeHtml(e.asig) : ''}`));
             }
 
             div.setAttribute('data-tip', tipLines.join('\n'));
 
+            // Marcamos para que la delegación lo intercepte
             if (estado !== 'vacio' || eventos.length > 0) {
-                div.addEventListener('mouseenter', () => {
-                    if(typeof updatePendingWindow === 'function') updatePendingWindow(dStr);
-                });
+                div.setAttribute('data-interactive', 'true');
             }
 
-            container.appendChild(div);
+            fragment.appendChild(div);
         }
+        
+        container.appendChild(fragment);
     }
 
     function updatePomoStats(horario, asigActual, lista, pomoLogHoy) {
@@ -1194,16 +1232,27 @@ function abrirFechasModal(bib, asigActual) {
             
             const pct = Math.round((doneContextual / Math.max(localGoal,1)) * 100);
             document.getElementById('daily-progress-text').innerText = pct + "%";
-            
-            // Actualizar estadísticas globales (Racha, etc)
-            updateGlobalStats();
+        
 
         } catch(e) { Logger.error("Error en updatePomoStats:", e); }
     }
 
+    /**
+     * @function updateWeeklyWidget
+     * @description Renderiza el gráfico de barras histórico. Utiliza delegación de eventos en el 
+     * contenedor principal para mostrar popups, previniendo la acumulación de listeners (Memory Leaks).
+     * @param {Object} horario - Configuración de metas diarias.
+     * @param {Object} bib - Biblioteca completa de tarjetas.
+     * @param {string} viewMode - Modo de vista actual ('7d' o '28d').
+     * @param {Object} pomoHistory - Historial de pomodoros de días anteriores.
+     * @param {Object} pomoLogHoy - Registro de pomodoros del día actual.
+     * @param {Object} pomoDetailsHistory - Desglose de materias estudiadas históricamente.
+     * @returns {void}
+     */
     function updateWeeklyWidget(horario, bib, viewMode, pomoHistory, pomoLogHoy, pomoDetailsHistory) {
         const container = document.getElementById('weekly-chart-container');
         if(!container) return;
+        
         container.innerHTML = "";
         
         const history = pomoHistory || {};
@@ -1214,15 +1263,46 @@ function abrirFechasModal(bib, asigActual) {
         let totalPomos = 0;
         let daysMetGoal = 0;
 
-        // Determinar maxRef global para escalar bien
+        // 1. Delegación de eventos centralizada para el contenedor
+        container.onclick = function(e) {
+            const col = e.target.closest('.weekly-col-item');
+            if (!col) return;
+            
+            document.querySelectorAll('.bar-popup').forEach(p => p.remove());
+            
+            const dateStr = col.getAttribute('data-date');
+            const logEntry = dateStr === todayStr ? (todayLog.date === todayStr ? todayLog : null) : null;
+            const details = logEntry ? logEntry.details : (pomoDetailsHistory[dateStr] || {});
+            
+            const valNum = parseInt(col.getAttribute('data-val') || '0', 10);
+            const goalNum = parseInt(col.getAttribute('data-goal') || '0', 10);
+
+            let popupHtml = `<strong>${dateStr}</strong><br>${valNum}/${goalNum} pomos<br>`;
+            if (Object.keys(details).length > 0) {
+                Object.entries(details).forEach(([asig, n]) => { popupHtml += `${escapeHtml(asig)}: ${n}<br>`; });
+            } else {
+                popupHtml += `Sin desglose`;
+            }
+            
+            const popup = document.createElement('div');
+            popup.className = 'bar-popup';
+            popup.innerHTML = popupHtml;
+            col.style.position = 'relative';
+            col.appendChild(popup);
+            setTimeout(() => popup.remove(), 3000);
+        };
+
+        // 2. Cálculo de máximos
         let allVals = [];
         for(let i = days-1; i >= 0; i--) {
             const d = new Date(); d.setDate(d.getDate() - i);
             const dStr = formatearFecha(d);
-            let val = dStr === todayStr ? ((todayLog.date === todayStr ? todayLog.count : 0) || 0) : (history[dStr] || 0);
-            allVals.push(val);
+            allVals.push(dStr === todayStr ? ((todayLog.date === todayStr ? todayLog.count : 0) || 0) : (history[dStr] || 0));
         }
         const maxVal = Math.max(...allVals, 1);
+        
+        // 3. Renderizado de columnas
+        const fragment = document.createDocumentFragment();
         
         for(let i = days-1; i >= 0; i--) {
             const d = new Date(); d.setDate(d.getDate() - i);
@@ -1232,8 +1312,8 @@ function abrirFechasModal(bib, asigActual) {
             const isToday = i === 0;
             
             let val = dStr === todayStr ? ((todayLog.date === todayStr ? todayLog.count : 0) || 0) : (history[dStr] || 0);
-            
             const dayIndex = (d.getDay() + 6) % 7; 
+            
             let dailyGoal = 0;
             if (horario) {
                 Object.keys(horario).forEach(asig => {
@@ -1246,66 +1326,34 @@ function abrirFechasModal(bib, asigActual) {
             if(isMet) daysMetGoal++;
             totalPomos += val;
             
-            let barColor = "#333";
-            let numColor = "#666";
-            if (isMet) { barColor = "#19a693"; numColor = "#19a693"; }
-            else if (isToday) { barColor = "var(--accent)"; numColor = "white"; }
-            else if (val > 0) { barColor = "#666"; numColor = "#aaa"; }
+            let barColor = isMet ? "var(--status-green, #19a693)" : (isToday ? "var(--accent)" : "var(--border, #666)");
+            let numColor = isMet ? "var(--status-green, #19a693)" : (isToday ? "var(--text-main, white)" : "var(--text-muted, #aaa)");
             
             const maxRef = Math.max(maxVal, dailyGoal);
             const h = Math.min(100, (val / maxRef) * 100);
             const goalH = Math.min(100, (dailyGoal / maxRef) * 100);
 
             const col = document.createElement('div');
-            const colStyle = viewMode === '28d'
-                ? "flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; position:relative; cursor:pointer;"
-                : "flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; position:relative; cursor:pointer;";
-            col.style.cssText = colStyle;
+            // Inyectamos clase semántica para la delegación de eventos
+            col.className = 'weekly-col-item';
+            col.style.cssText = `flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; position:relative; cursor:pointer;`;
             col.setAttribute('data-date', dStr);
             col.setAttribute('data-val', val);
             col.setAttribute('data-goal', dailyGoal);
+            col.title = `${dStr} — ${val}/${dailyGoal} pomos`;
 
-            // Tooltip desglose al hover
             col.innerHTML = `
                 <div style="width:100%; height:100%; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; position:relative;">
                     ${val > 0 && viewMode === '7d' ? `<span style="font-size:0.7em; margin-bottom:2px; font-weight:bold; color:${numColor};">${val}</span>` : ''}
                     <div style="width:${viewMode === '28d' ? '80' : '60'}%; height:${Math.max(h, 2)}%; background:${barColor}; border-radius:3px 3px 0 0; transition:height 0.5s; z-index:2; min-height:4px;"></div>
                     <div style="position:absolute; bottom:${goalH}%; width:100%; height:1px; border-top:1px dashed rgba(255,255,255,0.2); z-index:1; pointer-events:none;"></div>
                 </div>
-                <span style="font-size:${viewMode === '28d' ? '0.45' : '0.6'}em; margin-top:4px; color:${isToday ? 'white' : '#666'}; font-weight:${isToday ? 'bold' : 'normal'}">${dayLabel}</span>
+                <span style="font-size:${viewMode === '28d' ? '0.45' : '0.6'}em; margin-top:4px; color:${isToday ? 'var(--text-main, white)' : 'var(--text-muted, #666)'}; font-weight:${isToday ? 'bold' : 'normal'}">${dayLabel}</span>
             `;
-
-            // Click: mostrar popup de desglose
-            col.addEventListener('click', function() {
-                document.querySelectorAll('.bar-popup').forEach(p => p.remove());
-                const dateStr = this.getAttribute('data-date');
-                const logEntry = dateStr === todayStr
-                    ? (todayLog.date === todayStr ? todayLog : null)
-                    : null;
-                const histDetails = pomoDetailsHistory;
-                const details = logEntry ? logEntry.details : (histDetails[dateStr] || {});
-                const valNum = parseInt(this.getAttribute('data-val'));
-                const goalNum = parseInt(this.getAttribute('data-goal'));
-
-                let popupHtml = `<strong>${dateStr}</strong><br>${valNum}/${goalNum} pomos<br>`;
-                if (Object.keys(details).length > 0) {
-                    Object.entries(details).forEach(([asig, n]) => {
-                        popupHtml += `${asig}: ${n}<br>`;
-                    });
-                } else {
-                    popupHtml += `Sin desglose`;
-                }
-                const popup = document.createElement('div');
-                popup.className = 'bar-popup';
-                popup.innerHTML = popupHtml;
-                this.style.position = 'relative';
-                this.appendChild(popup);
-                setTimeout(() => popup.remove(), 3000);
-            });
-            
-            col.title = `${dStr} — ${val}/${dailyGoal} pomos`;
-            container.appendChild(col);
+            fragment.appendChild(col);
         }
+        
+        container.appendChild(fragment);
         
         const elMet = document.getElementById('weekly-goals-met');
         const elTotal = document.getElementById('weekly-total');
@@ -1317,26 +1365,33 @@ function abrirFechasModal(bib, asigActual) {
         const container = document.getElementById('hora-heatmap-container');
         const bestEl = document.getElementById('hora-best');
         if (!container) return;
+        
         container.innerHTML = '';
+        const fragment = document.createDocumentFragment();
         const maxVal = Math.max(...Object.values(horaHistory), 1);
 
         let bestHora = -1, bestVal = 0;
+        
         for (let h = 0; h < 24; h++) {
             const val = horaHistory[h] || 0;
             if (val > bestVal) { bestVal = val; bestHora = h; }
+            
             const intensity = val / maxVal;
             const r = Math.round(25 + intensity * 25);
             const g = Math.round(166 * intensity);
             const b = Math.round(147 * intensity);
-            const bg = val === 0 ? '#2a2a2a' : `rgb(${r},${g},${b})`;
+            const bg = val === 0 ? 'var(--menu-color)' : `rgb(${r},${g},${b})`;
 
             const cell = document.createElement('div');
             cell.className = 'hora-cell';
-            cell.style.background = bg;
+            cell.style.backgroundColor = bg;
             cell.setAttribute('data-tip', `${String(h).padStart(2,'0')}:00 — ${val} pomos`);
             if (val > 0) cell.innerText = val;
-            container.appendChild(cell);
+            
+            fragment.appendChild(cell);
         }
+
+        container.appendChild(fragment); // Único reflow
 
         if (bestHora >= 0 && bestVal > 0) {
             bestEl.innerHTML = `<i class="fa-solid fa-rotate" style="color: #e09f12;"></i> Mejor hora: ${String(bestHora).padStart(2,'0')}:00 (${bestVal} pomos)`;
@@ -1351,12 +1406,11 @@ function abrirFechasModal(bib, asigActual) {
         const titleWidget = document.querySelector('#widget-pendientes .stat-title');
         
         if(!listContainer || !countDisplay) return;
-        
         listContainer.innerHTML = "";
         
         if(!asigActual || !bib[asigActual]) {
             countDisplay.innerText = "0";
-            listContainer.innerHTML = "<li style='text-align:center; color:#666; font-size:0.8em; padding:10px;'>Selecciona asignatura</li>";
+            listContainer.innerHTML = "<li class='pending-empty-msg'>Selecciona asignatura</li>";
             return;
         }
 
@@ -1365,71 +1419,82 @@ function abrirFechasModal(bib, asigActual) {
         let tituloEstado = "Ventana de Pendientes (Hoy + Atrasados)";
 
         if (fechaEspecifica) {
-            // MODO HOVER: Solo lo de esa fecha exacta
             filtrados = cards.filter(c => c.ProximoRepaso === fechaEspecifica);
-            tituloEstado = `Programado para el ${fechaEspecifica}`;
+            tituloEstado = `Programado para el ${formatDateForUI(fechaEspecifica)}`;
         } else {
-            // MODO DEFAULT: Todo lo acumulado hasta hoy
             const todayVal = fechaValor(getFechaHoy());
-            filtrados = cards.filter(c => {
-                if(!c.ProximoRepaso) return false;
-                return fechaValor(c.ProximoRepaso) <= todayVal;
-            });
+            filtrados = cards.filter(c => c.ProximoRepaso && fechaValor(c.ProximoRepaso) <= todayVal);
             tituloEstado = "Ventana de Pendientes (Hoy)";
         }
 
-        // Actualizar Título del Widget
         if(titleWidget) titleWidget.innerText = tituloEstado;
 
-        // Actualizar Contador
         countDisplay.innerText = filtrados.length;
-        if (filtrados.length > 0) countDisplay.style.color = "var(--status-red)";
-        else countDisplay.style.color = (fechaEspecifica) ? "#888" : "var(--status-green)";
+        countDisplay.className = filtrados.length > 0 ? 'text-danger' : (fechaEspecifica ? 'text-muted' : 'text-success');
 
-        // Renderizar Lista
         if(filtrados.length === 0) {
             const msg = fechaEspecifica ? "Nada programado" : '¡Todo al día! <i class="fa-solid fa-dove"></i>';
-            listContainer.innerHTML = `<li style='text-align:center; color:#888; font-style:italic; padding:10px;'>${msg}</li>`;
-        } else {
-            filtrados.forEach(c => {
-                const li = document.createElement('li');
-                li.className = 'asig-item'; 
-                li.style.cursor = "default";
-                li.style.fontSize = "0.85em";
-                
-                let difText = "N";
-                let difColor = "#999";
-                
-                if (c.Dificultad) {
-                    difText = c.Dificultad;
-                    if(difText == 1) difColor = "#2196F3";
-                    if(difText == 2) difColor = "#4CAF50";
-                    if(difText == 3) difColor = "#FF9800";
-                    if(difText == 4) difColor = "#f44336";
-                } else if (c.EtapaRepaso > 0) {
-                    difText = "?";
-                }
+            listContainer.innerHTML = `<li class='pending-empty-msg'>${msg}</li>`;
+            return;
+        }
 
-                // Inyectamos HTML para que el LaTeX crudo se pinte
-                li.innerHTML = `
-                    <span style="flex-grow:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding-right:5px;">${c.Titulo}</span>
-                    <span style="font-weight:bold; color:${difColor};">(${difText})</span>
-                `;
-                listContainer.appendChild(li);
-            });
+        const fragment = document.createDocumentFragment();
+        filtrados.forEach(c => {
+            const li = document.createElement('li');
+            li.className = 'asig-item pending-item';
             
-            // CAMBIO: Renderizar LaTeX en esta lista pequeña
-            if(typeof MathJax !== 'undefined') {
-                MathJax.typesetPromise([listContainer]).catch(err => Logger.error(err));
+            let difText = "N";
+            let colorVar = "var(--text-muted)";
+            
+            if (c.Dificultad) {
+                difText = c.Dificultad;
+                if(difText == 1) colorVar = "var(--status-blue)";
+                if(difText == 2) colorVar = "var(--status-green)";
+                if(difText == 3) colorVar = "var(--status-yellow)";
+                if(difText == 4) colorVar = "var(--status-red)";
+            } else if (c.EtapaRepaso > 0) {
+                difText = "?";
             }
+
+            // BLINDAJE XSS + Uso de CSS Variables Estrictas
+            li.innerHTML = `
+                <span class="pending-item-title">${escapeHtml(c.Titulo)}</span>
+                <span style="font-weight:bold; color:${colorVar};">(${difText})</span>
+            `;
+            fragment.appendChild(li);
+        });
+        
+        listContainer.appendChild(fragment);
+        
+        if(typeof MathJax !== 'undefined') {
+            MathJax.typesetPromise([listContainer]).catch(err => Logger.error(err));
+        }
+    }
+
+    function renderControlesModoEstudio(isSecuencial) {
+        // Usa los selectores originales de tu HTML
+        const btnPrev = document.getElementById('btn-prev') || document.querySelector('[onclick*="anteriorTarjeta"]');
+        const btnNextText = document.getElementById('btn-next-text');
+        const nextShortcut = document.getElementById('next-shortcut');
+
+        if (isSecuencial) {
+            if(btnPrev) btnPrev.classList.remove('hidden');
+            if(btnNextText) btnNextText.innerText = "Siguiente"; 
+            if(nextShortcut) nextShortcut.innerText = "[→]"; 
+        } else {
+            if(btnPrev) btnPrev.classList.add('hidden');
+            if(btnNextText) btnNextText.innerText = "Siguiente (Random)";
+            if(nextShortcut) nextShortcut.innerText = "[→]"; 
         }
     }
 
     function renderHorarioGrid(horario, bib, diaSeleccionado) {
         const contenedor = document.getElementById('schedule-grid-container');
+        if (!contenedor) return;
         contenedor.innerHTML = "";
         const dias = ["L", "M", "X", "J", "V", "S", "D"];
         const nombresDias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+        
 
         dias.forEach((letra, i) => {
             const box = document.createElement('div');
@@ -1453,7 +1518,6 @@ function abrirFechasModal(bib, asigActual) {
                     const tag = document.createElement('div');
                     tag.className = 'mini-subject-tag';
                     tag.style.backgroundColor = getColorAsignatura(asig);
-                    // Aquí está tu formato: "EDP (2🍅)"
                     tag.innerText = `${asig} (${horas}🍅)`;
                     content.appendChild(tag);
                 }
@@ -1463,49 +1527,63 @@ function abrirFechasModal(bib, asigActual) {
             contenedor.appendChild(box);
         });
     }
+    function toggleDashboardVisibility(isVisible) {
+        const dashboardCol = document.getElementById('dashboard-col');
+        if (dashboardCol) {
+            if (isVisible) dashboardCol.classList.remove('hidden');
+            else dashboardCol.classList.add('hidden');
+        }
+    }
+
+    function updateWeeklyViewButtons(mode) {
+        const btn7 = document.getElementById('btn-week-7');
+        const btn28 = document.getElementById('btn-week-28');
+        if (btn7) btn7.classList.toggle('active', mode === '7d');
+        if (btn28) btn28.classList.toggle('active', mode === '28d');
+    }
+
+    function cerrarResumenSesion() {
+        const modal = document.getElementById('resumen-sesion-modal');
+        if (modal) modal.classList.remove('visible');
+    }
 
 function renderRecursos(asigActual, recursos, slots) {
-    const contenedor = document.getElementById('lista-recursos-slots');
-    if(!contenedor) return;
-    contenedor.innerHTML = "";
+        const contenedor = document.getElementById('lista-recursos-slots');
+        if(!contenedor) return;
+        contenedor.innerHTML = "";
 
-    if (!asigActual) return;
-    
-    // Inicializar array si no existe
-    if (!recursos[asigActual]) {
-        recursos[asigActual] = [];
+        if (!asigActual) return;
+        
+        // Uso de fallback inmutable. Cero mutación de dependencias externas.
+        const lista = recursos[asigActual] || [];
+        
+        if(lista.length === 0) {
+            contenedor.innerHTML = "<span style='font-size:0.8em; color:#444; font-style:italic;'>Sin libros. Añade uno a la derecha.</span>";
+            return;
+        }
+
+        lista.forEach((nombreLibro, index) => {
+            const key = `${asigActual}_${index}`;
+            const isLoaded = !!slots[key]; 
+            
+            const div = document.createElement('div');
+            let classes = "slot-chip";
+            if(isLoaded) classes += " loaded";
+            
+            div.className = classes;
+            div.title = isLoaded ? "Ver libro" : "Haga clic para cargar el archivo PDF";
+            div.onclick = () => { if(typeof window.clickEnSlot === 'function') window.clickEnSlot(index); };
+            
+            const icon = isLoaded ? '📖' : '📥';
+            const safeNombre = window.escapeHtml ? window.escapeHtml(nombreLibro) : nombreLibro;
+            
+            div.innerHTML = `
+                <span>${icon} ${safeNombre}</span>
+                <button class="slot-del-btn" data-action="borrarSlot" data-idx=${index} title="Olvidar referencia">✕</button>
+            `;
+            contenedor.appendChild(div);
+        });
     }
-
-    const lista = recursos[asigActual];
-    
-    if(lista.length === 0) {
-        contenedor.innerHTML = "<span style='font-size:0.8em; color:#444; font-style:italic;'>Sin libros. Añade uno a la derecha.</span>";
-        return;
-    }
-
-    lista.forEach((nombreLibro, index) => {
-        const key = `${asigActual}_${index}`;
-        const isLoaded = !!slots[key]; 
-        
-        // Crear el Chip
-        const div = document.createElement('div');
-        let classes = "slot-chip";
-        if(isLoaded) classes += " loaded";
-        
-        div.className = classes;
-        div.title = isLoaded ? "Ver libro" : "Haga clic para cargar el archivo PDF";
-        div.onclick = () => clickEnSlot(index);
-        
-        // Icono de estado
-        const icon = isLoaded ? 'ðŸ“–' : 'ðŸ“¥';
-        
-        div.innerHTML = `
-            <span>${icon} ${nombreLibro}</span>
-            <button class="slot-del-btn" data-action="borrarSlot" data-idx=${index} title="Olvidar referencia">í—</button>
-        `;
-        contenedor.appendChild(div);
-    });
-}
 function cambiarPestanaAjustes(tabId) {
         // 1. Recorrer todos los botones de pestaña declarados
         document.querySelectorAll('.stab').forEach(btn => {
@@ -1534,6 +1612,225 @@ function cambiarPestanaAjustes(tabId) {
         if (panelActivo) {
             panelActivo.classList.remove('hidden');
             panelActivo.style.display = ''; // Cede el control al CSS original (block/flex)
+        }
+    }
+
+    // ── ADAPTADORES DEL EDITOR Y JSON ─────────────────────────────
+    
+    function abrirEditorAmigable(concepto, idxNavegacion, totalCola) {
+        ocultarTodo();
+        const editorCard = document.getElementById('editor-card');
+        if(editorCard) editorCard.classList.remove('hidden');
+        
+        document.getElementById('edit-titulo').value = concepto.Titulo || "";
+        document.getElementById('edit-contenido').value = concepto.Contenido || "";
+        document.getElementById('edit-tema').value = concepto.Tema || 1;
+        document.getElementById('edit-apartado').value = concepto.Apartado || "Definición";
+
+        const idxLabel = document.getElementById('edit-idx-label');
+        if(idxLabel) idxLabel.innerText = `(Tarjeta ${idxNavegacion + 1} de ${totalCola})`;
+    }
+
+    function getEditorData() {
+        return {
+            titulo: document.getElementById('edit-titulo')?.value.trim() || "",
+            contenido: document.getElementById('edit-contenido')?.value.trim() || "",
+            tema: parseInt(document.getElementById('edit-tema')?.value) || 1,
+            apartado: document.getElementById('edit-apartado')?.value || "Definición"
+        };
+    }
+
+    /**
+     * @function limpiarEditorData
+     * @description Purga los campos de entrada del editor reteniendo las referencias.
+     */
+    function limpiarEditorData() {
+        const tituloEl = document.getElementById('edit-titulo');
+        const contenidoEl = document.getElementById('edit-contenido');
+        
+        if (tituloEl) tituloEl.value = "";
+        if (contenidoEl) contenidoEl.value = "";
+    }
+
+    function mostrarFeedbackGuardadoEditor() {
+        const btn = document.getElementById('btn-guardar-edicion-amigable');
+        if(btn) {
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-check"></i> ¡Guardado!';
+            btn.classList.add('btn-success');
+            setTimeout(() => { 
+                btn.innerHTML = originalText; 
+                btn.classList.remove('btn-success'); 
+            }, 1000);
+        }
+    }
+
+    /**
+     * @function setBtnIAModo
+     * @description Controla el estado semántico de carga del botón IA.
+     * Utiliza la propiedad 'disabled' nativa para garantizar la accesibilidad y el bloqueo real.
+     */
+    function setBtnIAModo(isProcessing) {
+        const btn = document.getElementById('btn-guardarnuevoconcepto');
+        if(!btn) return;
+        
+        if (isProcessing) {
+            btn.dataset.original = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-microchip fa-fade"></i> Pensando...';
+            btn.disabled = true; // FIX ARQUITECTÓNICO
+        } else {
+            btn.innerHTML = btn.dataset.original || '<i class="fa-solid fa-floppy-disk"></i> Guardar';
+            btn.disabled = false; // FIX ARQUITECTÓNICO
+        }
+    }
+
+    function abrirEditorJSON(tarjetasSaneadas) {
+        ocultarTodo();
+        const jsonCard = document.getElementById('json-editor-card');
+        if (jsonCard) jsonCard.classList.remove('hidden');
+        const area = document.getElementById('json-editor-area');
+        if (area) area.value = JSON.stringify(tarjetasSaneadas, null, 4);
+    }
+
+    function cancelarEdicion(hasAsignatura) {
+        ocultarTodo();
+        if (hasAsignatura) {
+            document.getElementById('study-card').classList.remove('hidden');
+        } else {
+            document.getElementById('welcome-screen').classList.remove('hidden');
+        }
+    }
+    // ── ADAPTADORES DE CONFIGURACIÓN Y ESTILO ─────────────────────
+
+    /**
+     * @function getAjustesData
+     * @description Recopila todos los valores de los inputs del modal de ajustes.
+     * @param {Array<string>} clavesAsignaturas - Lista de nombres para mapear colores.
+     * @returns {Object} Diccionario plano con toda la configuración.
+     */
+    function getAjustesData(clavesAsignaturas = []) {
+        const formData = {
+            pomo: {
+                work: parseInt(document.getElementById('set-work')?.value) || 35,
+                short: parseInt(document.getElementById('set-short')?.value) || 5,
+                long: parseInt(document.getElementById('set-long')?.value) || 15,
+                cyclesBeforeLong: parseInt(document.getElementById('set-cycles')?.value) || 4,
+                autoStart: document.getElementById('check-auto-start')?.checked || false
+            },
+            ia: {
+                apiKey: document.getElementById('set-groq-key')?.value.trim() || "",
+                sessionOnly: !!document.getElementById('set-groq-session-only')?.checked,
+                proxyUrl: document.getElementById('set-groq-proxy-url')?.value.trim() || ""
+            },
+            firebase: {
+                configStr: document.getElementById('set-firebase-config')?.value.trim() || ""
+            },
+            colores: {},
+            privacidad: {
+                shareStats: document.getElementById('set-privacy-stats')?.checked || false
+            }
+        };
+
+        clavesAsignaturas.forEach(k => {
+            const input = document.getElementById(`color-input-${k}`);
+            if(input) formData.colores[k] = input.value;
+        });
+
+        return formData;
+    }
+
+    /**
+     * @function aplicarColorAsignaturaActiva
+     * @description Muta visualmente los acentos de la UI basados en el color inyectado.
+     */
+    function aplicarColorAsignaturaActiva(color) {
+        const hBar = document.getElementById('pdf-header-bar');
+        const modPdf = document.getElementById('modulo-pdf');
+        if (hBar) { 
+            hBar.style.background = color; 
+            hBar.style.borderColor = color; 
+        }
+        if (modPdf) {
+            modPdf.style.setProperty('--dynamic-color', color);
+        }
+    }
+    /**
+     * @function pedirNombreAsignatura
+     * @description Genera un modal DOM asíncrono y no bloqueante para sustituir al prompt() nativo.
+     * @param {Function} callback - Función que recibe el string introducido o null si se cancela.
+     */
+    function pedirNombreAsignatura(callback) {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.7); display:flex; justify-content:center; align-items:center; z-index:9999; backdrop-filter: blur(3px);";
+        
+        const modal = document.createElement('div');
+        modal.style.cssText = "background:var(--card-bg, #1e1e1e); padding:25px; border-radius:12px; width:320px; text-align:center; border:1px solid var(--border, #333); box-shadow: 0 8px 32px rgba(0,0,0,0.6);";
+        
+        const title = document.createElement('h3');
+        title.innerText = "Nueva Asignatura";
+        title.style.cssText = "margin-top:0; color:var(--text-main, #eee); font-size: 1.2em; margin-bottom: 15px;";
+        
+        const input = document.createElement('input');
+        input.type = "text";
+        input.placeholder = "Nombre (ej: Termodinámica)";
+        input.style.cssText = "width:100%; padding:12px; margin-bottom:20px; border-radius:6px; border:1px solid var(--border, #444); background:var(--bg-color, #121212); color:var(--text-main, #eee); box-sizing:border-box; outline:none; font-size: 1em;";
+        input.onfocus = () => input.style.borderColor = "var(--accent, #00ffcc)";
+        input.onblur  = () => input.style.borderColor = "var(--border, #444)";
+        
+        const btnContainer = document.createElement('div');
+        btnContainer.style.cssText = "display:flex; justify-content:space-between; gap: 10px;";
+        
+        const btnsubir = document.createElement('button');
+        btnsubir.innerText = "Subir Archivo";
+        btnsubir.style.cssText = "flex: 1; background:transparent; border:1px solid var(--border, #555); color:var(--text-muted, #aaa); padding:10px; border-radius:6px; cursor:pointer; font-weight: 500; transition: all 0.2s;";
+        btnsubir.onmouseover = () => { btnsubir.style.background = "var(--border, #333)"; btnsubir.style.color = "var(--text-main, #eee)"; };
+        btnsubir.onmouseout  = () => { btnsubir.style.background = "transparent"; btnsubir.style.color = "var(--text-muted, #aaa)"; };
+        
+        const btnOk = document.createElement('button');
+        btnOk.innerText = "Crear";
+        btnOk.style.cssText = "flex: 1; background:var(--accent, #00ffcc); color:#000; font-weight:bold; border:none; padding:10px; border-radius:6px; cursor:pointer; transition: opacity 0.2s;";
+        btnOk.onmouseover = () => btnOk.style.opacity = "0.8";
+        btnOk.onmouseout  = () => btnOk.style.opacity = "1";
+
+        const close = (val) => {
+            document.body.removeChild(overlay);
+            callback(val);
+        };
+
+        btnsubir.onclick = () => close(null);
+        btnOk.onclick = () => close(input.value);
+        input.onkeydown = (e) => { 
+            if(e.key === 'Enter') btnOk.click(); 
+            if(e.key === 'Escape') btnsubir.click(); 
+        };
+
+        btnContainer.appendChild(btnsubir);
+        btnContainer.appendChild(btnOk);
+        modal.appendChild(title);
+        modal.appendChild(input);
+        modal.appendChild(btnContainer);
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+        
+        input.focus();
+    }
+
+    /**
+     * @function setEstadoCargaFragmentacionIA
+     * @description Controla el estado visual del botón de fragmentación IA (Spinner).
+     * @param {boolean} isProcessing - True para estado de carga, False para restaurar.
+     */
+    function setEstadoCargaFragmentacionIA(isProcessing) {
+        const btn = document.getElementById('btn-fragmentar-ia');
+        if (!btn) return;
+        
+        if (isProcessing) {
+            btn.dataset.original = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando...';
+            btn.disabled = true;
+        } else {
+            btn.innerHTML = btn.dataset.original || '<i class="fa-solid fa-scissors"></i> Fragmentar con IA';
+            btn.disabled = false;
         }
     }
 
@@ -1574,6 +1871,24 @@ function cambiarPestanaAjustes(tabId) {
         renderHorarioGrid,
         renderRecursos,
         cambiarPestanaAjustes,
+        getEstadoFiltros,
+        renderEstadoFiltros,
+        updateGlobalStats,
+        toggleDashboardVisibility,
+        updateWeeklyViewButtons,
+        cerrarResumenSesion,
+        renderControlesModoEstudio,
+        abrirEditorAmigable,
+        getEditorData,
+        limpiarEditorData,
+        mostrarFeedbackGuardadoEditor,
+        setBtnIAModo,
+        abrirEditorJSON,
+        cancelarEdicion,
+        getAjustesData,
+        aplicarColorAsignaturaActiva,
+        pedirNombreAsignatura,
+        setEstadoCargaFragmentacionIA,
     };
 })();
 

@@ -35,8 +35,8 @@ const AI = (() => {
 
         const response = await fetch(url, { method: "POST", headers, body: JSON.stringify(payload) });
         if (!response.ok) {
-            const err = await response.json();
-            throw new Error(err.error?.message || "Error en red IA");
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error?.message || `Error en red IA (Status: ${response.status})`);
         }
 
         const data = await response.json();
@@ -74,8 +74,10 @@ const AI = (() => {
         if (!texto) return;
 
         input.value = "";
-        UI.agregarMensajeChat("user", texto);
-        UI.agregarMensajeChat("system", "Pensando...");
+        if (typeof UI !== 'undefined' && UI.agregarMensajeChat) {
+            UI.agregarMensajeChat("user", texto);
+            UI.agregarMensajeChat("system", "Pensando...");
+        }
         
         try {
             const context = _construirContexto();
@@ -84,33 +86,30 @@ const AI = (() => {
             
             const container = document.getElementById('chat-messages');
             if (container && container.lastElementChild) container.removeChild(container.lastElementChild);
-            UI.agregarMensajeChat("ai", respuesta);
+            if (typeof UI !== 'undefined' && UI.agregarMensajeChat) UI.agregarMensajeChat("ai", respuesta);
         } catch (e) {
             const container = document.getElementById('chat-messages');
             if (container && container.lastElementChild) container.removeChild(container.lastElementChild);
-            UI.agregarMensajeChat("system", " Error: " + e.message);
+            if (typeof UI !== 'undefined' && UI.agregarMensajeChat) UI.agregarMensajeChat("system", " Error: " + e.message);
         }
     }
 
     async function generarTituloAutomatico(contenido) {
         if (!contenido || contenido.trim() === "") return "Tarjeta vacía (Auto)";
         
-        // Prompt mejorado para forzar diferenciación semántica
         const prompt = `Actúa como indexador de apuntes matemáticos. 
         Lee el texto y genera un título descriptivo y específico que lo diferencie de otros conceptos similares (máximo 6-8 palabras).
         Ejemplos: Si te dan la definición de sigma-algebra en X, o las propiedades de una medida arbitraria, pones:
         Ejemplo 1: {{{{$\\sigma$-álgebra en X}}}}
         Ejemplo 2: {{{{Propiedades de la Medida}}}}
-        Responde ÚNICAMENTE con el título envuelto en 4 llaves y los comandos de latex con dos \\ y envueltos en dólares $.`;
+        Responde ÚNICAMENTE con el título envuelto en 4 llaves y los comandos de latex con dos \\\\ y envueltos en dólares $.`;
         
-        try {
-            const respuesta = await _llamarGroq(prompt, contenido, MODELOS.RAPIDO);
-            // Captura flexible de las llaves
-            const match = respuesta.match(/\{{2,4}(.*?)\}{2,4}/);
-            return match ? `${match[1].trim()} (Auto)` : "Concepto Específico (Auto)";
-        } catch (e) {
-            return "Concepto Genérico (Auto)";
-        }
+        // Cero delegación de errores. El error debe subir al orquestador para no silenciar Rate Limits.
+        const respuesta = await _llamarGroq(prompt, contenido, MODELOS.RAPIDO);
+        const match = respuesta.match(/\{{2,4}(.*?)\}{2,4}/);
+        if (match) return `${match[1].trim()} (Auto)`;
+        
+        return "Concepto (Revisar IA)";
     }
 
     async function procesarTitulosEnLote(asignatura) {
@@ -123,18 +122,17 @@ const AI = (() => {
         for (let i = 0; i < tarjetas.length; i++) {
             if (tarjetas[i]._needsAutoTitle) {
                 try {
-                    // SUBIDO A 3 SEGUNDOS para evitar el Rate Limit (429)
-                    await new Promise(resolve => setTimeout(resolve, 3000));
+                    // Backoff de 3500ms estricto para mitigar el HTTP 429 (Rate Limit de Groq)
+                    await new Promise(resolve => setTimeout(resolve, 3500));
                     
                     const nuevoTitulo = await generarTituloAutomatico(tarjetas[i].Contenido);
                     tarjetas[i].Titulo = nuevoTitulo;
                     delete tarjetas[i]._needsAutoTitle;
                     procesadas++;
                     
-                    // Actualizar visualmente cada vez que procesa una
-                    if (procesadas % 2 === 0) EventBus.emit('STATE_CHANGED', { keys: ['colaEstudio'] });
                 } catch (e) {
-                    tarjetas[i].Titulo = "Error de IA (Auto)";
+                    if (typeof Logger !== 'undefined') Logger.error("Fallo IA en título:", e);
+                    tarjetas[i].Titulo = "Error de IA (Editar)";
                     delete tarjetas[i]._needsAutoTitle;
                 }
             }
@@ -142,8 +140,10 @@ const AI = (() => {
 
         if (procesadas > 0) {
             State.set('biblioteca', biblioteca);
-            EventBus.emit('DATA_REQUIRES_SAVE');
-            EventBus.emit('STATE_CHANGED', { keys: ['colaEstudio'] });
+            if (typeof EventBus !== 'undefined') EventBus.emit('DATA_REQUIRES_SAVE');
+            
+            // CORRECCIÓN DE REACTIVIDAD: Forzamos la regeneración de la cola para que la UI se actualice
+            if (typeof window.aplicarFiltros === 'function') window.aplicarFiltros(false);
         }
     }
 

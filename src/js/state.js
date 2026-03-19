@@ -65,6 +65,24 @@ const State = (() => {
 
         // Widget layout (orden, minimizado, oculto)
         widgetConfig: null,
+        // Configuración de Dominio (Ontología de tarjetas)
+        tiposTarjeta: {
+            'Definición':   { color: '#c40202', comandoLatex: '\\defi' },
+            'Teorema':      { color: '#1e4fb2', comandoLatex: '\\teorema' },
+            'Proposición':  { color: '#16a116', comandoLatex: '\\prop' },
+            'Lema':         { color: '#3b9c67', comandoLatex: '\\lema' },
+            'Corolario':    { color: '#00bcd4', comandoLatex: '\\coro' },
+            'Axioma':       { color: '#9c27b0', comandoLatex: '\\axioma' },
+            'Observación':  { color: '#7242A3', comandoLatex: '\\obs' },
+            'Nota':         { color: '#9e9e9e', comandoLatex: '\\nota' },
+            'Ejemplo':      { color: '#3db370', comandoLatex: '\\ejemplo' }
+        },
+        // Configuración de Importación Masiva
+        importConfig: {
+            delimitador: '!!!!!',
+            formato: 'lineas', // 'lineas' o 'etiquetas'
+            orden: ['Titulo', 'Apartado', 'Contenido'] 
+        },
     };
 
     // ── Getters con lazy-init para valores de localStorage ────────
@@ -74,6 +92,7 @@ const State = (() => {
                             || localStorage.getItem('estudiador_groq_key') || '',
         groqProxyUrl: () => localStorage.getItem('estudiador_groq_proxy_url') || '',
         widgetConfig: () => JSON.parse(localStorage.getItem('estudiador_widget_config') || 'null'),
+        tiposTarjeta: () => JSON.parse(localStorage.getItem('estudiador_tipos_tarjeta')) || null, // Se fusionará con el default luego
     };
 
     // ── Exponer cada clave como propiedad de window ───────────────

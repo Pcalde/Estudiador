@@ -12,11 +12,10 @@
 // Ref: https://github.com/open-spaced-repetition/fsrs4anki/wiki/The-Algorithm
 // ════════════════════════════════════════════════════════════════
 
-    // ── Constantes heredadas (usadas por código externo) ─────────
-    const INTERVALOS = [2, 3, 5, 7];   // conservado por retrocompatibilidad
+    // ── Constantes heredadas ─────────
+    const INTERVALOS = [2, 3, 5, 7];
     const DATE_FORMAT_STORAGE = 'yyyy-MM-dd';
     const DATE_FORMAT_LEGACY  = 'dd/MM/yyyy';
-
 
 // ════════════════════════════════════════════════════════════════
 // UTILIDADES DE FECHAS
@@ -93,7 +92,6 @@
         return Math.round((utcTo - utcFrom) / 86400000);
     }
 
-
 // ════════════════════════════════════════════════════════════════
 // NORMALIZACIÓN DE FECHAS
 // ════════════════════════════════════════════════════════════════
@@ -101,12 +99,11 @@
     function normalizarPomoFechas() {
         const regexAntiguo = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
         function convertirClave(clave) {
-            const match = clave.match(regexAntiguo);
-            if (match) {
-                return `${match[3]}-${match[2].padStart(2,'0')}-${match[1].padStart(2,'0')}`;
-            }
-            return clave;
+            const match = clave?.match(regexAntiguo);
+            return match ? `${match[3]}-${match[2].padStart(2,'0')}-${match[1].padStart(2,'0')}` : clave;
         }
+
+        // 1. Log singular del día
         try {
             const raw = localStorage.getItem('pomo_log_today');
             if (raw) {
@@ -117,34 +114,26 @@
                 }
             }
         } catch(e) { console.error('Error migrando pomo_log_today:', e); }
-        try {
-            const raw = localStorage.getItem('pomo_history');
-            if (raw) {
-                const history = JSON.parse(raw);
+
+        // 2. Extracción DRY para diccionarios
+        function migrarDiccionario(key) {
+            try {
+                const raw = localStorage.getItem(key);
+                if (!raw) return;
+                const dict = JSON.parse(raw);
                 let mod = false;
                 const nuevo = {};
-                for (const [f, v] of Object.entries(history)) {
+                for (const [f, v] of Object.entries(dict)) {
                     const nf = convertirClave(f);
                     nuevo[nf] = v;
                     if (nf !== f) mod = true;
                 }
-                if (mod) localStorage.setItem('pomo_history', JSON.stringify(nuevo));
-            }
-        } catch(e) { console.error('Error migrando pomo_history:', e); }
-        try {
-            const raw = localStorage.getItem('pomo_details_history');
-            if (raw) {
-                const details = JSON.parse(raw);
-                let mod = false;
-                const nuevo = {};
-                for (const [f, v] of Object.entries(details)) {
-                    const nf = convertirClave(f);
-                    nuevo[nf] = v;
-                    if (nf !== f) mod = true;
-                }
-                if (mod) localStorage.setItem('pomo_details_history', JSON.stringify(nuevo));
-            }
-        } catch(e) { console.error('Error migrando pomo_details_history:', e); }
+                if (mod) localStorage.setItem(key, JSON.stringify(nuevo));
+            } catch(e) { console.error(`Error migrando ${key}:`, e); }
+        }
+
+        migrarDiccionario('pomo_history');
+        migrarDiccionario('pomo_details_history');
     }
 
     function normalizarTarjetaFechas(tarjeta) {
@@ -153,150 +142,111 @@
         tarjeta.ProximoRepaso = toISODateString(tarjeta.ProximoRepaso) || null;
     }
 
-    function normalizarBibliotecaFechas() {
-        Object.keys(biblioteca || {}).forEach(asig => {
-            if (!Array.isArray(biblioteca[asig])) return;
-            biblioteca[asig].forEach(normalizarTarjetaFechas);
+    function normalizarBibliotecaFechas(bibliotecaParam) {
+        Object.keys(bibliotecaParam || {}).forEach(asig => {
+            if (!Array.isArray(bibliotecaParam[asig])) return;
+            bibliotecaParam[asig].forEach(normalizarTarjetaFechas);
         });
     }
 
-    function normalizarFechasClave() {
-        if (!Array.isArray(fechasClave)) return;
-        fechasClave = fechasClave
+    function normalizarFechasClave(fechasClaveParam) {
+        if (!Array.isArray(fechasClaveParam)) return [];
+        return fechasClaveParam
             .map(ev => ({ ...ev, fecha: toISODateString(ev?.fecha) }))
             .filter(ev => !!ev.fecha);
     }
-
 
 // ════════════════════════════════════════════════════════════════
 // OBJETIVOS Y DEUDA
 // ════════════════════════════════════════════════════════════════
 
-    function getObjetivoHoy() {
+    function getObjetivoHoy(horarioParam, bibliotecaParam) {
         const hoy = new Date();
         let diaSemana = hoy.getDay() - 1;
         if (diaSemana === -1) diaSemana = 6;
         let sumaTotal = 0;
-        Object.keys(horarioGlobal).forEach(asig => {
-            if (biblioteca[asig] || asig === 'General')
-                sumaTotal += (horarioGlobal[asig][diaSemana] || 0);
+        Object.keys(horarioParam || {}).forEach(asig => {
+            if ((bibliotecaParam && bibliotecaParam[asig]) || asig === 'General')
+                sumaTotal += (horarioParam[asig][diaSemana] || 0);
         });
         return sumaTotal > 0 ? sumaTotal : 4;
     }
 
-    function getObjetivoContextual() {
+    function getObjetivoContextual(horarioParam, bibliotecaParam, asigActual) {
         const hoy = new Date();
         let diaSemana = hoy.getDay() - 1;
         if (diaSemana === -1) diaSemana = 6;
-        if (!nombreAsignaturaActual) return getObjetivoHoy();
+        if (!asigActual) return getObjetivoHoy(horarioParam, bibliotecaParam);
         let obj = 0;
-        if (horarioGlobal[nombreAsignaturaActual])
-            obj += (horarioGlobal[nombreAsignaturaActual][diaSemana] || 0);
-        if (horarioGlobal['General'] && nombreAsignaturaActual !== 'General')
-            obj += (horarioGlobal['General'][diaSemana] || 0);
+        if (horarioParam && horarioParam[asigActual])
+            obj += (horarioParam[asigActual][diaSemana] || 0);
+        if (horarioParam && horarioParam['General'] && asigActual !== 'General')
+            obj += (horarioParam['General'][diaSemana] || 0);
         return obj > 0 ? obj : 1;
     }
 
-    function calcularDeuda() {
-        if (!nombreAsignaturaActual || !biblioteca[nombreAsignaturaActual]) return 0;
-        const todayVal = fechaValor(getFechaHoy());
-        const pesos    = { 1: 0.5, 2: 1, 3: 2, 4: 4 };
-        let deuda = 0;
-        biblioteca[nombreAsignaturaActual].forEach(c => {
-            if (c.ProximoRepaso && fechaValor(c.ProximoRepaso) <= todayVal) {
-                const dif = (c.Dificultad == null) ? 2 : parseInt(c.Dificultad);
-                deuda += (pesos[dif] || 1);
-            }
-        });
-        return Math.round(deuda);
+    function calcularDeuda(asigActual, bibliotecaParam) {
+        if (!asigActual || !bibliotecaParam || !bibliotecaParam[asigActual]) return 0;
+        return Math.round(Scheduler.calcularDeudaArray(bibliotecaParam[asigActual]));
     }
-
 
 // ════════════════════════════════════════════════════════════════
 // FSRS-6 — NÚCLEO MATEMÁTICO
 // ════════════════════════════════════════════════════════════════
-//
-// Parámetros por defecto optimizados sobre ~500M repasos de ~10k usuarios.
-// Fuente: https://github.com/open-spaced-repetition/srs-benchmark
-//
-// Índice de parámetros:
-//   w[0..3]   → S inicial para grades Again/Hard/Good/Easy
-//   w[4..7]   → dificultad D (inicial y actualización)
-//   w[8..14]  → estabilidad S tras revisión (éxito y lapse)
-//   w[15]     → penalización Hard en S_r
-//   w[16]     → bonificación Easy en S_r
-//   w[17..19] → revisión mismo día (S_st, NUEVO en FSRS-5/6)
-//   w[20]     → curvatura de la curva de olvido (NUEVO en FSRS-6, 0.1–0.8)
-//
-// Mapeo de calidades app → grades FSRS:
-//   App: 1=Fácil  2=Bien  3=Difícil  4=Crítica
-//   FSRS: 4=Easy  3=Good  2=Hard     1=Again
-// ════════════════════════════════════════════════════════════════
 
 const FSRS6_W_DEFAULT = [
-    0.212,  1.2931, 2.3065, 8.2956,   // w0-w3:  S0 por grade Again/Hard/Good/Easy
-    6.4133, 0.8334, 3.0194, 0.001,    // w4-w7:  dificultad
-    1.8722, 0.1666, 0.796,  1.4835,   // w8-w11: estabilidad éxito / lapse
-    0.0614, 0.2629, 1.6483, 0.6014,   // w12-w15
-    1.8729, 0.5425, 0.0912, 0.0658,   // w16-w19
-    0.1542                             // w20: curvatura
+    0.212,  1.2931, 2.3065, 8.2956,
+    6.4133, 0.8334, 3.0194, 0.001,
+    1.8722, 0.1666, 0.796,  1.4835,
+    0.0614, 0.2629, 1.6483, 0.6014,
+    1.8729, 0.5425, 0.0912, 0.0658,
+    0.1542
 ];
 
 const FSRS6_DR_DEFAULT   = 0.90;
-const FSRS6_MAX_INTERVAL = 36500;    // 100 años como techo absoluto
+const FSRS6_MAX_INTERVAL = 36500;
+
+// ── Caché de Constantes FSRS ───────────────────────────────────
+let _cachedW20 = null;
+let _cachedDecay = null;
+let _cachedFactor = null;
+
+function getFsrsConstants(w20) {
+    if (_cachedW20 === w20) return { DECAY: _cachedDecay, FACTOR: _cachedFactor };
+    _cachedDecay = -w20;
+    _cachedFactor = Math.pow(0.9, 1 / _cachedDecay) - 1;
+    _cachedW20 = w20;
+    return { DECAY: _cachedDecay, FACTOR: _cachedFactor };
+}
 
 // ── Funciones matemáticas internas ───────────────────────────────
 
-/** App grade (1-4) → FSRS grade (4-1) */
 function appGradeToFSRS(g) { return 5 - g; }
 
-/**
- * Curva de olvido FSRS-6:
- *   R(t,S) = (1 + FACTOR·t/S)^DECAY
- *   DECAY  = -w[20]
- *   FACTOR = 0.9^(1/DECAY) – 1
- *   → garantiza R(S,S) = 0.9 para cualquier w[20]
- */
 function fsrsR(t, S, w20) {
-    const DECAY  = -w20;
-    const FACTOR = Math.pow(0.9, 1 / DECAY) - 1;
+    const { DECAY, FACTOR } = getFsrsConstants(w20);
     return Math.pow(1 + FACTOR * t / S, DECAY);
 }
 
-/** Intervalo óptimo: I = S/FACTOR · (DR^(1/DECAY) – 1) */
 function fsrsInterval(S, DR, w20, maxI = FSRS6_MAX_INTERVAL) {
-    const DECAY  = -w20;
-    const FACTOR = Math.pow(0.9, 1 / DECAY) - 1;
-    const I      = (S / FACTOR) * (Math.pow(DR, 1 / DECAY) - 1);
+    const { DECAY, FACTOR } = getFsrsConstants(w20);
+    const I = (S / FACTOR) * (Math.pow(DR, 1 / DECAY) - 1);
     return Math.min(Math.max(1, Math.round(I)), maxI);
 }
 
-/** S0(G) = w[G-1]  (G ∈ {1,2,3,4}) */
 function fsrsS0(G, w) { return Math.max(0.1, w[G - 1]); }
 
-/** D0(G) = w[4] – exp(w[5]·(G–1)) + 1  clamp [1,10] */
 function fsrsD0(G, w) {
     return Math.min(10, Math.max(1, w[4] - Math.exp(w[5] * (G - 1)) + 1));
 }
 
-/**
- * Actualización de D:
- *   ΔD  = –w[6]·(G–3)
- *   D'  = D + ΔD·(10–D)/9          (amortiguación lineal)
- *   D'' = w[7]·D0(Easy) + (1–w[7])·D'   (regresión a la media)  clamp [1,10]
- */
 function fsrsDnext(D, G, w) {
     const dD   = -w[6] * (G - 3);
     const Dp   = D + dD * (10 - D) / 9;
-    const D0e  = fsrsD0(4, w);   // ancla = Easy default
+    const D0e  = fsrsD0(4, w);
     return Math.min(10, Math.max(1, w[7] * D0e + (1 - w[7]) * Dp));
 }
 
-/**
- * S tras revisión exitosa (Hard/Good/Easy):
- *   SInc = 1 + exp(w[8])·(11–D)·S^(–w[9])·(exp((1–R)·w[10])–1)·hPen·eBonus
- *   S'_r = S · SInc   (S no puede bajar en éxito)
- */
 function fsrsSr(D, S, R, G, w) {
     const hPen   = G === 2 ? w[15] : 1;
     const eBonus = G === 4 ? w[16] : 1;
@@ -307,11 +257,6 @@ function fsrsSr(D, S, R, G, w) {
     return Math.max(S, S * SInc);
 }
 
-/**
- * S tras lapse (Again):
- *   S'_f = w[11]·D^(–w[12])·((S+1)^w[13]–1)·exp((1–R)·w[14])
- *          min(S'_f, S)
- */
 function fsrsSf(D, S, R, w) {
     const raw = w[11]
         * Math.pow(D, -w[12])
@@ -320,25 +265,14 @@ function fsrsSf(D, S, R, w) {
     return Math.min(S, Math.max(0.1, raw));
 }
 
-/**
- * S tras revisión el mismo día (FSRS-5/6):
- *   S'_st = S · exp(w[17]·(G–3+w[18])) · S^(–w[19])
- *   Si G ≥ 3: S'_st ≥ S  (Good/Easy no pueden bajar S)
- */
 function fsrsSst(S, G, w) {
     const newS = S * Math.exp(w[17] * (G - 3 + w[18])) * Math.pow(S, -w[19]);
     return G >= 3 ? Math.max(S, newS) : Math.max(0.1, newS);
 }
 
-/**
- * Migración suave: tarjetas del algoritmo antiguo → estado FSRS inicial.
- * Solo se ejecuta una vez por tarjeta (si fsrs_stability ya existe, no hace nada).
- */
-
 function migrarAFsrs6(tarjeta) {
     const t = structuredClone(tarjeta);
     
-    // 1. INYECCIÓN DE IDENTIDAD ESTABLE (UUID)
     if (!t.id) {
         t.id = typeof crypto !== 'undefined' && crypto.randomUUID 
             ? crypto.randomUUID() 
@@ -370,36 +304,20 @@ function migrarAFsrs6(tarjeta) {
     return t;
 }
 
-
-
-
-
-
 // ════════════════════════════════════════════════════════════════
 // Scheduler — API pública del módulo SRS
 // ════════════════════════════════════════════════════════════════
 
 const Scheduler = {
 
-    /**
-     * Avanza el estado de una tarjeta según la calidad del repaso (FSRS-6).
-     *
-     * @param {Object}   tarjeta  - Tarjeta (con estado FSRS o legado; se migra aquí).
-     * @param {number}   calidad  - Grade app: 1=Fácil, 2=Bien, 3=Difícil, 4=Crítica.
-     * @param {number[]} _unused  - Parámetro heredado (intervalos legacy), ignorado.
-     * @param {Object}   opts     - { w, desiredRetention, isSameDay }
-     *
-     * @returns {{ tarjeta, reencolar, intervalDias, R }}
-     */
     calcularSiguienteRepaso(tarjeta, calidad, _unused, opts = {}) {
         const w         = opts.w                 || FSRS6_W_DEFAULT;
         const DR        = opts.desiredRetention  || FSRS6_DR_DEFAULT;
         const isSameDay = opts.isSameDay         || false;
 
         let t = migrarAFsrs6(structuredClone(tarjeta));
-        const G = appGradeToFSRS(calidad);   // 1=Again … 4=Easy
+        const G = appGradeToFSRS(calidad);
 
-        // Retención en el momento de la revisión
         const elapsed = t.UltimoRepaso
             ? Math.max(0, diffDiasCalendario(t.UltimoRepaso, getFechaHoy()))
             : 0;
@@ -407,7 +325,6 @@ const Scheduler = {
             ? fsrsR(elapsed, t.fsrs_stability, w[20])
             : 1.0;
 
-        // Nuevos S y D según estado
         let newS, newD;
         if (t.fsrs_state === 'new' || t.fsrs_stability == null) {
             newS = fsrsS0(G, w);
@@ -430,20 +347,17 @@ const Scheduler = {
         const fechaBase = new Date();
         fechaBase.setDate(fechaBase.getDate() + (reencolar ? 0 : intervalDias));
 
-        // Campos FSRS
         t.fsrs_stability  = newS;
         t.fsrs_difficulty = newD;
         t.fsrs_state      = (G === 1 && t.fsrs_state !== 'review') ? 'learning' : 'review';
 
-        // Campos legacy (para compatibilidad con el resto del código)
         t.Dificultad    = calidad;
         t.EtapaRepaso   = t.fsrs_state === 'review'
             ? Math.round(Math.log2(Math.max(1, newS)))
             : 0;
         t.UltimoRepaso  = getFechaHoy();
-        t.ProximoRepaso = formatearFecha(fechaBase);
+        t.ProximoRepaso = toISODateString(fechaBase);
 
-        // ── PERSISTENCIA DE TELEMETRÍA (FIRE & FORGET) ──
         if (typeof DB !== 'undefined' && t.id) {
             DB.addRevlog({
                 cardId: t.id,
@@ -455,26 +369,22 @@ const Scheduler = {
             }).catch(e => console.error("Fallo guardando Revlog local:", e));
         }
         
-        // Limpiamos la basura del localStorage si existía en esta tarjeta
         if (t.review_log) delete t.review_log;
 
         return { tarjeta: t, reencolar, intervalDias, R };
     },
 
-    /** Días hasta el próximo repaso (negativo = atrasada). */
     diasHastaRepaso(tarjeta) {
         if (!tarjeta.ProximoRepaso) return 0;
         return diffDiasCalendario(getFechaHoy(), tarjeta.ProximoRepaso);
     },
 
-    /** Retención actual estimada (0-1), o null si no hay estado FSRS. */
-    retenciónActual(tarjeta, w = FSRS6_W_DEFAULT) {
+    retencionActual(tarjeta, w = FSRS6_W_DEFAULT) {
         if (tarjeta.fsrs_stability == null || !tarjeta.UltimoRepaso) return null;
         const elapsed = Math.max(0, diffDiasCalendario(tarjeta.UltimoRepaso, getFechaHoy()));
         return fsrsR(elapsed, tarjeta.fsrs_stability, w[20]);
     },
 
-    /** Deuda ponderada de un array de tarjetas (escala legacy conservada). */
     calcularDeudaArray(tarjetas) {
         const pesos    = { 1: 0.5, 2: 1, 3: 2, 4: 4 };
         const todayVal = fechaValor(getFechaHoy());
@@ -487,10 +397,6 @@ const Scheduler = {
         return deuda;
     },
 
-    /**
-     * Vista previa de los 4 intervalos posibles para una tarjeta.
-     * Útil para mostrar al usuario qué pasará al pulsar cada botón.
-     */
     previstaIntervalos(tarjeta, opts = {}) {
         const labels = ['Fácil', 'Bien', 'Difícil', 'Crítica'];
         return [1, 2, 3, 4].map((calidad, i) => {
@@ -513,7 +419,89 @@ const Scheduler = {
         maxInterval:      FSRS6_MAX_INTERVAL,
     },
 
-    // Expuesto para el futuro optimizador de parámetros por usuario
     _math: { fsrsR, fsrsInterval, fsrsS0, fsrsD0, fsrsDnext, fsrsSr, fsrsSf, fsrsSst,
-             appGradeToFSRS, migrarAFsrs6 },
+             appGradeToFSRS, migrarAFsrs6, getFsrsConstants },
 };
+
+/**
+     * @function calcularHoraFinPomodoro
+     * @description Calcula la hora estimada de finalización basándose en las tareas pendientes 
+     * y la configuración de ciclos FSRS/Pomodoro. Función pura, sin efectos secundarios.
+     * @param {Array} tasks - Lista de tareas del estado.
+     * @param {Object} config - Configuración del Pomodoro (work, short, long, cyclesBeforeLong).
+     * @param {number} ciclosActuales - Ciclos completados en la sesión actual.
+     * @returns {string|null} Hora formateada (ej. "18:45") o null si no hay tareas.
+     */
+    /**
+     * @function calcularHoraFinPomodoro
+     * @description Calcula la hora de finalización blindada. Corrige el contrato de datos (t.est).
+     */
+    function calcularHoraFinPomodoro(tasks, config, ciclosActuales, currentMode, timeLeftSeconds) {
+        try {
+            if (!tasks || !Array.isArray(tasks) || tasks.length === 0) return null;
+            
+            const safeConfig = config || {};
+            let remainingPomos = 0;
+            
+            tasks.forEach(t => { 
+                if (!t.done) {
+                    // FIX ARQUITECTÓNICO: Mapeo correcto de la propiedad heredada 'est'
+                    const est = Number(t.est) || 1; 
+                    const comp = Number(t.completed) || 0;
+                    const pendientes = est - comp;
+                    if (pendientes > 0) remainingPomos += pendientes;
+                }
+            });
+            
+            if (remainingPomos <= 0) return null;
+
+            let timeSeconds = 0;
+            const cbl = Number(safeConfig.cyclesBeforeLong) || 4;
+            const wSec = (Number(safeConfig.work) || 25) * 60;
+            const sSec = (Number(safeConfig.short) || 5) * 60;
+            const lSec = (Number(safeConfig.long) || 15) * 60;
+            
+            let currentCycle = Number(ciclosActuales) || 0;
+            const timeLeft = Number(timeLeftSeconds) || 0;
+
+            if (currentMode === 'work') {
+                timeSeconds += timeLeft;
+                remainingPomos -= 1; 
+                currentCycle += 1;
+                if (remainingPomos > 0) {
+                    timeSeconds += (currentCycle % cbl === 0) ? lSec : sSec;
+                }
+            } else {
+                timeSeconds += timeLeft;
+            }
+
+            for (let i = 0; i < remainingPomos; i++) {
+                timeSeconds += wSec;
+                currentCycle += 1;
+                if (i < remainingPomos - 1) {
+                    timeSeconds += (currentCycle % cbl === 0) ? lSec : sSec;
+                }
+            }
+            
+            if (isNaN(timeSeconds)) return null;
+
+            const now = new Date();
+            now.setSeconds(now.getSeconds() + timeSeconds);
+            return now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+        } catch (error) {
+            if (typeof Logger !== 'undefined') Logger.error("Error en calcularHoraFinPomodoro:", error);
+            return null;
+        }
+    }
+
+// ════════════════════════════════════════════════════════════════
+// NAMESPACE DE LA CAPA DE DOMINIO (Exportación explícita)
+// ════════════════════════════════════════════════════════════════
+
+const Domain = {
+    calcularHoraFinPomodoro,
+    // Aquí iremos registrando las futuras funciones de lógica pura
+};
+
+// Exposición segura al objeto global para que otros scripts (pomodoro.js) lo detecten
+window.Domain = Domain;

@@ -1,4 +1,4 @@
-        :root {
+:root  {
             --bg-color: #121212; --card-bg: #1e1e1e; --text-main: #e0e0e0;
             --border: #333; --sidebar-w: 280px; 
             --accent: #4CAF50;
@@ -14,6 +14,13 @@
             --safe-top: env(safe-area-inset-top, 0px);
             --safe-bottom: env(safe-area-inset-bottom, 0px);
             --nav-height: 65px;
+
+            /* JERARQUÍA DE CAPAS (Z-INDEX STRATIFICATION) */
+            --z-pdf: 1000;
+            --z-nav: 6000;
+            --z-modal-overlay: 9000;
+            --z-modal-content: 9001;
+            --z-tooltip: 9999;
         }
 
         body { 
@@ -31,7 +38,7 @@
 
         /* SIDEBAR & COLLAPSE */
         #sidebar { 
-            width: var(--sidebar-w); background: #181818; border-right: 1px solid var(--border); 
+            width: var(--sidebar-w); background: var(--menu-color); border-right: 1px solid var(--border); 
             display: flex; flex-direction: column; padding: 20px; box-sizing: border-box; 
             transition: width 0.3s ease, padding 0.3s ease; /* Transición suave de ancho */
             position: relative; z-index: 100;
@@ -323,7 +330,7 @@
         .hidden { display: none !important; }
 
         /* DASHBOARD WIDGETS */
-        .stat-widget { background: #252525; border-radius: 6px; padding: 15px; margin-bottom: 15px; border: 1px solid #333; }
+        .stat-widget { background: var(--card-bg); border-radius: 6px; padding: 15px; margin-bottom: 15px; border: 1px solid #333; }
         .stat-title { color: #888; font-size: 0.85em; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; border-bottom: 1px solid #444; padding-bottom: 5px; }
 
         /* 1. Anillo de Progreso */
@@ -332,7 +339,7 @@
             width: 120px; 
             height: 120px; 
             margin: 0 auto; 
-            background: #252525; /* Fondo base */
+            background: var(--card-bg); 
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -575,7 +582,7 @@
         .fecha-item {
             display: flex; align-items: center; gap: 8px;
             padding: 7px 10px; border-radius: 6px; margin-bottom: 4px;
-            background: #252525; font-size: 0.82em;
+            background: var(--card-bg); font-size: 0.82em;
         }
         .fecha-item .fi-label { flex-grow: 1; }
         .fecha-item .fi-date  { color: #888; font-size: 0.9em; white-space: nowrap; }
@@ -604,7 +611,7 @@
             display: flex; 
             align-items: center; /* Centrado vertical estricto */
             gap: 8px; 
-            background: #252525; 
+            background: var(--card-bg); 
             padding: 4px 10px; /* Padding ajustado */
             border-radius: 6px; 
             height: 36px; /* Altura fija para forzar alineación */
@@ -676,25 +683,84 @@
         }
         body.style-skeuo .btn-modern:hover { filter: brightness(1.1); }
 
+        /* --- TEMA 4: NORDIC NIGHT (Gélido) --- */
+        /* LA MÁQUINA ES UNA GRACIOSA
+        body.style-nord {
+            --bg-color: #2e3440; --card-bg: #3b4252; --text-main: #eceff4;
+            --border: #4c566a; --accent: #88c0d0;
+        }*/
+        body.style-nord .btn-reveal {
+            background: #434c5e; color: #d8dee9; border: 1px solid #4c566a;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        body.style-nord .btn-next {
+            background: #5e81ac; color: #eceff4; border: 1px solid #81a1c1;
+            box-shadow: 0 4px 14px rgba(94, 129, 172, 0.3);
+        }
+        body.style-nord .btn-modern:hover { transform: translateY(-2px); filter: brightness(1.1); }
+
+        /* --- TEMA 5: OLED ABYSS (Negro Puro) --- */
+        body.style-abyss {
+            --bg-color: #000000; --card-bg: #050505; --text-main: #d0d0d0;
+            --border: #1a1a1a; --accent: #00ffcc;
+        }
+        body.style-abyss .btn-reveal {
+            background: #000000; color: #666; border: 1px solid #333;
+        }
+        body.style-abyss .btn-next {
+            background: #000000; color: #00ffcc; border: 1px solid #00ffcc;
+            box-shadow: 0 0 10px rgba(0, 255, 204, 0.2);
+        }
+        body.style-abyss .btn-modern:hover { border-color: #fff; color: #fff; box-shadow: 0 0 15px rgba(255,255,255,0.1); }
+
+        /* --- TEMA 6: RETRO TERMINAL (Fósforo) --- */
+        body.style-terminal {
+            --bg-color: #0a0a0a; --card-bg: #0f0f0f; --text-main: #33ff33;
+            --border: #33ff3344; --accent: #33ff33;
+        }
+        body.style-terminal .btn-reveal {
+            background: #050505; color: #33ff33aa; border: 1px solid #33ff3344;
+        }
+        body.style-terminal .btn-next {
+            background: #33ff33; color: #000; border: 1px solid #33ff33;
+            font-weight: 900;
+        }
+        body.style-terminal .btn-modern:hover { 
+            background: #000; color: #33ff33; box-shadow: 0 0 20px rgba(51, 255, 51, 0.2); 
+        }
+
         /* --- ANIMACIONES DE PULSADO (SEPARADAS) --- */
         /* Se aplican tanto a :active (ratón) como a .simulated-active (teclado) */
 
         /* 1. NADA (Estático) */
-        body.click-none .btn-modern:active, body.click-none .btn-modern.simulated-active {
+        body.click-none .btn-modern:active, body.click-none .btn-modern.simulated-active,
+        body.click-none .btn-success:active, body.click-none .btn-info:active, 
+        body.click-none .btn-danger:active, body.click-none .btn-neutral:active {
             transform: none; box-shadow: none; opacity: 0.8;
         }
 
         /* 2. SUTIL (Cyberpunk style - Glow interno) */
-        body.click-cyber .btn-modern:active, body.click-cyber .btn-modern.simulated-active {
+        body.click-cyber .btn-modern:active, body.click-cyber .btn-modern.simulated-active,
+        body.click-cyber .btn-success:active, body.click-cyber .btn-info:active, 
+        body.click-cyber .btn-danger:active, body.click-cyber .btn-neutral:active {
             transform: scale(0.98);
-            box-shadow: 0 0 10px var(--accent), inset 0 0 5px rgba(255,255,255,0.2);
-            border-color: var(--accent);
+            box-shadow: 0 0 10px currentColor, inset 0 0 5px rgba(255,255,255,0.2);
+            border-color: currentColor;
         }
 
         /* 3. TÁCTIL (Skeuomorphic - Hundimiento físico) */
-        body.click-skeuo .btn-modern:active, body.click-skeuo .btn-modern.simulated-active {
+        body.click-skeuo .btn-modern:active, body.click-skeuo .btn-modern.simulated-active,
+        body.click-skeuo .btn-success:active, body.click-skeuo .btn-info:active, 
+        body.click-skeuo .btn-danger:active, body.click-skeuo .btn-neutral:active {
             transform: translateY(2px) scale(0.98);
             box-shadow: inset 2px 2px 5px rgba(0,0,0,0.5), inset -1px -1px 2px rgba(255,255,255,0.05) !important;
+        }
+
+        body.click-liquid .btn-modern:active, 
+        body.click-liquid .btn-modern.simulated-active {
+            transform: scale(0.97);
+            box-shadow: inset 0 0 20px rgba(255,255,255,0.1);
+            filter: brightness(1.2);
         }
 
         /* --- BOTONES POMODORO REDISEí‘ADOS --- */
@@ -705,7 +771,7 @@
             height: 70px;
             border-radius: 24px;   /* Aquí está la clave: 24px da esa curva suave moderna */
             border: 3px solid rgba(255,255,255,0.15); /* Borde un poco más sutil */
-            background: #252525;   /* Fondo oscuro base para consistencia */
+            background: var(--card-bg);   /* Fondo oscuro base para consistencia */
             color: var(--pomo-work); 
             font-size: 2em;        /* Icono más grande */
             cursor: pointer;
@@ -749,7 +815,7 @@
             width: 70px; 
             height: 70px;
             border-radius: 24px;   /* Mismo radio para coherencia visual */
-            background: #252525;
+            background: var(--card-bg);
             border: 3px solid #333; /* Borde oscuro por defecto */
             color: #666;
             cursor: pointer;
@@ -847,7 +913,7 @@
             margin-bottom: 5px; display: inline-block; transition: 0.2s;
         }
         #pomodoro-card { 
-            text-align: center; background: #252525; border-top: 4px solid var(--pomo-work); 
+            text-align: center; background: var(--card-bg); border-top: 4px solid var(--pomo-work); 
             transition: max-height 0.5s ease, opacity 0.3s ease; 
             overflow: hidden; max-height: 1000px; opacity: 1; /* Estado abierto */
         }
@@ -1118,11 +1184,11 @@
         /* MODAL */
         /* MODAL AJUSTES */
         #ajustes-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; display: flex; justify-content: center; align-items: center; }
-        .modal-content { background: var(--card-bg); padding: 30px; border-radius: 8px; width: 90%; max-width: 500px; border: 1px solid #444; max-height: 80vh; overflow-y: auto; }
+        .modal-content { background: var(--card-bg); padding: 30px; border-radius: 8px; width: 90%; max-width: 500px; border: 1px solid var(--border); max-height: 80vh; overflow-y: auto; }
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #444; padding-bottom: 10px; }
         .setting-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
         .setting-row input { width: 60px; text-align: center; }
-        .tutorial-step { background: #252525; padding: 10px; margin-bottom: 5px; border-left: 3px solid #555; font-size: 0.9em; }
+        .tutorial-step { background: var(--card-bg); padding: 10px; margin-bottom: 5px; border-left: 3px solid #555; font-size: 0.9em; }
         /* JSON EDITOR (Source View) */
         #json-editor-area { font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; background: #1a1a1a; color: #a9b7c6; line-height: 1.5; border: 1px solid #444; }
     
@@ -1540,7 +1606,7 @@
 
         .chat-input-area {
             padding: 10px;
-            background: #252525;
+            background: var(--card-bg);
             border-top: 1px solid #333;
             display: flex;
             gap: 10px;
@@ -1637,7 +1703,418 @@
     border-bottom-color: var(--accent, #4CAF50);
 }
 .stab-panel { animation: stabFadeIn 0.15s ease; }
+.stab-icon { color: rgb(120, 53, 187); font-size: 1.1em; }
 @keyframes stabFadeIn {
     from { opacity: 0; transform: translateY(4px); }
     to   { opacity: 1; transform: translateY(0); }
 }
+
+/* ── Botón icono cuadrado (sidebar/toolbar) ── */
+.btn-icon-sm {
+    min-width: 0 !important;
+    width: 45px;
+    height: 45px;
+    padding: 0 !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   EXAM MODULE - CORRECTION UI
+   ════════════════════════════════════════════════════════════════ */
+.exam-correction-card { border: 1px solid #2a2a2a; border-radius: 8px; padding: 14px; background: #151515; margin-bottom: 12px; }
+.exam-card-header { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
+.exam-badge { font-size: 0.7em; padding: 1px 8px; border-radius: 10px; }
+.exam-meta { font-size: 0.75em; color: #555; }
+.exam-meta.right { margin-left: auto; color: #888; }
+.exam-card-title { font-weight: bold; color: #eee; margin-bottom: 10px; }
+.exam-card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; font-size: 0.85em; }
+.exam-col-label { color: #888; margin-bottom: 4px; font-size: 0.8em; text-transform: uppercase; }
+.exam-ans-box { background: #1a1a1a; border-radius: 5px; padding: 8px; min-height: 40px; white-space: pre-wrap; line-height: 1.5; }
+.exam-ans-box.user-ans { color: #aaa; }
+.exam-ans-box.correct-ans { color: #ccc; }
+.exam-grade-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.exam-btn-grade { padding: 7px 2px; border-radius: 6px; cursor: pointer; font-size: 0.8em; font-weight: bold; transition: all 0.2s; }
+.exam-btn-grade.grade-1 { background: rgba(33,150,243,0.2); border: 1px solid #2196F3; color: #2196F3; }
+.exam-btn-grade.grade-2 { background: rgba(76,175,80,0.2); border: 1px solid #4CAF50; color: #4CAF50; }
+.exam-btn-grade.grade-3 { background: rgba(255,152,0,0.2); border: 1px solid #FF9800; color: #FF9800; }
+.exam-btn-grade.grade-4 { background: rgba(244,67,54,0.2); border: 1px solid #f44336; color: #f44336; }
+/* ════════════════════════════════════════════════════════════════
+   CLASES EXTRAÍDAS DE ESTILOS INLINE
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── Tarjeta de estudio ── */
+.meta-tema   { font-size: 0.8em; color: #888; }
+.meta-fecha  { font-size: 0.8em; font-weight: bold; color: #ffab40; }
+
+.btn-card-edit {
+    background: none;
+    border: 1px solid #444;
+    color: #aaa;
+    cursor: pointer;
+    font-size: 0.7em;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+.btn-card-edit:hover { color: #eee; border-color: #666; }
+
+.area-revelar { margin-top: 30px; display: flex; justify-content: center; }
+.concepto-contenido { margin: 20px 0; }
+.controles-respuesta { flex-wrap: wrap; justify-content: center; }
+
+/* ── Filtros (pie de tarjeta) ── */
+.btn-filtros-dropdown {
+    background: transparent;
+    border: 1px solid #555;
+    border-radius: 12px;
+    color: #aaa;
+    font-size: 0.75em;
+    padding: 2px 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.2s;
+}
+.btn-filtros-dropdown:hover { border-color: #888; color: #eee; }
+.filtros-icon { font-size: 0.9em; color: #e53935; transition: color 0.2s; }
+
+.study-check-label {
+    margin: 0;
+    cursor: pointer;
+    font-size: 0.75em;
+    color: #aaa;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.study-check-shortcut { font-size: 0.8em; opacity: 0.5; }
+.contador-filtro { font-size: 0.7em; color: #666; font-family: monospace; white-space: nowrap; }
+
+/* ── Sidebar header ── */
+.sidebar-title {
+    font-size: 1.1em;
+    color: rgb(251, 196, 0);
+    margin: 0;
+    letter-spacing: -0.5px;
+}
+.sidebar-version { font-size: 0.6em; opacity: 0.5; }
+
+/* ════════════════════════════════════════════════════════════════
+   UTILIDADES Y COMPONENTES EXTRAS
+   (Añadidos tras la extracción de estilos inline del HTML)
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── Utilidades flex ── */
+.flex-center { display: flex; align-items: center; justify-content: center; }
+.flex-between { display: flex; justify-content: space-between; align-items: center; }
+.flex-col { display: flex; flex-direction: column; }
+
+/* ── Cabecera de panel (editor, JSON, etc.) ── */
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 15px;
+}
+.panel-header h3 { margin: 0; font-size: 1.3em; }
+.panel-header p  { font-size: 0.85em; color: #888; margin: 4px 0 0 0; }
+
+/* ── Etiquetas de formulario ── */
+.form-label {
+    color: #aaa;
+    font-size: 0.85em;
+    margin-bottom: 6px;
+    display: block;
+}
+
+/* ── Inputs / selects de formulario (fondo oscuro) ── */
+.form-input {
+    width: 100%;
+    background: #151515;
+    border: 1px solid #333;
+    color: #eee;
+    padding: 10px 12px;
+    border-radius: 6px;
+    box-sizing: border-box;
+    font-family: inherit;
+}
+.form-input:focus { outline: none; border-color: #555; }
+.form-input.sm { padding: 8px; }
+
+input[type="color"].color-picker-dinamico {
+    background: none; border: 1px solid var(--border); border-radius: 4px; 
+    width: 32px; height: 32px; cursor: pointer; padding: 0;
+}
+input[type="color"].color-picker-dinamico::-webkit-color-swatch-wrapper { padding: 2px; }
+input[type="color"].color-picker-dinamico::-webkit-color-swatch { border-radius: 3px; border: none; }
+
+/* ── Pie de formulario con acciones ── */
+.form-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    border-top: 1px dashed #222;
+    padding-top: 15px;
+    margin-top: 20px;
+}
+
+/* ── Botón icono cuadrado pequeño (45×45, sidebar / toolbar) ── */
+.btn-icon-sm {
+    min-width: 0;
+    width: 45px;
+    height: 45px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+
+/* ── Botones de acción con color semántico ────────────────────── */
+/* Base compartida para animaciones fluidas */
+.btn-success, .btn-info, .btn-danger, .btn-neutral {
+    border-radius: 6px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-family: inherit;
+    position: relative;
+    transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+/* ── Botones Semánticos Dinámicos ────────────────────── */
+.btn-success { background: color-mix(in srgb, var(--status-green) 15%, transparent); border: 1px solid color-mix(in srgb, var(--status-green) 40%, transparent); color: var(--status-green); }
+.btn-success:hover { background: color-mix(in srgb, var(--status-green) 25%, transparent); box-shadow: 0 4px 12px color-mix(in srgb, var(--status-green) 20%, transparent); }
+
+.btn-info { background: color-mix(in srgb, var(--status-blue) 15%, transparent); border: 1px solid var(--status-blue); color: var(--status-blue); }
+.btn-info:hover { background: color-mix(in srgb, var(--status-blue) 25%, transparent); box-shadow: 0 4px 12px color-mix(in srgb, var(--status-blue) 20%, transparent); }
+
+.btn-danger { background: color-mix(in srgb, var(--status-red) 10%, transparent); border: 1px solid color-mix(in srgb, var(--status-red) 40%, transparent); color: var(--status-red); }
+.btn-danger:hover { background: color-mix(in srgb, var(--status-red) 20%, transparent); box-shadow: 0 4px 12px color-mix(in srgb, var(--status-red) 15%, transparent); }
+
+.btn-neutral { background: color-mix(in srgb, var(--text-main) 10%, transparent); border: 1px solid color-mix(in srgb, var(--text-main) 40%, transparent); color: color-mix(in srgb, var(--text-main) 70%, transparent); }
+.btn-neutral:hover { background: color-mix(in srgb, var(--text-main) 20%, transparent); color: var(--text-main); }
+
+/* ==========================================
+   CLASES DE UTILIDAD SEMÁNTICA (Requeridas por UI.js)
+   ========================================== */
+.text-success { color: var(--status-green) !important; }
+.text-danger  { color: var(--status-red) !important; }
+.text-warning { color: var(--status-yellow) !important; }
+.text-info    { color: var(--status-blue) !important; }
+.text-muted   { color: #666 !important; }
+
+/* Feedback de guardado (Editor Amigable) */
+.btn-success { 
+    background-color: var(--status-green) !important; 
+    color: #121212 !important; 
+    font-weight: bold;
+}
+.btn--saved { animation: savePulse 1s ease; }
+
+@keyframes savePulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); background-color: var(--status-green); }
+    100% { transform: scale(1); }
+}
+
+/* ==========================================
+   REFACTOR VENTANA PENDIENTES (UI.js)
+   ========================================== */
+.pending-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 10px;
+    border-radius: 4px;
+    margin-bottom: 4px;
+    background: rgba(255,255,255,0.03);
+    transition: background 0.2s;
+}
+
+.pending-item:hover {
+    background: rgba(255,255,255,0.08);
+}
+
+.pending-item-title {
+    flex-grow: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-right: 8px;
+    color: #eee;
+    font-size: 0.95em;
+}
+
+/* ==========================================
+   CONTENCIÓN MATHJAX EN WIDGETS
+   ========================================== */
+.stat-widget mjx-container {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    padding: 2px 0;
+}
+.stat-widget mjx-container::-webkit-scrollbar { height: 3px; }
+.stat-widget mjx-container::-webkit-scrollbar-thumb { background: #444; }
+
+/* ==========================================
+   APLICACIÓN DE JERARQUÍA Z-INDEX
+   ========================================== */
+#modulo-pdf { z-index: var(--z-pdf); }
+#mobile-nav-bar { z-index: var(--z-nav); }
+
+.modal-overlay, 
+#ajustes-modal, 
+#pomodoro-modal, 
+#fechas-modal, 
+#resumen-sesion-modal {
+    z-index: var(--z-modal-overlay) !important;
+}
+
+.modal-content, 
+.resumen-card, 
+.fechas-card {
+    z-index: var(--z-modal-content) !important;
+}
+
+/* ── Botones mini de control (▲▼ pomodoro, etc.) ── */
+.btn-mini-control {
+    background: #333;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 0.7em;
+    padding: 2px 5px;
+    transition: background 0.15s ease;
+}
+.btn-mini-control:hover { background: #444; }
+
+/* ── Botón fantasma (acciones secundarias) ── */
+.btn-ghost {
+    background: transparent;
+    border: 1px solid #444;
+    color: #888;
+    font-size: 0.8em;
+    cursor: pointer;
+    padding: 5px 12px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+.btn-ghost:hover { background: #222; color: #ccc; border-color: #555; }
+
+/* ── Selector de modo de examen (reemplaza los <label> inline) ── */
+.exam-mode-selector {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 18px;
+}
+.exam-mode-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding: 12px;
+    border: 2px solid #333;
+    border-radius: 10px;
+    cursor: pointer;
+    background: transparent;
+    color: #888;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+.exam-mode-card:hover:not(.active) {
+    border-color: rgba(76, 175, 80, 0.3);
+    background: #1c1c1c;
+    color: #eee;
+    transform: translateY(-2px);
+}
+.exam-mode-card.active {
+    border-color: var(--accent);
+    background: rgba(76, 175, 80, 0.12);
+    color: #fff;
+}
+.exam-mode-card.active::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+}
+.exam-mode-card .exam-mode-icon { font-size: 1.5em; }
+.exam-mode-card strong { font-size: 0.8em; font-weight: 600; }
+
+/* =========================================
+   WIDGET MANAGER (Dashboard Personalizado)
+   ========================================= */
+.widget-controls {
+    display: flex; justify-content: flex-end; align-items: center;
+    gap: 4px; margin-bottom: 4px; opacity: 0;
+    transition: opacity 0.15s; height: 18px;
+}
+.stat-widget:hover .widget-controls { opacity: 1; }
+
+.widget-drag-handle {
+    cursor: grab; color: #555; font-size: 1.1em;
+    padding: 0 4px; line-height: 1; user-select: none;
+}
+.widget-drag-handle:active { cursor: grabbing; }
+
+.widget-ctrl-btn {
+    background: none; border: none; cursor: pointer;
+    color: #555; font-size: 0.75em; padding: 2px 5px;
+    border-radius: 3px; line-height: 1; transition: color 0.1s, background 0.1s;
+}
+.widget-ctrl-btn:hover { color: #ccc; background: #333; }
+
+/* Estados Virtuales (Minimizado / Oculto) */
+.stat-widget.widget-minimized > *:not(.widget-controls):not(.stat-title) {
+    display: none !important;
+}
+.stat-widget.widget-minimized > .stat-title { margin-bottom: 0; opacity: 0.6; }
+.stat-widget.widget-minimized { padding-bottom: 8px; }
+.stat-widget.widget-hidden { display: none !important; }
+
+/* Drag & Drop Feedback */
+.stat-widget.widget-dragging { opacity: 0.45; outline: 2px dashed var(--accent, #4CAF50); }
+.stat-widget.widget-drag-over { outline: 2px solid var(--accent, #4CAF50); outline-offset: -2px; }
+
+/* Panel de Gestión de Widgets */
+#widget-manage-panel {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: var(--card-bg, #1e1e1e); border: 1px solid var(--border, #333);
+    border-radius: 10px; padding: 18px; z-index: 9999;
+    min-width: 240px; max-width: 300px; box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+    display: none;
+}
+#widget-manage-panel.open { display: block; }
+#widget-manage-panel h3 {
+    margin: 0 0 12px; font-size: 0.85em; color: var(--text-muted, #aaa);
+    text-transform: uppercase; letter-spacing: 1px;
+}
+.wmp-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 5px 0; border-bottom: 1px solid var(--border, #2a2a2a);
+    font-size: 0.8em; color: var(--text-main, #ccc);
+}
+.wmp-row:last-child { border-bottom: none; }
+.wmp-toggle {
+    cursor: pointer; padding: 2px 8px; border-radius: 4px;
+    border: 1px solid var(--border, #444); background: none;
+    font-size: 0.75em; color: var(--text-muted, #888); transition: all 0.15s;
+}
+.wmp-toggle.active { color: var(--status-green, #4CAF50); border-color: var(--status-green, #4CAF50); }
+#widget-manage-close {
+    margin-top: 12px; width: 100%; padding: 6px;
+    background: var(--bg-color, #2a2a2a); border: none; border-radius: 5px;
+    color: var(--text-muted, #888); cursor: pointer; font-size: 0.8em;
+}
+#widget-manage-close:hover { background: var(--border, #333); color: var(--text-main, #ccc); }

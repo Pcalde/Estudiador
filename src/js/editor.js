@@ -8,6 +8,15 @@ const ORDEN_CLAVES_TARJETA = [
     "Titulo", "Contenido", "Tema", "Apartado", "Dificultad",
     "EtapaRepaso", "UltimoRepaso", "ProximoRepaso", "IndiceGlobal"
 ];
+function _procesarContenido(c) {
+    if (typeof Parser === 'undefined') return c;
+    // Si tiene comandos LaTeX estructurales, convertir primero
+    if (/\\begin\{|\\item\b/.test(c)) {
+        try { return Parser.cleanLatexToHtml(c); } 
+        catch(e) { Logger.error('Conversión LaTeX falló:', e); }
+    }
+    return Parser.sanearLatex(c);
+}
 
 function ordenarTarjeta(obj) {
     const out = {};
@@ -149,7 +158,7 @@ async function guardarNuevoConcepto() {
         const biblioteca = State.get('biblioteca');
         biblioteca[asigActual].push({
             "Titulo":       t,
-            "Contenido":    typeof Parser !== 'undefined' ? Parser.sanearLatex(c) : c,
+            "Contenido":    _procesarContenido(c),
             "Tema":         formData.tema || 1,
             "Apartado":     formData.apartado || "Concepto",
             "EtapaRepaso":  0,

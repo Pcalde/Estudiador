@@ -79,10 +79,27 @@ const Parser = (() => {
 
     function cleanLatexToHtml(latexStr) {
         let text = latexStr;
+        
+        // 1. Formato básico de texto
         text = text.replace(/\\textbf{([^}]+)}/g, '<strong>$1</strong>');
         text = text.replace(/\\textit{([^}]+)}/g, '<em>$1</em>');
         text = text.replace(/\\underline{([^}]+)}/g, '<u>$1</u>');
+        
+        // 2. Entornos de listas (enumerate, itemize)
+        text = text.replace(/\\begin\{enumerate\}/g, '<ol>');
+        text = text.replace(/\\end\{enumerate\}/g, '</ol>');
+        text = text.replace(/\\begin\{itemize\}/g, '<ul>');
+        text = text.replace(/\\end\{itemize\}/g, '</ul>');
+        
+        // 3. Elementos de lista (\item). Soporta etiquetas personalizadas como \item[Nota:]
+        text = text.replace(/\\item(?:\[(.*?)\])?\s*/g, (match, opt) => {
+            return opt ? `<li><strong>${opt}</strong> ` : `<li>`;
+        });
+        
+        // 4. Saltos de línea de párrafo (evita romper estructuras HTML recién formadas)
         text = text.replace(/\n\n/g, '<br><br>');
+        
+        // 5. Delegar saneamiento estricto a la whitelist de HTML
         return sanitizeHtmlFragment(text).trim();
     }
 
@@ -120,8 +137,12 @@ const Parser = (() => {
                     if (!block) { cursor++; continue; }
 
                     let contenidoLimpio;
-                    try { contenidoLimpio = cleanLatexToHtml(block.content); }
-                    catch (e) { contenidoLimpio = block.content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); }
+                    try { 
+                        contenidoLimpio = cleanLatexToHtml(block.content); 
+                    } catch (e) { 
+                        Logger.error('cleanLatexToHtml falló:', e, '\nContenido:', block.content.slice(0, 200));
+                        contenidoLimpio = block.content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); 
+                    }
 
                     const tipo = CMD_MAP_JS[command];
                     let needsAI = false;
@@ -199,5 +220,5 @@ const Parser = (() => {
         return newCards;
     }
 
-    return { sanearLatex, sanitizeHtmlFragment, parseLatexToCards };
+    return { sanearLatex, sanitizeHtmlFragment, parseLatexToCards, cleanLatexToHtml };
 })();

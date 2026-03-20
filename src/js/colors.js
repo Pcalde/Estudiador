@@ -48,16 +48,23 @@ function inyectarVariablesCSS(paleta) {
 }
 
 function cargarColoresGlobales() {
-    const saved = Util.loadLS('estudiador_paleta_global', { basePreset: 'default', overrides: {} });
+    const raw = Util.loadLS('estudiador_paleta_global', null);
+    const saved = (raw && typeof raw === 'object')
+        ? raw
+        : { basePreset: 'default', overrides: {} };
 
     if (!COLOR_PRESETS[saved.basePreset]) saved.basePreset = 'default';
 
-    const paletaActiva = { ...COLOR_PRESETS[saved.basePreset], ...saved.overrides };
+    const overrides = (saved.overrides && typeof saved.overrides === 'object')
+        ? saved.overrides
+        : {};
+
+    const paletaActiva = { ...COLOR_PRESETS[saved.basePreset], ...overrides };
     inyectarVariablesCSS(paletaActiva);
 
     const select = document.getElementById('set-color-preset');
     if (select) {
-        select.value = Object.keys(saved.overrides).length > 0 ? 'custom' : saved.basePreset;
+        select.value = Object.keys(overrides).length > 0 ? 'custom' : saved.basePreset;
     }
 }
 

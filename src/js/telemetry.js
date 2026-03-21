@@ -287,7 +287,8 @@ const Telemetry = (() => {
         let deudaDesglose = { nuevas: 0, learning: 0, repasoNormal: 0, criticas: 0 };
 
         bib[asigActual].forEach(c => {
-            if (c.ProximoRepaso && window.fechaValor(c.ProximoRepaso) <= todayVal) {
+            // FIX: Evaluar la deuda para toda tarjeta pendiente (incluso si no tiene ProximoRepaso asignado por ser nueva)
+            if (!c.ProximoRepaso || window.fechaValor(c.ProximoRepaso) <= todayVal) {
                 const isNew = c.fsrs_state === 'new' || (!c.fsrs_state && !c.UltimoRepaso);
                 if (isNew) {
                     deudaTotal += 1.0; contadores.nuevas++; deudaDesglose.nuevas += 1.0;
@@ -355,97 +356,113 @@ const Telemetry = (() => {
  * @returns {number}
  */
 function _calcularRachaDesdeEstado(biblioteca) {
-    const todayStr = window.getFechaHoy();
-    let doneMap = {};
+        const todayStr = window.getFechaHoy();
+        let doneMap = {};
 
-    Object.values(biblioteca || {}).forEach(tarjetas => {
-        (tarjetas || []).forEach(c => {
-            if (c.UltimoRepaso) doneMap[window.toISODateString(c.UltimoRepaso)] = true;
+        // FIX: Normalización de strings segura. Evitar over-parsing.
+        Object.values(biblioteca || {}).forEach(tarjetas => {
+            (tarjetas || []).forEach(c => {
+                if (c.UltimoRepaso) {
+                    const dateStr = String(c.UltimoRepaso).substring(0, 10);
+                    doneMap[dateStr] = true;
+                }
+            });
         });
-    });
 
-    let streak = doneMap[todayStr] ? 1 : 0;
-    let check  = new Date();
-    check.setDate(check.getDate() - 1);
+        // FIX: Considerar los pomodoros de hoy válidos para mantener racha activa
+        const todayLog = JSON.parse(localStorage.getItem('pomo_log_today') || '{}');
+        if (todayLog.date === todayStr && todayLog.count > 0) {
+            doneMap[todayStr] = true;
+        }
 
-    for (let i = 0; i < 365; i++) {
-        const d = window.formatearFecha(check);
-        if (!doneMap[d]) break;
-        streak++;
+        let streak = doneMap[todayStr] ? 1 : 0;
+        let check  = new Date();
         check.setDate(check.getDate() - 1);
-    }
-    return streak;
-}
 
+        for (let i = 0; i < 365; i++) {
+            const d = window.formatearFecha(check);
+            if (!doneMap[d]) break;
+            streak++;
+            check.setDate(check.getDate() - 1);
+        }
+        return streak;
+    }
 /**
  * Construye el objeto de estadísticas públicas del usuario para Firestore.
  * Lee únicamente de State y localStorage. Cero DOM, cero efectos secundarios.
  * @returns {Object} Resumen público serializable
  */
 function construirResumenPublico() {
-    const isPrivate = localStorage.getItem('estudiador_privacy_stats') === 'true';
-    if (isPrivate) return { isPrivate: true };
+        const isPrivate = localStorage.getItem('estudiador_privacy_stats') === 'true';
+        if (isPrivate) return { isPrivate: true };
 
-    const todayLog   = JSON.parse(localStorage.getItem('pomo_log_today') || '{"count":0}');
-    const biblioteca = State.get('biblioteca') || {};
-    const todayVal   = window.fechaValor(window.getFechaHoy());
+        const todayStr   = window.getFechaHoy();
+        const todayLog   = JSON.parse(localStorage.getItem('pomo_log_today') || '{}');
+        // FIX: Si el date no es hoy, los pomosHoy son estrictamente 0
+        const pomosHoy   = (todayLog.date === todayStr) ? (todayLog.count || 0) : 0;
+        
+        const biblioteca = State.get('biblioteca') || {};
+        const todayVal   = window.fechaValor(todayStr);
 
-    const resumen = {
-        isPrivate:     false,
-        totalTarjetas: 0,
-        pendientesHoy: 0,
-        dominadas:     0,
-        deudaTotal:    0,
-        racha:         _calcularRachaDesdeEstado(biblioteca),
-        pomosHoy:      todayLog.count || 0,
-        asignaturas:   []
-    };
+        const resumen = {
+            isPrivate:     false,
+            totalTarjetas: 0,
+            pendientesHoy: 0,
+            dominadas:     0,
+            deudaTotal:    0,
+            racha:         _calcularRachaDesdeEstado(biblioteca),
+            pomosHoy:      pomosHoy,
+            asignaturas:   []
+        };
 
-    Object.keys(biblioteca).forEach(asig => {
-        const tarjetas = Array.isArray(biblioteca[asig]) ? biblioteca[asig] : [];
-        if (!tarjetas.length) return;
+        Object.keys(biblioteca).forEach(asig => {
+            const tarjetas = Array.isArray(biblioteca[asig]) ? biblioteca[asig] : [];
+            if (!tarjetas.length) return;
 
-        let pendientes = 0, dominadas = 0, deudaLocal = 0;
+            let pendientes = 0, dominadas = 0, deudaLocal = 0;
 
-        tarjetas.forEach(c => {
-            if (!c?.ProximoRepaso || window.fechaValor(c.ProximoRepaso) <= todayVal) pendientes++;
+            tarjetas.forEach(c => {
+                const isPending = !c?.ProximoRepaso || window.fechaValor(c.ProximoRepaso) <= todayVal;
+                
+                if (isPending) pendientes++;
 
-            if      (c.fsrs_state === 'review' && c.fsrs_stability > 21) dominadas++;
-            else if (!c.fsrs_state && (c?.EtapaRepaso || 0) >= 5)        dominadas++;
+                // Lógica de "Mastered"
+                if      (c.fsrs_state === 'review' && c.fsrs_stability > 21) dominadas++;
+                else if (!c.fsrs_state && (c?.EtapaRepaso || 0) >= 5)        dominadas++;
 
-            if (c.ProximoRepaso && window.fechaValor(c.ProximoRepaso) <= todayVal) {
-                const isNew = c.fsrs_state === 'new' || (!c.fsrs_state && !c.UltimoRepaso);
-                if (isNew) {
-                    deudaLocal += 1.0;
-                } else if (c.fsrs_state === 'learning') {
-                    deudaLocal += 4.0;
-                } else {
-                    const elapsed = c.UltimoRepaso
-                        ? Math.max(0, window.diffDiasCalendario(c.UltimoRepaso, window.getFechaHoy()))
-                        : 0;
-                    const R = Math.pow(0.9, elapsed / (c.fsrs_stability || 1));
-                    deudaLocal += Math.max(0.5, (1 - R) * (c.fsrs_difficulty || 5));
+                // FIX: El cálculo FSRS ahora abraza a las tarjetas isPending, independientemente de si tienen fecha o son nuevas.
+                if (isPending) {
+                    const isNew = c.fsrs_state === 'new' || (!c.fsrs_state && !c.UltimoRepaso);
+                    if (isNew) {
+                        deudaLocal += 1.0;
+                    } else if (c.fsrs_state === 'learning') {
+                        deudaLocal += 4.0;
+                    } else {
+                        const elapsed = c.UltimoRepaso
+                            ? Math.max(0, window.diffDiasCalendario(c.UltimoRepaso, todayStr))
+                            : 0;
+                        const R = Math.pow(0.9, elapsed / (c.fsrs_stability || 1));
+                        deudaLocal += Math.max(0.5, (1 - R) * (c.fsrs_difficulty || 5));
+                    }
                 }
-            }
+            });
+
+            resumen.totalTarjetas += tarjetas.length;
+            resumen.pendientesHoy += pendientes;
+            resumen.dominadas     += dominadas;
+            resumen.deudaTotal    += deudaLocal;
+            resumen.asignaturas.push({
+                nombre:        asig,
+                totalTarjetas: tarjetas.length,
+                pendientesHoy: pendientes,
+                dominadas,
+                deuda:         Math.round(deudaLocal * 10) / 10
+            });
         });
 
-        resumen.totalTarjetas += tarjetas.length;
-        resumen.pendientesHoy += pendientes;
-        resumen.dominadas     += dominadas;
-        resumen.deudaTotal    += deudaLocal;
-        resumen.asignaturas.push({
-            nombre:        asig,
-            totalTarjetas: tarjetas.length,
-            pendientesHoy: pendientes,
-            dominadas,
-            deuda:         Math.round(deudaLocal * 10) / 10
-        });
-    });
-
-    resumen.deudaTotal = Math.round(resumen.deudaTotal * 10) / 10;
-    return resumen;
-}
-
+        resumen.deudaTotal = Math.round(resumen.deudaTotal * 10) / 10;
+        return resumen;
+    }
     return {
         updateDashboard, updateDifficultyStats, updateCalendarHeatmap,
         updatePomoStats, registrarPomoCompletado, editarProgresoManual,

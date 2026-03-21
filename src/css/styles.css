@@ -1120,12 +1120,12 @@ iframe#pdf-frame { width: 100%; height: 100%; border: none; display: none; }
    MODALES
    ════════════════════════════════════════════════════════════════ */
 /* Z-index unificado — antes declarado en 3 sitios distintos */
-#ajustes-modal,
-#pomodoro-modal,
-#fechas-modal,
-#resumen-sesion-modal,
-#modal-filtros,
-#modal-amigos { z-index: var(--z-modal); }
+#ajustes-modal {z-index: var(--z-modal);},
+#pomodoro-modal {z-index: var(--z-nav);},
+#fechas-modal {z-index: var(--z-modal);},
+#resumen-sesion-modal {z-index: var(--z-top);},
+#modal-filtros {z-index: var(--z-nav);},
+#modal-amigos { z-index: var(--z-top); }
 
 #ajustes-modal {
     position: fixed; inset: 0;

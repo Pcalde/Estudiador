@@ -494,13 +494,87 @@ const Scheduler = {
         }
     }
 
+    // ════════════════════════════════════════════════════════════════
+// RESOLUCIÓN DE CONTEXTO DE TAREAS POMODORO
+// ════════════════════════════════════════════════════════════════
+
+/**
+ * Comprueba si un nombre corresponde a una asignatura conocida en la biblioteca.
+ * Función pura: solo lee State como consulta, sin efectos secundarios.
+ * @param {string} nombre
+ * @returns {boolean}
+ */
+function esAsignaturaValida(nombre) {
+    if (!nombre) return false;
+    const n   = nombre.toLowerCase().trim();
+    const bib = State.get('biblioteca') || {};
+    return Object.keys(bib).some(k => k.toLowerCase().trim() === n);
+}
+
+/**
+ * Extrae la asignatura de contexto a partir del texto de una tarea.
+ * Soporta los formatos de tag:
+ *   [Proyecto]           → busca si es asignatura directa o proyecto vinculado
+ *   [Proyecto : Asig]    → extrae la asignatura explícita tras el separador ':'
+ *
+ * @param {string} taskText - Texto completo de la tarea (ej. "Repasar límites [Análisis]")
+ * @param {string} fallback - Valor por defecto si no se resuelve contexto
+ * @returns {string} Nombre de asignatura resuelto
+ */
+function resolverAsignaturaDeTarea(taskText, fallback = 'General') {
+    if (!taskText) return fallback;
+
+    const match = taskText.match(/\[([^\]]+)\]/);
+    if (!match) return fallback;
+
+    // Limpiar el tag: quitar '#' y espacios extremos
+    const rawTag = match[1].replace(/#/g, '').trim();
+
+    // Formato explícito [Proyecto : Asignatura] — separador con posibles espacios
+    const separadorIdx = rawTag.indexOf(':');
+    if (separadorIdx !== -1) {
+        const posibleAsig = rawTag.slice(separadorIdx + 1).trim();
+        if (esAsignaturaValida(posibleAsig)) {
+            const bib       = State.get('biblioteca') || {};
+            const nombreReal = Object.keys(bib).find(
+                k => k.toLowerCase().trim() === posibleAsig.toLowerCase().trim()
+            );
+            return nombreReal || posibleAsig;
+        }
+    }
+
+    // Formato simple [Tag]: comprobar si es asignatura directa
+    if (esAsignaturaValida(rawTag)) {
+        const bib        = State.get('biblioteca') || {};
+        const nombreReal = Object.keys(bib).find(
+            k => k.toLowerCase().trim() === rawTag.toLowerCase().trim()
+        );
+        return nombreReal || rawTag;
+    }
+
+    // Buscar si el tag corresponde a un proyecto vinculado a una asignatura
+    const proyectos = State.get('projects') || [];
+    const proyecto  = proyectos.find(p => {
+        const pNombre = (typeof p === 'object' ? p.nombre : p) || '';
+        return pNombre.toLowerCase().trim() === rawTag.toLowerCase().trim();
+    });
+
+    if (proyecto && typeof proyecto === 'object' && proyecto.asignatura) {
+        return proyecto.asignatura;
+    }
+
+    // Tag desconocido: devolver el raw para que el caller decida
+    return rawTag || fallback;
+}
+
 // ════════════════════════════════════════════════════════════════
 // NAMESPACE DE LA CAPA DE DOMINIO (Exportación explícita)
 // ════════════════════════════════════════════════════════════════
 
 const Domain = {
     calcularHoraFinPomodoro,
-    // Aquí iremos registrando las futuras funciones de lógica pura
+    esAsignaturaValida,
+    resolverAsignaturaDeTarea,
 };
 
 // Exposición segura al objeto global para que otros scripts (pomodoro.js) lo detecten

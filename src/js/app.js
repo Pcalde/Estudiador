@@ -8,7 +8,7 @@
 //   → ui.js → app.js  ← este archivo
 // ════════════════════════════════════════════════════════════════
 
-const APP_VERSION = "1.18.10";
+const APP_VERSION = "1.18.12";
 
 // ────────────────────────────────────────────────────────────────
 // LOGGER CENTRALIZADO
@@ -108,6 +108,32 @@ EventBus.on('DATA_REQUIRES_SAVE', async () => {
     } catch (error) {
         Logger.error("Error guardando en IndexedDB:", error);
     }
+});
+EventBus.on('DATOS_NUBE_CARGADOS', ({ asigActual }) => {
+    Logger.info('Reaccionando a carga de nube: actualizando UI...');
+
+    if (typeof actualizarMenuLateral === 'function') actualizarMenuLateral();
+    if (typeof updateDashboard       === 'function') updateDashboard();
+    if (asigActual && typeof cargarAsignatura === 'function') {
+        cargarAsignatura(asigActual);
+    }
+});
+// REEMPLAZAR EN app.js
+EventBus.on('AJUSTES_GUARDADOS', ({ modoIA }) => {
+    if (typeof window.setPomoMode      === 'function') window.setPomoMode(State.get('currentMode') || 'work');
+    if (typeof window.updateDashboard  === 'function') window.updateDashboard();
+    if (typeof renderHorarioGrid       === 'function') renderHorarioGrid();
+    if (typeof actualizarMenuLateral   === 'function') actualizarMenuLateral();
+
+    const asig = State.get('nombreAsignaturaActual');
+    if (asig && typeof UI !== 'undefined' && UI.aplicarColorAsignaturaActiva) {
+        UI.aplicarColorAsignaturaActiva(getColorAsignatura(asig));
+    }
+    if (typeof Toast !== 'undefined') {
+        Toast.show(`Ajustes guardados. Modo IA: ${modoIA}`, 'success');
+    }
+    
+    if (typeof UI !== 'undefined' && UI.cerrarAjustes) UI.cerrarAjustes();
 });
 
 EventBus.on('UI_ASIGNATURA_CARGADA', (payload) => {

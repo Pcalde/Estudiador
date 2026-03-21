@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Estudiador Pro v 1.18.5</title>
+    <title>Estudiador Pro</title>
     <script>
     MathJax = {
     loader: { load: ['[tex]/amscd'] }, // <--- CARGAMOS EL MÓDULO AMSCD y xypic
@@ -752,8 +752,12 @@
                     <option value="style-cyber">Cyberpunk</option>
                     <option value="style-skeuo">Skeuomorphic</option>
                     <option value="style-nord">Nord</option>
-                    <option value="style-abyss">Abyss</option>
+                    <option value="style-yahrnam">Yahrnam</option>
                     <option value="style-terminal">Terminal</option>
+                    <option value="style-material">Material</option>
+                    <option value="style-minimal">Minimal</option>
+                    <option value="style-neon">Neon</option>
+                    <option value="style-brutalist">Brutalist</option>
                 </select>
             </div>
             <div class="setting-row">
@@ -762,6 +766,8 @@
                     <option value="click-skeuo">Táctil (Skeuo)</option>
                     <option value="click-cyber">Luminosa (Cyber)</option>
                     <option value="click-liquid">Líquida</option>
+                    <option value="click-bounce">Rebote Elástico</option>
+                    <option value="click-brutal">Impacto Brutalista</option>
                     <option value="click-none">Ninguna</option>
                 </select>
             </div>
@@ -1506,13 +1512,25 @@
 <script src="src/js/study-engine.js" defer></script>
 <script src="src/js/telemetry.js" defer></script>
 <script src="src/js/exam.js" defer></script> 
-<script src="src/js/pomodoro.js" defer></script> 
+<script src="src/js/timer.js"></script>
+<script src="src/js/tasks.js"></script>
 <script src="src/js/pdf-manager.js" defer></script> 
+<script src="src/js/toast.js"></script>
+<script src="src/js/interfaz/ui-core.js"></script>
+<script src="src/js/interfaz/ui-study.js"></script>
+<script src="src/js/interfaz/ui-dashboard.js"></script>
+<script src="src/js/interfaz/ui-editor.js"></script>
+<script src="src/js/interfaz/ui-agenda.js"></script>
+<script src="src/js/interfaz/ui-settings.js"></script>
+<script src="src/js/interfaz/ui-sidebar.js"></script>
+<script src="src/js/interfaz/ui-pomo.js"></script>
+<script src="src/js/interfaz/ui-amigos.js"></script>
 <script src="src/js/ui.js" defer></script>
 <script src="src/js/ai.js" defer></script> 
 <script src="src/js/parser.js" defer></script>
 <script src="src/js/data-io.js" defer></script> <script src="src/js/pizarra.js" defer></script>
 <script src="src/js/firebase.js" defer></script>
+<script src="src/js/amigos.js"></script>
 <script src="src/js/widget-manager.js"></script>
 <script src="src/js/colors.js"></script>
 <script src="src/js/agenda.js"></script>

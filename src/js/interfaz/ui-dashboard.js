@@ -45,13 +45,41 @@ const UIDashboard = (() => {
         if (containerBars) containerBars.innerHTML = html;
     }
 
-    function updateGlobalStats(streak, totalDiasActivos, msgActividad) {
-        const elStreak = document.getElementById('global-streak');
-        const elTotal  = document.getElementById('global-total-days');
-        const elMsg    = document.getElementById('global-activity-msg');
+    function updateGlobalStats(streak, totalDiasActivos, avg) {
+        const elStreak = document.getElementById('stat-streak');
+        const elTotal  = document.getElementById('stat-total-days');
+        const elAvg    = document.getElementById('stat-avg');
+        const elMsg    = document.getElementById('streak-msg');
+
         if (elStreak) elStreak.innerText = escapeHtml(String(streak || 0));
         if (elTotal)  elTotal.innerText  = escapeHtml(String(totalDiasActivos || 0));
-        if (elMsg)    elMsg.innerText    = escapeHtml(String(msgActividad || ''));
+        if (elAvg)    elAvg.innerText    = escapeHtml(String(avg || 0));
+        
+            if (elMsg) {
+            if (streak > 0) {
+                // Configuración dinámica basada en la magnitud de la racha
+                let colorVar = 'var(--status-red)';    
+                let iconColor = 'var(--fuego)';
+                const labelDia = streak === 1 ? 'día' : 'días';
+
+                if (streak >= 7) {
+                    colorVar = 'var(--status-blue)';
+                    iconColor = 'var(--fuego-azul)';
+                }    else if (streak >= 5) {
+                    colorVar = 'var(--status-green)';  
+                    
+                } else if (streak >= 2) {
+                    colorVar = 'var(--status-yellow)'; 
+                }
+
+                elMsg.innerHTML = `
+                    Racha: <span style="color:${colorVar}; font-weight:bold;">${streak}</span> ${labelDia}! 
+                    <i class="fa-solid fa-fire-flame-curved" style="color:${iconColor}; margin-left:4px; font-size: 1.25em"></i>
+                `;
+            } else {
+                elMsg.innerHTML = `<span style="color:var(--text-muted);">Inicia una racha hoy para no acumular deuda.</span>`;
+            }
+        }
     }
 
     function updateCalendarHeatmap(bib, asigActual, fechas, viewDate) {
@@ -217,39 +245,78 @@ const UIDashboard = (() => {
         container.appendChild(fragment);
     }
 
+    /**
+     * Actualiza el widget de Pronóstico de Carga (7 días).
+     * Renderiza un gráfico de barras proporcional con un eje Y de escala a la izquierda.
+     * @param {Array<{count: number, dayLabel: string, isToday: boolean}>} counts
+     * @param {number} maxCount - El valor máximo para escalar el eje Y.
+     */
     function updatePronostico(counts, maxCount) {
-        const container = document.getElementById('pronostico-bars');
+        const container = document.getElementById('forecast-container'); 
         if (!container) return;
 
         container.innerHTML = '';
+        container.style.height = '120px';
+        container.style.marginTop = '10px';
+
         if (!counts || counts.length === 0) {
-            container.innerHTML = "<div style='color:var(--text-muted);font-size:0.85em;text-align:center;'>Sin datos para pronóstico</div>";
+            container.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:0.85em;">Sin datos</div>`;
             return;
         }
 
-        const fragment = document.createDocumentFragment();
+        // --- LÓGICA DE ESCALADO (Raíz Cuadrada) ---
+        // f(x) = sqrt(x). Esto cumple que sqrt(64)=8 vs sqrt(1)=1 (8 veces más grande)
+        const sqrtMax = Math.sqrt(Math.max(maxCount, 1));
+        
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'display:flex; width:100%; height:100%; gap:8px;';
+
+        // 1. EJE Y (Ticks basados en la escala inversa para referencia visual)
+        const yAxis = document.createElement('div');
+        yAxis.style.cssText = 'display:flex; flex-direction:column-reverse; justify-content:space-between; width:28px; color:var(--text-muted); font-size:0.65em; text-align:right; padding-bottom:18px; border-right:1px solid rgba(255,255,255,0.05);';
+
+        // Mostramos 3 puntos de referencia: 0, el punto medio visual (sqrt) y el máximo
+        const midPoint = Math.round(Math.pow(sqrtMax / 2, 2));
+        [0, midPoint, Math.round(maxCount)].forEach(val => {
+            const span = document.createElement('span');
+            span.innerText = escapeHtml(String(val));
+            yAxis.appendChild(span);
+        });
+        wrapper.appendChild(yAxis);
+
+        // 2. ÁREA DE GRÁFICO
+        const chartArea = document.createElement('div');
+        chartArea.style.cssText = 'display:flex; flex:1; justify-content:space-around; align-items:flex-end; height:100%;';
+
         counts.forEach(c => {
-            const h        = Math.max((c.count / maxCount) * 100, 2);
-            let barColor   = 'var(--border)';
-            if      (c.isToday)    barColor = 'var(--accent)';
-            else if (c.count > 20) barColor = 'var(--status-red)';
+            // Calculamos la altura basada en la raíz cuadrada
+            const currentSqrt = Math.sqrt(c.count);
+            const percentage = (currentSqrt / sqrtMax) * 100;
+            
+            const barHeight = c.count > 0 ? `calc(${Math.min(percentage, 100)}% - 18px)` : '2px';
+
+            let barColor = 'var(--border)';
+            if (c.isToday) barColor = 'var(--accent)';
+            else if (c.count > 30) barColor = 'var(--status-red)';
             else if (c.count > 0)  barColor = 'var(--status-blue)';
 
             const col = document.createElement('div');
-            col.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;flex:1;';
+            col.style.cssText = 'display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; flex:1;';
+            
             col.innerHTML = `
-                <span style="font-size:0.65em;margin-bottom:4px;color:var(--text-muted);">${c.count > 0 ? escapeHtml(c.count) : ''}</span>
-                <div style="width:60%;height:${h}%;background:${barColor};border-radius:3px 3px 0 0;min-height:4px;transition:height 0.3s ease;"></div>
-                <span style="font-size:0.6em;margin-top:4px;color:${c.isToday ? 'var(--text-main)' : 'var(--text-muted)'};font-weight:${c.isToday ? 'bold' : 'normal'};">${escapeHtml(c.dayLabel)}</span>
+                <div title="${c.count} tarjetas" style="width:65%; height:${barHeight}; background:${barColor}; border-radius:3px 3px 0 0; transition:height 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); min-width:6px;"></div>
+                <span style="height:18px; line-height:18px; font-size:0.7em; color:${c.isToday ? 'var(--accent)' : 'var(--text-muted)'}; font-weight:${c.isToday ? 'bold' : 'normal'}; text-transform:uppercase;">${escapeHtml(c.dayLabel)}</span>
             `;
-            fragment.appendChild(col);
+            chartArea.appendChild(col);
         });
-        container.appendChild(fragment);
+
+        wrapper.appendChild(chartArea);
+        container.appendChild(wrapper);
     }
 
     function updateDeudaEstudio(deudaTotal, contadores, deudaDesglose) {
         const scoreEl = document.getElementById('deuda-score');
-        const listEl  = document.getElementById('deuda-list');
+        const listEl  = document.getElementById('deuda-breakdown'); 
         if (!scoreEl || !listEl) return;
 
         const dt = Math.round((deudaTotal || 0) * 10) / 10;
@@ -261,19 +328,19 @@ const UIDashboard = (() => {
         const fmt = (v) => (Math.round((v || 0) * 10) / 10).toFixed(1);
         listEl.innerHTML = `
             <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-                <span style="color:var(--text-muted);"><i class="fa-solid fa-leaf" style="color:var(--status-green)"></i> Nuevas (${escapeHtml(contadores.nuevas || 0)})</span>
+                <span style="color:var(--text-muted);"><i class="fa-solid fa-seedling" style="color:var(--status-green)"></i> Nuevas (${escapeHtml(String(contadores.nuevas || 0))})</span>
                 <span style="font-weight:bold;color:var(--text-main);">${fmt(deudaDesglose.nuevas)}</span>
             </div>
             <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-                <span style="color:var(--text-muted);"><i class="fa-solid fa-book-open" style="color:var(--status-blue)"></i> Aprendizaje (${escapeHtml(contadores.learning || 0)})</span>
+                <span style="color:var(--text-muted);"><i class="fa-solid fa-book-open" style="color:var(--status-blue)"></i> Aprendizaje (${escapeHtml(String(contadores.learning || 0))})</span>
                 <span style="font-weight:bold;color:var(--text-main);">${fmt(deudaDesglose.learning)}</span>
             </div>
             <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-                <span style="color:var(--text-muted);"><i class="fa-solid fa-rotate-right" style="color:var(--text-main)"></i> Repaso (${escapeHtml(contadores.repasoNormal || 0)})</span>
+                <span style="color:var(--text-muted);"><i class="fa-solid fa-rotate-right" style="color:var(--text-main)"></i> Repaso (${escapeHtml(String(contadores.repasoNormal || 0))})</span>
                 <span style="font-weight:bold;color:var(--text-main);">${fmt(deudaDesglose.repasoNormal)}</span>
             </div>
             <div style="display:flex;justify-content:space-between;">
-                <span style="color:var(--text-muted);"><i class="fa-solid fa-triangle-exclamation" style="color:var(--status-red)"></i> Críticas (${escapeHtml(contadores.criticas || 0)})</span>
+                <span style="color:var(--text-muted);"><i class="fa-solid fa-triangle-exclamation" style="color:var(--status-red)"></i> Críticas (${escapeHtml(String(contadores.criticas || 0))})</span>
                 <span style="font-weight:bold;color:var(--status-red);">${fmt(deudaDesglose.criticas)}</span>
             </div>`;
     }

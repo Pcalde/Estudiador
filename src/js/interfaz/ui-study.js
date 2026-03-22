@@ -59,21 +59,27 @@ const UIStudy = (() => {
         }
 
         const metaTema = document.getElementById('meta-tema');
-        if (metaTema) metaTema.innerText = `Tema ${tarjeta.Tema}`;
+        if (metaTema) {
+            let txtContext = `Tema ${tarjeta.Tema || 1}`;
+            if (tarjeta.IndiceGlobal !== undefined) txtContext += ` · # ${tarjeta.IndiceGlobal}`;
+            metaTema.innerText = txtContext;
+        }
 
-        const fElem  = document.getElementById('meta-fecha');
-        const hoyVal = fechaValor(getFechaHoy());
-        const proxVal = fechaValor(tarjeta.ProximoRepaso);
+        const fElem   = document.getElementById('meta-fecha');
+        // Fallback seguro de window.* asumiendo inyección global
+        const fHoy    = typeof window.getFechaHoy === 'function' ? window.getFechaHoy() : new Date().toISOString().split('T')[0];
+        const hoyVal  = typeof window.fechaValor === 'function' ? window.fechaValor(fHoy) : Date.parse(fHoy);
+        const proxVal = typeof window.fechaValor === 'function' ? window.fechaValor(tarjeta.ProximoRepaso) : Date.parse(tarjeta.ProximoRepaso);
 
         if (fElem) {
             if (proxVal < hoyVal) {
-                fElem.innerText   = 'Retraso: ' + formatDateForUI(tarjeta.ProximoRepaso);
+                fElem.innerText   = 'Retraso: ' + (typeof window.formatDateForUI === 'function' ? window.formatDateForUI(tarjeta.ProximoRepaso) : tarjeta.ProximoRepaso);
                 fElem.style.color = 'var(--status-red)';
             } else if (proxVal === hoyVal) {
                 fElem.innerText   = 'Hoy';
                 fElem.style.color = 'var(--status-yellow)';
             } else {
-                fElem.innerText   = 'Adelanto: ' + formatDateForUI(tarjeta.ProximoRepaso);
+                fElem.innerText   = 'Adelanto: ' + (typeof window.formatDateForUI === 'function' ? window.formatDateForUI(tarjeta.ProximoRepaso) : tarjeta.ProximoRepaso);
                 fElem.style.color = 'var(--text-muted)';
             }
         }
@@ -97,7 +103,7 @@ const UIStudy = (() => {
                 MathJax.typesetClear([target]);
                 MathJax.typesetPromise([target]).catch(err => {
                     if (err?.message?.includes('replaceChild') || err?.stack?.includes('replaceChild')) return;
-                    Logger.error('Error MathJax:', err);
+                    if (typeof Logger !== 'undefined') Logger.error('Error MathJax:', err);
                 });
             }
         }

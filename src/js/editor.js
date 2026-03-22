@@ -32,6 +32,7 @@ function ordenarTarjeta(obj) {
 function modoImportar() {
     if (!State.get('nombreAsignaturaActual')) return;
     UI.ocultarTodo();
+    State.set('currentContext', 'import');
     document.getElementById('import-card').classList.remove('hidden');
     document.getElementById('import-area').value = "";
 }
@@ -47,6 +48,7 @@ function cancelarEdicion() {
     if (typeof UI !== 'undefined' && UI.cancelarEdicion) {
         UI.cancelarEdicion(!!State.get('nombreAsignaturaActual'));
     }
+    State.set('currentContext', nombreAsignaturaActual ? 'study' : 'welcome');
 }
 
 function abrirEditorAmigable() {
@@ -67,7 +69,7 @@ function guardarDatosEditorAmigable(cerrar = true) {
     if (!concepto || !asigActual) return false;
 
     if (typeof UI === 'undefined' || !UI.getEditorData) {
-        if (typeof Logger !== 'undefined') Logger.error("Arquitectura: UI.getEditorData no disponible.");
+        Logger.error("Arquitectura: UI.getEditorData no disponible.");
         return false;
     }
 
@@ -111,7 +113,7 @@ function guardarDatosEditorAmigable(cerrar = true) {
             }
             success = true;
         } else {
-            if (typeof Logger !== 'undefined') Logger.error("Editor: Índice objetivo no localizado. Abortando mutación para evitar duplicados.");
+            Logger.error("Editor: Índice objetivo no localizado. Abortando mutación para evitar duplicados.");
         }
     });
 
@@ -148,7 +150,7 @@ async function guardarNuevoConcepto() {
     // INTERCEPTOR ARQUITECTÓNICO: Redirección forzosa.
     // Si la UI invoca esto por error pero hay un concepto activo, se trata de una edición.
     if (State.get('conceptoActual')) {
-        if (typeof Logger !== 'undefined') Logger.info("Interceptado intento de crear nueva tarjeta durante edición. Redirigiendo...");
+        Logger.info("Interceptado intento de crear nueva tarjeta durante edición. Redirigiendo...");
         guardarDatosEditorAmigable(true);
         return;
     }

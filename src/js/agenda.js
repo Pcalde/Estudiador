@@ -109,3 +109,4 @@ function cambiarMes(delta) {
     calendarViewDate.setMonth(calendarViewDate.getMonth() + delta);
     if (typeof updateCalendarHeatmap === 'function') updateCalendarHeatmap();
 }
+CommandRegistry.register('eliminarFechaClave', ({id}) => eliminarFechaClave(id));

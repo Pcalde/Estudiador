@@ -13,6 +13,15 @@
 //   - importarAsignaturaCompartida: sustituye guardarEnLocal por EventBus
 //   - aceptarSolicitud: firma corregida (solo docId)
 // ════════════════════════════════════════════════════════════════
+let _db   = null;
+let _auth = null;
+
+// Getters públicos para los demás módulos
+const getDb   = () => _db;
+const getAuth = () => _auth;
+window.getDb   = getDb;
+window.getAuth = getAuth;
+
 
 const FIREBASE_CONFIG_EMBEBIDA = {
     apiKey: "AIzaSyBZJar5Z82Fb8lvPaYc2BOMpjGMF2PM0jY",
@@ -27,7 +36,6 @@ const INTERVALO_AUTOSAVE_MS = 15 * 60 * 1000; // 15 minutos
 
 // ── Variables privadas al módulo ──────────────────────────────
 let _syncTimeout   = null;
-let _autoSaveInterval = null;
 
 // ─────────────────────────────────────────────────────────────
 // INICIALIZACIÓN
@@ -41,17 +49,12 @@ function inicializarFirebase(configStr) {
         if (!firebase.apps.length) {
             firebase.initializeApp(firebaseConfig);
         }
+        _db   = firebase.firestore();
+        _auth = firebase.auth();
 
-        // FIX: asignamos via State para que los módulos que usen State.get() los vean
-        State.set('db',   firebase.firestore());
-        State.set('auth', firebase.auth());
+        _auth.onAuthStateChanged(_manejarCambioAuth);
 
-        // FIX: registrar onAuthStateChanged ANTES de setPersistence
-        // así funciona aunque setPersistence falle (Safari modo privado, etc.)
-        State.get('auth').onAuthStateChanged(_manejarCambioAuth);
-
-        State.get('auth')
-            .setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+        _auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
             .catch(err => Logger.warn('setPersistence falló (modo privado?):', err));
 
     } catch (e) {
@@ -73,23 +76,36 @@ function _manejarCambioAuth(user) {
         const esNuevoLogin = !State.get('currentUser');
         State.set('currentUser', user);
 
-        const db = State.get('db');
+        const db = _db;
         if (db) db.collection('emailIndex').doc(user.email).set({ uid: user.uid }).catch(() => {});
 
         UI.renderAuthEstado(user);
 
-        if (_autoSaveInterval) clearInterval(_autoSaveInterval);
-        _autoSaveInterval = setInterval(() => {
-            Logger.info("Ejecutando Auto-Save de seguridad en la nube...");
-            sincronizar();
-        }, INTERVALO_AUTOSAVE_MS);
 
-        if (esNuevoLogin) comprobarNubeAlIniciar();
+        if (esNuevoLogin) {
+            comprobarNubeAlIniciar();
+            
+            // Guardar en nube 3 minutos después del último cambio
+            EventBus.on('DATA_REQUIRES_SAVE', () => {
+                if (!State.get('currentUser')) return;
+                if (_syncTimeout) clearTimeout(_syncTimeout);
+                _syncTimeout = setTimeout(() => {
+                    guardarDatosUsuario().catch(e => Logger.error("Fallo auto-save nube:", e));
+                }, 3 * 60 * 1000);
+            });
+
+            // Guardar inmediatamente al cerrar la pestaña
+            window.addEventListener('beforeunload', () => {
+                if (State.get('currentUser')) {
+                    guardarDatosUsuario().catch(() => {});
+                }
+            });
+        }
 
     } else {
         State.set('currentUser', null);
 
-        if (_autoSaveInterval) { clearInterval(_autoSaveInterval); _autoSaveInterval = null; }
+        if (_syncTimeout) { clearTimeout(_syncTimeout); _syncTimeout = null; }
 
         UI.renderAuthEstado(null);
     }
@@ -101,7 +117,7 @@ function _manejarCambioAuth(user) {
 
 async function comprobarNubeAlIniciar() {
     const currentUser = State.get('currentUser');
-    const db = State.get('db');
+    const db = _db;
     if (!currentUser || !db) return;
 
     try {
@@ -126,7 +142,7 @@ async function comprobarNubeAlIniciar() {
 
 async function guardarDatosUsuario() {
     const currentUser = State.get('currentUser');
-    const db          = State.get('db');
+    const db          = _db;
     if (!currentUser || !db) return;
 
     // FIX: todas las lecturas via State.get()
@@ -161,7 +177,7 @@ async function guardarDatosUsuario() {
 
 async function cargarDatosUsuario() {
     const currentUser = State.get('currentUser');
-    const db          = State.get('db');
+    const db          = _db;
     if (!currentUser || !db) return;
 
     try {
@@ -174,7 +190,7 @@ async function cargarDatosUsuario() {
             State.batch(() => {
                 const biblio = data.biblioteca || {};
                 // FIX: normalizar con argumentos correctos
-                window.normalizarBibliotecaFechas(biblio);
+                Domain.normalizarBibliotecaFechas(biblio);
                 State.set('biblioteca', biblio);
 
                 State.set('projects',      data.projects      || []);
@@ -183,7 +199,7 @@ async function cargarDatosUsuario() {
                 State.set('pomoSettings',  data.pomoSettings  || State.get('pomoSettings'));
                 State.set('taskList',      data.taskList      || []);
 
-                const fechasSaneadas = window.normalizarFechasClave(data.fechasClave || []);
+                const fechasSaneadas = Domain.normalizarFechasClave(data.fechasClave || []);
                 State.set('fechasClave', fechasSaneadas);
             });
 
@@ -251,7 +267,7 @@ function forzarBajada() {
 // ─────────────────────────────────────────────────────────────
 
 async function sincronizarTelemetriaFSRS() {
-    const db          = State.get('db');
+    const db          = _db;
     const currentUser = State.get('currentUser');
     if (!db || !currentUser || typeof DB === 'undefined') return;
 
@@ -288,7 +304,7 @@ async function sincronizarTelemetriaFSRS() {
 // ─────────────────────────────────────────────────────────────
 
 async function asegurarFirebaseInit() {
-    if (State.get('auth')) return true;
+    if (_auth) return true;
     const configStr = document.getElementById('set-firebase-config')?.value.trim()
                    || localStorage.getItem('firebase_config');
     if (!configStr) {
@@ -297,7 +313,7 @@ async function asegurarFirebaseInit() {
     }
     inicializarFirebase(configStr);
     for (let i = 0; i < 30; i++) {
-        if (State.get('auth')) return true;
+        if (_auth) return true;
         await new Promise(r => setTimeout(r, 100));
     }
     alert("No se pudo inicializar Firebase. Comprueba la configuración.");
@@ -312,7 +328,7 @@ async function procesarLogin() {
     if (!await asegurarFirebaseInit()) return;
     btn.innerText = "Conectando...";
     try {
-        await State.get('auth').signInWithEmailAndPassword(email, pass);
+        await _auth.signInWithEmailAndPassword(email, pass);
     } catch (error) {
         Logger.error("Error en login:", error);
         alert("Error de acceso. Verifica tu correo y contraseña.");
@@ -329,8 +345,8 @@ async function procesarRegistro() {
     if (!await asegurarFirebaseInit()) return;
     btn.innerText = "Creando...";
     try {
-        const cred = await State.get('auth').createUserWithEmailAndPassword(email, pass);
-        const db   = State.get('db');
+        const cred = await _auth.createUserWithEmailAndPassword(email, pass);
+        const db   = _db;
         const ts   = firebase.firestore.FieldValue.serverTimestamp();
         await db.collection('users').doc(cred.user.uid).set({
             biblioteca: {}, projects: [], fechasClave: [], horarioGlobal: {},
@@ -356,9 +372,9 @@ async function procesarLoginGoogle() {
     const btn = document.getElementById('btn-login-google');
     if (btn) btn.innerText = "Conectando...";
     try {
-        const result = await State.get('auth').signInWithPopup(provider);
+        const result = await _auth.signInWithPopup(provider);
         const user   = result.user;
-        const db     = State.get('db');
+        const db     = _db;
         const ts     = firebase.firestore.FieldValue.serverTimestamp();
 
         // FIX: additionalUserInfo.isNewUser es frágil en v9+; usamos get() como comprobación robusta
@@ -393,7 +409,7 @@ function cerrarSesion() {
     if (!confirm("¿Seguro que deseas cerrar sesión? Dejarás de sincronizar con la nube.")) return;
     // Detener auto-save antes de cerrar
     if (_autoSaveInterval) { clearInterval(_autoSaveInterval); _autoSaveInterval = null; }
-    State.get('auth').signOut().then(() => {
+    _auth.signOut().then(() => {
         State.set('currentUser', null);
         location.reload();
     });

@@ -24,7 +24,10 @@ function abrirModalFiltros() {
             cb.style.accentColor = c;
             cb.onchange = () => {
                 lbl.style.background = cb.checked ? `${c}30` : `${c}15`;
-                if (typeof window.aplicarFiltros === 'function') window.aplicarFiltros();
+                if (typeof window.aplicarFiltros === 'function') {
+    sincronizarFiltrosAlState(); 
+    window.aplicarFiltros();
+}
             };
             lbl.appendChild(cb);
             lbl.appendChild(document.createTextNode(t));
@@ -75,9 +78,16 @@ function limpiarFiltros() {
         if (lbl) lbl.style.background = `${color}15`;
     });
 
-    if (typeof window.aplicarFiltros === 'function') window.aplicarFiltros();
+    if (typeof window.aplicarFiltros === 'function') {
+        sincronizarFiltrosAlState(); 
+        window.aplicarFiltros();
+    }
 }
 
 function toggleFiltrosUI() {
     document.getElementById('filters-container')?.classList.toggle('filters-active');
+}
+
+function sincronizarFiltrosAlState() {
+    State.set('filtrosActivos', UI.getEstadoFiltros());
 }

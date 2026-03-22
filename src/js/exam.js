@@ -76,7 +76,8 @@ const EXAM = (() => {
 
     // ── CONFIG ────────────────────────────────────────────────────
     function abrir() {
-        if (typeof Logger !== 'undefined') Logger.info('Modo Examen: abriendo');
+        Logger.info('Modo Examen: abriendo');
+        State.set('currentContext', 'exam');
 
         State.set('examenActivo', true);
 
@@ -161,7 +162,7 @@ const EXAM = (() => {
         _feedbacks  = new Array(_cola.length).fill('');
         _config     = { asig, tiempo, modo: _modo, numMax: _cola.length };
 
-        if (typeof Logger !== 'undefined') Logger.info(`Examen (${_modo}): ${_cola.length} tarjetas. Contexto: ${asig}`);
+        Logger.info(`Examen (${_modo}): ${_cola.length} tarjetas. Contexto: ${asig}`);
 
         if (_modo === 'flash') {
             _show('examen-flash');
@@ -291,7 +292,7 @@ const EXAM = (() => {
     function realEntregar() {
         _clearTimer();
         _guardarRespuestaActual();
-        if (typeof Logger !== 'undefined') Logger.info('Examen real entregado. Evaluando...');
+        Logger.info('Examen real entregado. Evaluando...');
         
         _show('examen-correccion');
         
@@ -542,7 +543,7 @@ const EXAM = (() => {
                   }).join('');
         }
 
-        if (typeof Logger !== 'undefined') Logger.info(`Examen terminado: nota ${niceNota}, bien=${bien}, repasar=${aRep}`);
+        Logger.info(`Examen terminado: nota ${niceNota}, bien=${bien}, repasar=${aRep}`);
 
         if (typeof EventBus !== 'undefined') {
             EventBus.emit('EXAMEN_COMPLETADO', {
@@ -576,11 +577,13 @@ const EXAM = (() => {
     function cerrar() {
         _clearTimer();
         State.set('examenActivo', false);
+        State.set('currentContext', 'study');
         const modal = document.getElementById('examen-modal');
         if (modal) {
             modal.style.display = 'none';
             modal.classList.remove('active'); 
         }
+        
     }
 
     // ── API pública ───────────────────────────────────────────────
@@ -611,3 +614,7 @@ window.examenRealAnterior         = () => EXAM.realAnterior();
 window.examenRealEntregar         = () => EXAM.realEntregar();
 window.examenCorreccionPuntuar    = (i, n) => EXAM.correccionPuntuar(i, n);
 window.examenRealCalcularNota     = () => EXAM.calcularNota();
+
+CommandRegistry.register('examRealIrA',            ({idx}) => EXAM._api.realIrA(Number(idx)));
+CommandRegistry.register('examenCorreccionPuntuar', ({idx, n}) => EXAM.correccionPuntuar(Number(idx), Number(n)));
+CommandRegistry.register('setModoExamen',           ({modo}) => EXAM.setModo(modo));

@@ -16,7 +16,7 @@ const DB = (() => {
         
         request.onupgradeneeded = (e) => {
             const db = e.target.result;
-            if (typeof Logger !== 'undefined') Logger.info("DB: Construyendo esquema versión " + DB_VERSION);
+            Logger.info("DB: Construyendo esquema versión " + DB_VERSION);
             
             // Almacén 1: Telemetría de Repasos (FSRS Revlog)
             if (!db.objectStoreNames.contains('fsrs_logs')) {
@@ -39,7 +39,7 @@ const DB = (() => {
         };
 
         request.onerror = (e) => {
-            if (typeof Logger !== 'undefined') Logger.error("DB: Error crítico inicializando IndexedDB", e.target.error);
+            Logger.error("DB: Error crítico inicializando IndexedDB", e.target.error);
             reject(e.target.error);
         };
     });

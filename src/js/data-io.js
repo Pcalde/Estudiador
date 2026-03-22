@@ -49,14 +49,6 @@ const DataIO = (() => {
         EventBus.emit('DATA_REQUIRES_SAVE');
         EventBus.emit('STATE_CHANGED', { keys: ['colaEstudio', 'biblioteca'] });
         
-        const importArea = document.getElementById('import-area-latex');
-        if (importArea) importArea.value = "";
-        
-        if (aProcesarPorIA > 0) {
-            alert(`${newCards.length} tarjetas importadas. La IA procesará ${aProcesarPorIA} títulos vacíos.`);
-        } else {
-            alert(`${newCards.length} tarjetas importadas con sus títulos originales respetados.`);
-        }
         
         if (typeof window.cancelarEdicion === 'function') window.cancelarEdicion();
         if (typeof window.aplicarFiltros === 'function') window.aplicarFiltros();
@@ -64,6 +56,7 @@ const DataIO = (() => {
         if (aProcesarPorIA > 0 && typeof AI !== 'undefined' && AI.procesarTitulosEnLote) {
             AI.procesarTitulosEnLote(asigActual);
         }
+        return { count: newCards.length, conIA: aProcesarPorIA };
     }
 
     // 2. CREACIÓN DE ASIGNATURA (Operación de datos pura)
@@ -88,8 +81,7 @@ const DataIO = (() => {
     }
 
     // 2. IMPORTACIÓN JSON
-    function procesarImportacion() {
-        const raw = document.getElementById('import-area').value;
+    function procesarImportacion(raw) {
         try {
             const data = JSON.parse(raw);
             if (!Array.isArray(data)) throw new Error("El JSON debe ser una lista [].");
@@ -97,18 +89,15 @@ const DataIO = (() => {
             const asigActual = State.get('nombreAsignaturaActual');
             if (!asigActual) throw new Error("Selecciona una asignatura primero.");
 
-            let biblioteca = State.get('biblioteca') || {};
+            let biblioteca = State.get('biblioteca');
             biblioteca[asigActual] = [...(biblioteca[asigActual] || []), ...data];
-
             State.set('biblioteca', biblioteca);
             EventBus.emit('DATA_REQUIRES_SAVE');
             EventBus.emit('STATE_CHANGED', { keys: ['colaEstudio', 'biblioteca'] });
 
-            alert("Importación JSON exitosa.");
-            if (typeof window.cancelarEdicion === 'function') window.cancelarEdicion();
-            if (typeof window.aplicarFiltros === 'function') window.aplicarFiltros();
+            return { success: true };
         } catch (e) {
-            alert("Error en JSON: " + e.message);
+            return { success: false, error: e.message };
         }
     }
 
@@ -170,12 +159,30 @@ const DataIO = (() => {
 
 // Proxies Globales para compatibilidad con app.js
 window.procesarImportacionLatex = () => {
-    // La lectura del DOM ocurre en el límite de la aplicación, no en la capa de datos.
     const rawInput = document.getElementById('import-area-latex')?.value || '';
     const temaDefault = parseInt(document.getElementById('latex-tema-input')?.value) || 1;
-    DataIO.procesarImportacionLatex(rawInput, temaDefault);
+    const result = DataIO.procesarImportacionLatex(rawInput, temaDefault);
+    
+    const importArea = document.getElementById('import-area-latex');
+    if (importArea) importArea.value = "";
+    
+    if (result.conIA > 0) {
+        alert(`${result.count} tarjetas importadas. La IA procesará ${result.conIA} títulos vacíos.`);
+    } else {
+        alert(`${result.count} tarjetas importadas con sus títulos originales respetados.`);
+    }
 };
-window.procesarImportacion         = () => DataIO.procesarImportacion();
+window.procesarImportacion = () => {
+    const raw = document.getElementById('import-area').value;
+    const result = DataIO.procesarImportacion(raw);
+    if (result.success) {
+        alert("Importación JSON exitosa.");
+        if (typeof window.cancelarEdicion === 'function') window.cancelarEdicion();
+        if (typeof window.aplicarFiltros === 'function') window.aplicarFiltros();
+    } else {
+        alert("Error en JSON: " + result.error);
+    }
+};
 window.descargarAsignaturaActual   = () => DataIO.descargarAsignaturaActual();
 window.exportarBackup              = () => DataIO.exportarBackup();
 window.importarBackup              = el => DataIO.importarBackup(el);
@@ -199,7 +206,7 @@ window.gestionarNuevaAsignatura = () => {
             }
         });
     } else {
-        if (typeof Logger !== 'undefined') Logger.error("Arquitectura: UI.pedirNombreAsignatura no está implementado en ui.js.");
+        Logger.error("Arquitectura: UI.pedirNombreAsignatura no está implementado en ui.js.");
     }
 };
 window.guardarEdicionJSON = () => {

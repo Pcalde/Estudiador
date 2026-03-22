@@ -17,10 +17,11 @@ const State = (() => {
         indiceNavegacion:        0,
         modoSecuencial:          false,
         modoLectura:             false,
-
+        
         // Apariencia
         currentVisualTheme:  'style-glass',
         currentClickEffect:  'click-skeuo',
+        currentContext: 'welcome', // 'welcome' | 'study' | 'editor' | 'import' | 'exam'
         userColors:          {},
 
         // Pomodoro & Tareas
@@ -45,8 +46,6 @@ const State = (() => {
         diaSeleccionadoIndex: -1,
 
         // Firebase
-        db:                 null,
-        auth:               null,
         currentUser:        null,
         unsubscribeSnapshot: null,
         primeraCarga:       true,
@@ -65,6 +64,12 @@ const State = (() => {
 
         // Widget layout (orden, minimizado, oculto)
         widgetConfig: null,
+
+        // Lista filtros
+        filtrosActivos: {
+            hoy: false, nuevas: false, tema: false, rango: false, tipo: false, dificultad: false,
+            temaVal: '', rangoVal: '', tiposSeleccionados: [], difsActivas: []
+        },
         // Configuración de Dominio (Ontología de tarjetas)
         tiposTarjeta: {
             'Definición':   { color: '#c40202', comandoLatex: '\\defi' },
@@ -119,13 +124,20 @@ const State = (() => {
 
     return {
         /** Lee un valor del estado */
-        get(key) { 
-            return window[key]; 
+        get(key) {
+            const val = window[key];
+            if (val === null || val === undefined || typeof val !== 'object') return val;
+            return structuredClone(val);
+        },
+        getRef(key) {
+            return window[key];
         },
         
         /** Escribe un valor en el estado y notifica al bus si no hay transacción activa */
-        set(key, val) { 
-            window[key] = val; 
+        set(key, val) {
+            window[key] = (val !== null && val !== undefined && typeof val === 'object')
+                ? structuredClone(val)
+                : val;
             if (_isBatching) {
                 _pendingChanges.add(key);
             } else if (typeof EventBus !== 'undefined') {
@@ -148,7 +160,7 @@ const State = (() => {
             try { 
                 fn(); 
             } catch(e) { 
-                if (typeof Logger !== 'undefined') Logger.error("State Batch Error:", e); 
+                Logger.error("State Batch Error:", e); 
                 throw e; 
             } finally {
                 _isBatching = false;

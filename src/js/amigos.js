@@ -6,7 +6,7 @@
 
 const Amigos = (() => {
 
-    const _db   = () => State.get('db');
+    const _db   = () => getDb;
     const _user = () => State.get('currentUser');
 
     // ── Modal ─────────────────────────────────────────────────────
@@ -238,3 +238,13 @@ window.verStatsAmigo                = (uid, email) => Amigos.verStats(uid, email
 window.abrirCompartirAsignatura     = (email) => Amigos.abrirCompartir(email);
 window.compartirAsignatura          = (email, asig) => Amigos.compartir(email, asig);
 window.importarAsignaturaCompartida = (id) => Amigos.importarCompartida(id);
+
+CommandRegistry.register('importarAsignaturaCompartida', ({id})           => Amigos.importarCompartida(id));
+CommandRegistry.register('aceptarSolicitud',             ({id})           => Amigos.aceptarSolicitud(id));
+CommandRegistry.register('verStatsAmigo',                ({uid, email})   => Amigos.verStats(uid, email));
+CommandRegistry.register('abrirCompartirAsignatura',     ({email})        => Amigos.abrirCompartir(email));
+CommandRegistry.register('enviarSolicitudAmistad',       ()               => Amigos.enviarSolicitud());
+CommandRegistry.register('compartirAsignatura',          ({email, asig})  => Amigos.compartir(email, asig));
+CommandRegistry.register('rechazarSolicitud',            ({id})           => Amigos.rechazarSolicitud(id));
+CommandRegistry.register('eliminarAmigo',                ({id})           => Amigos.eliminarAmigo(id));
+CommandRegistry.register('cargarPanelAmigos',            ()               => Amigos.cargarPanel());

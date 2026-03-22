@@ -30,10 +30,10 @@ const StudyEngine = (() => {
         const todos = biblioteca[asigActual] || [];
         let filtrados = [...todos];
 
-        const f = UI.getEstadoFiltros();
+        const f = State.get('filtrosActivos');
 
         // 1. Filtrado Matemático
-        if (f.hoy) filtrados = filtrados.filter(c => !c.ProximoRepaso || window.esVencido(c.ProximoRepaso));
+        if (f.hoy) filtrados = filtrados.filter(c => !c.ProximoRepaso || Domain.esVencido(c.ProximoRepaso));
         if (f.nuevas) filtrados = filtrados.filter(c => !c.UltimoRepaso);
         if (f.tema) {
             const temasSet = _parsearListaNumeros(f.temaVal);
@@ -86,7 +86,7 @@ const StudyEngine = (() => {
         // 3. Notificación a la Interfaz de Usuario
         const nFiltros = [f.hoy, f.nuevas, f.tema, f.rango, f.tipo, f.dificultad].filter(Boolean).length;
         if (typeof UI !== 'undefined') {
-            if (UI.renderEstadoFiltros) UI.renderEstadoFiltros(nFiltros, filtrados.length);
+            if (UI.renderEstadoFiltros) UI.renderEstadoFiltros(f, filtrados.length, isSecuencial);
             if (UI.renderControlesModoEstudio) UI.renderControlesModoEstudio(isSecuencial);
         }
 
@@ -143,10 +143,8 @@ const StudyEngine = (() => {
         const concepto = State.get('conceptoActual');
         const asigActual = State.get('nombreAsignaturaActual');
         if (!concepto || !asigActual) return;
-
-        // FIX ARQUITECTÓNICO: El núcleo matemático se expone como Scheduler, no Domain.
         if (typeof Scheduler === 'undefined') {
-            if (typeof Logger !== 'undefined') Logger.error("Error Crítico: Scheduler no definido.");
+            Logger.error("Error Crítico: Scheduler no definido.");
             return;
         }
 

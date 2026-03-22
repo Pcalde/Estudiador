@@ -2,41 +2,13 @@
 // APP.JS — Núcleo de arranque y orquestador
 //
 // Orden de carga:
-//   state.js → domain.js → firebase.js → colors.js → agenda.js
+//   state.js → window.js → firebase.js → colors.js → agenda.js
 //   → asignaturas.js → editor.js → ia-service.js → settings.js
 //   → filters.js → mobile.js → [exam.js, pizarra.js, pomodoro.js…]
 //   → ui.js → app.js  ← este archivo
 // ════════════════════════════════════════════════════════════════
 
-const APP_VERSION = "1.18.12";
-
-// ────────────────────────────────────────────────────────────────
-// LOGGER CENTRALIZADO
-// ────────────────────────────────────────────────────────────────
-const Logger = (() => {
-    const MAX = 200;
-    const _log = [];
-
-    function _push(level, ...args) {
-        const entry = {
-            ts:    new Date().toISOString(),
-            level,
-            msg:   args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ')
-        };
-        _log.push(entry);
-        if (_log.length > MAX) _log.shift();
-        const fn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
-        fn(`[${level.toUpperCase()}]`, ...args);
-    }
-
-    return {
-        info:    (...a) => _push('info',  ...a),
-        warn:    (...a) => _push('warn',  ...a),
-        error:   (...a) => _push('error', ...a),
-        getLogs: ()     => [..._log],
-        dump:    ()     => { console.table(_log.slice(-50)); }
-    };
-})();
+const APP_VERSION = "1.19.2";
 
 // ────────────────────────────────────────────────────────────────
 // UTIL — helpers privados reutilizables
@@ -288,9 +260,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (badge) badge.innerText = APP_VERSION;
 
     // 2. Sanitización de fechas en memoria
-    if (typeof window.normalizarPomoFechas === 'function')       window.normalizarPomoFechas();
-    if (typeof window.normalizarBibliotecaFechas === 'function') window.normalizarBibliotecaFechas(State.get('biblioteca'));
-    if (typeof window.normalizarFechasClave === 'function')      State.set('fechasClave', window.normalizarFechasClave(State.get('fechasClave')));
+    if (typeof Domain.normalizarPomoFechas === 'function')       Domain.normalizarPomoFechas();
+    if (typeof Domain.normalizarBibliotecaFechas === 'function') Domain.normalizarBibliotecaFechas(State.get('biblioteca'));
+    if (typeof Domain.normalizarFechasClave === 'function')      State.set('fechasClave', Domain.normalizarFechasClave(State.get('fechasClave')));
 
     // 3. Estado ligero (localStorage)
     initAppState();
@@ -347,102 +319,98 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // 8. Controlador de teclado global
+    // ESTAMOS CEDIENDO EN ESTE ASPECTO DEUDA TÉCNICA POR SER SIMPLEMENTE UNA TONTERÍA VISUAL: EL SIMULARCLICKVISUAL
+    // GANAMOS POCO METIÉNDOLO EN UI EN COMPARACIÓN A DEJARLO AHÍ, NO ES IMPORTANTE
     document.addEventListener('keydown', (e) => {
         if (!e.key) return;
         const key     = e.key.toLowerCase();
         const tag     = e.target.tagName;
         const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable || tag === 'SELECT';
+        const context = State.get('currentContext');
 
-        // Prioridad 1: Modo Examen
-        if (State.get('examenActivo')) {
-            const isFlash    = document.getElementById('examen-flash')?.style.display === 'block';
+        // ── Contexto: Examen ──────────────────────────────────────
+        if (context === 'exam') {
+            const isFlash = document.getElementById('examen-flash')?.style.display === 'block';
             if (!isFlash || isInput) return;
             const btnRevelar = document.getElementById('ex-f-btn-revelar');
             const isRevelado = btnRevelar && btnRevelar.style.display === 'none';
             if ((e.code === 'Space' || key === 'enter') && !isRevelado) {
                 e.preventDefault();
-                window.examenFlashRevelar?.();
+                EXAM.flashRevelar();
                 simularClickVisual('#ex-f-btn-revelar');
                 return;
             }
             if (isRevelado && ['1','2','3','4'].includes(key)) {
                 e.preventDefault();
-                window.examenFlashPuntuar(parseInt(key));
+                EXAM.flashPuntuar(parseInt(key));
                 simularClickVisual(`#btn-examenflashpuntuar${key === '1' ? '' : `-${key}`}`);
             }
             return;
         }
 
-        // Prioridad 2: Editor amigable
-        const editorCard     = document.getElementById('editor-card');
-        const isEditorActive = editorCard && !editorCard.classList.contains('hidden');
-        if (isEditorActive) {
-            const nav = (delta) => {
-                simularClickVisual(delta < 0 ? '#btn-edit-prev' : '#btn-edit-next');
-                navegarEditor(delta);
-            };
+        // ── Contexto: Editor ──────────────────────────────────────
+        if (context === 'editor') {
+            const nav = (delta) => navegarEditor(delta);
             if (e.altKey && (key === 'a' || key === 'arrowleft'))  { e.preventDefault(); nav(-1); return; }
             if (e.altKey && (key === 'd' || key === 'arrowright')) { e.preventDefault(); nav(1);  return; }
             if (!isInput) {
                 if (key === 'a' || key === 'arrowleft')  { e.preventDefault(); nav(-1); return; }
                 if (key === 'd' || key === 'arrowright') { e.preventDefault(); nav(1);  return; }
             }
+            return;
         }
 
         if (isInput) return;
 
-        // Espacio: Pomodoro
+        // ── Global: Espacio → Pomodoro ────────────────────────────
         if (key === ' ') {
             e.preventDefault();
-            toggleTimer?.();
-            simularClickVisual('#mini-btn-toggle');
-            simularClickVisual('#btn-pomo-action');
+            Timer.toggle();
             return;
         }
 
-        // L / S: modos
+        // ── Global: L / S → modos lectura/secuencial ─────────────
         if (key === 'l' || key === 's') {
             e.preventDefault();
             const id  = key === 'l' ? 'check-lectura' : 'check-secuencial';
             const fn  = key === 'l' ? window.toggleModoLectura : window.toggleModoSecuencial;
             const chk = document.getElementById(id);
-            if (chk) { chk.checked = !chk.checked; fn?.(chk.checked); feedbackVisualSimple(chk.parentElement); }
+            if (chk) { chk.checked = !chk.checked; fn?.(chk.checked); }
             return;
         }
 
-        // Contexto: tarjeta de estudio
-        const studyCard = document.getElementById('study-card');
-        if (studyCard && !studyCard.classList.contains('hidden')) {
+        // ── Contexto: Estudio ─────────────────────────────────────
+        if (context === 'study') {
             if (key === 'enter') {
                 e.preventDefault();
                 const estaVisible = !document.getElementById('concepto-contenido')?.classList.contains('hidden');
-                if (estaVisible) { simularClickVisual('#btn-ocultar');      UI.ocultarRespuesta?.(); }
-                else             { simularClickVisual('#btn-main-revelar'); UI.revelar?.(); }
+                if (estaVisible) { UI.ocultarRespuesta(); simularClickVisual('#btn-ocultar'); }
+                else             { UI.revelar(); simularClickVisual('#btn-main-revelar'); }
                 return;
             }
             if (key === 'd' || key === 'arrowright') {
-                e.preventDefault(); simularClickVisual('#btn-siguientetarjeta'); window.siguienteTarjeta?.(); return;
+                e.preventDefault();
+                StudyEngine.siguienteTarjeta();
+                simularClickVisual('#btn-siguientetarjeta');
+                return;
             }
             if (key === 'a' || key === 'arrowleft') {
                 e.preventDefault();
-                const btnPrev = document.getElementById('btn-prev');
-                if (btnPrev && !btnPrev.classList.contains('hidden')) {
-                    simularClickVisual('#btn-prev'); window.anteriorTarjeta?.();
-                }
+                if (State.get('modoSecuencial')) { StudyEngine.anteriorTarjeta(); simularClickVisual('#btn-prev'); }
                 return;
             }
             if (['1','2','3','4'].includes(key)) {
                 const controles = document.getElementById('controles-respuesta');
                 if (controles && !controles.classList.contains('hidden')) {
                     e.preventDefault();
+                    StudyEngine.procesarRepaso(parseInt(key));
                     simularClickVisual(`#btn-procesarrepaso${key === '1' ? '' : `-${key}`}`);
-                    window.procesarRepaso?.(parseInt(key));
                 }
             }
         }
     });
 
-    Logger.info("Estudiador: Teclado global restaurado.");
+    Logger.info("Estudiador: Teclado global listo.");
 });
 
 // ────────────────────────────────────────────────────────────────
@@ -451,54 +419,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 document.addEventListener('click', function(e) {
     const el = e.target.closest('[data-action]');
     if (!el) return;
-    const action = el.dataset.action;
-    const idx    = el.dataset.idx    !== undefined ? Number(el.dataset.idx)  : undefined;
-    const nombre = el.dataset.nombre !== undefined ? el.dataset.nombre       : undefined;
-    const id     = el.dataset.id     !== undefined ? el.dataset.id           : undefined;
-    const n      = el.dataset.n      !== undefined ? Number(el.dataset.n)    : undefined;
-
-    switch (action) {
-        case 'renombrarAsignatura':           renombrarAsignatura(nombre, e);                          break;
-        case 'borrarAsignatura':              borrarAsignatura(nombre, e);                             break;
-        case 'borrarProyecto':                borrarProyecto(idx);                                     break;
-        case 'editTask':                      editTask(idx, e);                                        break;
-        case 'toggleDone':                    toggleDone(idx, e);                                      break;
-        case 'deleteTask':                    deleteTask(idx, e);                                      break;
-        case 'eliminarFechaClave':            eliminarFechaClave(id);                                  break;
-        case 'borrarSlot':                    borrarSlot(idx, e);                                      break;
-        case 'examRealIrA':                   EXAM._api.realIrA(idx);                                  break;
-        case 'examenCorreccionPuntuar':       examenCorreccionPuntuar(idx, n);                         break;
-        case 'cargarPanelAmigos':             cargarPanelAmigos();                                     break;
-        case 'importarAsignaturaCompartida':  importarAsignaturaCompartida(el.dataset.id);             break;
-        case 'aceptarSolicitud':              aceptarSolicitud(el.dataset.id, el.dataset.email);       break;
-        case 'verStatsAmigo':                 verStatsAmigo(el.dataset.uid, el.dataset.email);         break;
-        case 'abrirCompartirAsignatura':      abrirCompartirAsignatura(el.dataset.email);              break;
-        case 'enviarSolicitudAmistad':        enviarSolicitudAmistad();                                break;
-        case 'compartirAsignatura':           compartirAsignatura(el.dataset.email, el.dataset.asig);  break;
-        case 'rechazarSolicitud':             rechazarSolicitud(id);                                   break;
-        case 'eliminarAmigo':                 eliminarAmigo(id);                                       break;
-        case 'fragmentarTarjetaActualIA':     fragmentarTarjetaActualIA();                             break;
-        case 'minimizeWidget':                WidgetManager?.toggleMinimize(el.dataset.widgetId);      break;
-        case 'hideWidget':
-        case 'restoreWidget':                 WidgetManager?.toggleHide(el.dataset.widgetId);          break;
-        case 'nav-mobile':                    manejarNavegacionMovil(el.dataset.target, el);           break;
-        case 'abrir-ajustes':
-            manejarNavegacionMovil?.('study');
-            abrirAjustes?.();
-            break;
-        case 'toggle-pomodoro': {
-            manejarNavegacionMovil?.('study', document.querySelector('[data-target="study"]'));
-            const pomoCard = document.getElementById('pomodoro-card');
-            if (pomoCard) { pomoCard.classList.remove('collapsed'); pomoCard.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-            break;
-        }
-        case 'setModoExamen': examenSetMode(el.dataset.modo); break;
-        case 'restaurarWidgetsOcultos':
-            if (typeof WidgetManager !== 'undefined' && WidgetManager.restaurarWidgets) {
-                WidgetManager.restaurarWidgets();
-            }
-            break;
-    }
+    CommandRegistry.dispatch(el.dataset.action, el.dataset);
 });
 
 // ────────────────────────────────────────────────────────────────
@@ -680,24 +601,24 @@ document.addEventListener('DOMContentLoaded', () => {
     on('#btn-cerrarmodalfiltros',   'click',  cerrarModalFiltros);
     on('#btn-cerrarmodalfiltros-2', 'click',  cerrarModalFiltros);
     on('#btn-limpiarfiltros',       'click',  limpiarFiltros);
-    on('#check-filtro-hoy',     'change', () => { toggleIconoFiltro('icon-hoy',        '#C93412'); window.aplicarFiltros(); });
+    on('#check-filtro-hoy',     'change', () => { toggleIconoFiltro('icon-hoy',        '#C93412'); sincronizarFiltrosAlState(); window.aplicarFiltros(); });
     on('#btn-document-2',       'click',  () => document.getElementById('check-filtro-hoy').click());
-    on('#check-filtro-nuevas',  'change', () => { toggleIconoFiltro('icon-nuevas',     '#C93412'); window.aplicarFiltros(); });
+    on('#check-filtro-nuevas',  'change', () => { toggleIconoFiltro('icon-nuevas',     '#C93412'); sincronizarFiltrosAlState(); window.aplicarFiltros(); });
     on('#btn-document-3',       'click',  () => document.getElementById('check-filtro-nuevas').click());
-    on('#check-filtro-tema',    'change', () => { toggleIconoFiltro('icon-tema',       '#C93412'); window.aplicarFiltros(); });
+    on('#check-filtro-tema',    'change', () => { toggleIconoFiltro('icon-tema',       '#C93412'); sincronizarFiltrosAlState(); window.aplicarFiltros(); });
     on('#btn-document-4',       'click',  () => document.getElementById('check-filtro-tema').click());
-    on('#filtro-tema-val',      'input',  window.aplicarFiltros);
-    on('#check-filtro-rango',   'change', () => { toggleIconoFiltro('icon-rango',      '#256ca5'); window.aplicarFiltros(); });
+    on('#filtro-tema-val',      'input',  sincronizarFiltrosAlState, window.aplicarFiltros);
+    on('#check-filtro-rango',   'change', () => { toggleIconoFiltro('icon-rango',      '#256ca5'); sincronizarFiltrosAlState(); window.aplicarFiltros(); });
     on('#btn-document-5',       'click',  () => document.getElementById('check-filtro-rango').click());
-    on('#filtro-rango-val',     'input',  window.aplicarFiltros);
-    on('#check-filtro-tipo',    'change', () => { toggleIconoFiltro('icon-tipo',       '#C93412'); window.aplicarFiltros(); });
+    on('#filtro-rango-val',     'input',  sincronizarFiltrosAlState, window.aplicarFiltros);
+    on('#check-filtro-tipo',    'change', () => { toggleIconoFiltro('icon-tipo',       '#C93412'); sincronizarFiltrosAlState(); window.aplicarFiltros(); });
     on('#btn-document-6',       'click',  () => document.getElementById('check-filtro-tipo').click());
-    on('#check-filtro-dificultad','change',() => { toggleIconoFiltro('icon-dificultad','#C93412'); window.aplicarFiltros(); });
+    on('#check-filtro-dificultad','change',() => { toggleIconoFiltro('icon-dificultad','#C93412'); sincronizarFiltrosAlState(); window.aplicarFiltros(); });
     on('#btn-document-7',       'click',  () => document.getElementById('check-filtro-dificultad').click());
-    on('#check-dif-1', 'change', window.aplicarFiltros);
-    on('#check-dif-2', 'change', window.aplicarFiltros);
-    on('#check-dif-3', 'change', window.aplicarFiltros);
-    on('#check-dif-4', 'change', window.aplicarFiltros);
+    on('#check-dif-1', 'change', sincronizarFiltrosAlState, window.aplicarFiltros);
+    on('#check-dif-2', 'change', sincronizarFiltrosAlState, window.aplicarFiltros);
+    on('#check-dif-3', 'change', sincronizarFiltrosAlState, window.aplicarFiltros);
+    on('#check-dif-4', 'change', sincronizarFiltrosAlState, window.aplicarFiltros);
     on('#btn-restaurar-widgets', 'click', () => {
         if (typeof WidgetManager !== 'undefined' && WidgetManager.restaurarWidgets) {
             if (confirm("¿Restaurar orden y visibilidad original de los widgets?")) {

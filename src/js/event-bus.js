@@ -15,7 +15,7 @@ const EventBus = (() => {
                 try { 
                     cb(payload); 
                 } catch (e) { 
-                    if(typeof Logger !== 'undefined') Logger.error(`EventBus [${event}]:`, e); 
+                    Logger.error(`EventBus [${event}]:`, e); 
                 }
             });
         },

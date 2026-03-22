@@ -132,3 +132,5 @@ ${tarjeta.Contenido}`;
     }
     return fragmentos;
 }
+
+CommandRegistry.register('fragmentarTarjetaActualIA', () => fragmentarTarjetaActualIA());

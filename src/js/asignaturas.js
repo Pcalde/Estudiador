@@ -67,6 +67,7 @@ function borrarAsignatura(nombre, ev) {
 
 function cargarAsignatura(nombre) {
     Logger.info("Cargando asignatura:", nombre);
+    State.set('currentContext', 'study');
 
     nombreAsignaturaActual = nombre;
     actualizarMenuLateral();
@@ -132,3 +133,7 @@ function crearProyecto() {
 function actualizarDesplegableMini() {
     UI.actualizarDesplegableMini(taskList, State.get('userColors') || {});
 }
+
+CommandRegistry.register('renombrarAsignatura', ({nombre}) => renombrarAsignatura(nombre));
+CommandRegistry.register('borrarAsignatura',    ({nombre}) => borrarAsignatura(nombre));
+CommandRegistry.register('borrarProyecto',      ({idx})    => borrarProyecto(Number(idx)));

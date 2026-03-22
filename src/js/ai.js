@@ -131,7 +131,7 @@ const AI = (() => {
                     procesadas++;
                     
                 } catch (e) {
-                    if (typeof Logger !== 'undefined') Logger.error("Fallo IA en título:", e);
+                    Logger.error("Fallo IA en título:", e);
                     tarjetas[i].Titulo = "Error de IA (Editar)";
                     delete tarjetas[i]._needsAutoTitle;
                 }

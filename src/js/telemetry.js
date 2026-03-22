@@ -23,7 +23,7 @@ const Telemetry = (() => {
                 try {
                     fn();
                 } catch (e) {
-                    if (typeof Logger !== 'undefined') Logger.error(`Dashboard: Excepción controlada en ${wid}:`, e);
+                    Logger.error(`Dashboard: Excepción controlada en ${wid}:`, e);
                 }
             } 
         };
@@ -61,33 +61,32 @@ const Telemetry = (() => {
 
     function updateDifficultyStats() {
         const asig = State.get('nombreAsignaturaActual');
-        const bib = State.get('biblioteca');
+        const bib = State.getRef('biblioteca');
         if (!asig || !bib[asig]) return;
 
         const cards = bib[asig];
-        const snapKey = `dist_snap_${asig}`;
-        const prevSnap = JSON.parse(localStorage.getItem(snapKey) || 'null');
-        
-        // CÁLCULO ESTRICTO EN TELEMETRÍA
-        let counts = { 0:0, 1:0, 2:0, 3:0, 4:0 };
+        let counts = { new: 0, learning: 0, consolidando: 0, revision: 0, dominadas: 0 };
         let pendientesHoy = 0;
-        const todayVal = window.fechaValor(window.getFechaHoy());
+        const todayVal = Domain.fechaValor(Domain.getFechaHoy());
 
         cards.forEach(c => {
-            const dif = (c.Dificultad === null || c.Dificultad === undefined) ? 2 : parseInt(c.Dificultad);
-            const etapa = c.EtapaRepaso || 0;
-            const tieneRepaso = !!c.UltimoRepaso;
+            const state     = c.fsrs_state || 'new';
+            const stability = c.fsrs_stability || 0;
 
-            if (dif === 2 && !tieneRepaso && etapa === 0) counts[0]++;
-            else if (counts[dif] !== undefined) counts[dif]++;
-            else counts[3]++;
+            if (!c.UltimoRepaso || state === 'new') {
+                counts.new++;
+            } else if (state === 'learning') {
+                counts.learning++;
+            } else {
+                if      (stability > 21) counts.dominadas++;
+                else if (stability >= 7) counts.revision++;
+                else                     counts.consolidando++;
+            }
 
-            if (c.ProximoRepaso && window.fechaValor(c.ProximoRepaso) <= todayVal) pendientesHoy++;
+            if (c.ProximoRepaso && Domain.fechaValor(c.ProximoRepaso) <= todayVal) pendientesHoy++;
         });
 
-        // Almacenar y delegar renderizado
-        localStorage.setItem(snapKey, JSON.stringify(counts));
-        UI.updateDifficultyStats(counts, prevSnap, cards.length, pendientesHoy);
+        UI.updateDifficultyStats(counts, cards.length, pendientesHoy);
     }
 
     function updateCalendarHeatmap() {
@@ -111,7 +110,7 @@ const Telemetry = (() => {
 
     function registrarPomoCompletado(asignatura) {
         let todayLog = JSON.parse(localStorage.getItem('pomo_log_today') || '{"date":"","count":0, "details":{}}');
-        const todayStr = window.getFechaHoy();
+        const todayStr = Domain.getFechaHoy();
         
         if(todayLog.date !== todayStr) { 
             if(todayLog.date && todayLog.count > 0) {
@@ -158,7 +157,7 @@ const Telemetry = (() => {
         if (historial.length > 100) historial.shift();
         
         localStorage.setItem('estudiador_historial_examenes', JSON.stringify(historial));
-        if (typeof Logger !== 'undefined') Logger.info("Historial de examen persistido.");
+        Logger.info("Historial de examen persistido.");
     }
 
     function editarProgresoManual() {
@@ -194,18 +193,13 @@ const Telemetry = (() => {
 
         const cards = biblioteca[asig];
         const today = new Date();
-        const todayStr = window.formatearFecha(today);
-        const todayVal = window.fechaValor(todayStr);
+        const todayStr = Domain.formatearFecha(today);
 
         let doneMap = {};
-        let missedMap = {};
 
+        // Mapeamos únicamente los días donde hubo actividad real
         cards.forEach(c => {
             if (c.UltimoRepaso) doneMap[c.UltimoRepaso] = true;
-            if (c.ProximoRepaso) {
-                const pVal = window.fechaValor(c.ProximoRepaso);
-                if (pVal < todayVal) missedMap[c.ProximoRepaso] = true;
-            }
         });
 
         const todayLog = JSON.parse(localStorage.getItem('pomo_log_today') || '{"count":0, "details":{}}');
@@ -216,17 +210,19 @@ const Telemetry = (() => {
 
         let streak = 0;
         let checkDate = new Date(today);
-        checkDate.setDate(checkDate.getDate() - 1); 
+        
+        // LÓGICA DE RACHA CORREGIDA:
+        // Si ya estudiaste hoy, cuenta hacia atrás desde hoy.
+        // Si aún no has estudiado hoy, cuenta hacia atrás desde ayer (mantienes tu número visualmente).
+        const estudiadoHoy = !!doneMap[todayStr];
+        checkDate.setDate(checkDate.getDate() - (estudiadoHoy ? 0 : 1));
 
         for (let i = 0; i < 365; i++) {
-            const dayStr = window.formatearFecha(checkDate);
-            if (missedMap[dayStr]) break; 
-            else if (doneMap[dayStr]) streak++;
-            else break;
+            const dayStr = Domain.formatearFecha(checkDate);
+            if (!doneMap[dayStr]) break; // Solo rompe si un día entero no tuvo repasos
+            streak++;
             checkDate.setDate(checkDate.getDate() - 1);
         }
-
-        if (doneMap[todayStr]) streak++;
 
         const totalDiasActivos = Object.keys(doneMap).length;
         const totalCards = cards.filter(c => c.UltimoRepaso).length;
@@ -274,11 +270,11 @@ const Telemetry = (() => {
 
         for (let i = 0; i < 7; i++) {
             const d = new Date(); d.setDate(d.getDate() + i);
-            const dStr = window.formatearFecha(d);
+            const dStr = Domain.formatearFecha(d);
             const dayLabel = dayLabels[d.getDay()];
             const isToday = i === 0;
             const count = cards.filter(c => c.ProximoRepaso === dStr).length
-                        + (isToday ? cards.filter(c => c.ProximoRepaso && window.fechaValor(c.ProximoRepaso) < window.fechaValor(dStr)).length : 0);
+                        + (isToday ? cards.filter(c => c.ProximoRepaso && Domain.fechaValor(c.ProximoRepaso) < Domain.fechaValor(dStr)).length : 0);
             counts.push({ dayLabel, count, isToday });
         }
 
@@ -286,60 +282,43 @@ const Telemetry = (() => {
         UI.updatePronostico(counts, maxCount);
     }
     function updateDeudaEstudio() {
-        const asigActual = State.get('nombreAsignaturaActual');
-        const bib = State.get('biblioteca');
-        
-        if (!asigActual || !bib[asigActual]) {
-            if (typeof UI !== 'undefined' && typeof UI.updateDeudaEstudio === 'function') {
-                UI.updateDeudaEstudio(0, { nuevas:0, learning:0, repasoNormal:0, criticas:0 }, { nuevas:0, learning:0, repasoNormal:0, criticas:0 });
-            }
-            return;
-        }
+    const asigActual = State.get('nombreAsignaturaActual');
+    const bib = State.getRef('biblioteca');
 
-        try {
-            const todayVal = window.fechaValor(window.getFechaHoy());
-            let deudaTotal = 0;
-            let contadores = { nuevas: 0, learning: 0, repasoNormal: 0, criticas: 0 };
-            let deudaDesglose = { nuevas: 0, learning: 0, repasoNormal: 0, criticas: 0 };
-
-            bib[asigActual].forEach(c => {
-                if (c.ProximoRepaso && window.fechaValor(c.ProximoRepaso) <= todayVal) {
-                    const isNew = c.fsrs_state === 'new' || (!c.fsrs_state && !c.UltimoRepaso);
-                    if (isNew) {
-                        deudaTotal += 1.0; contadores.nuevas++; deudaDesglose.nuevas += 1.0;
-                    } else if (c.fsrs_state === 'learning') {
-                        deudaTotal += 4.0; contadores.learning++; deudaDesglose.learning += 4.0;
-                    } else {
-                        // Cálculo seguro de días transcurridos con fallback nativo
-                        let elapsed = 0;
-                        if (c.UltimoRepaso) {
-                            if (typeof window.diffDiasCalendario === 'function') {
-                                elapsed = Math.max(0, window.diffDiasCalendario(c.UltimoRepaso, window.getFechaHoy()));
-                            } else {
-                                const d1 = new Date(c.UltimoRepaso);
-                                const d2 = new Date(window.getFechaHoy());
-                                if (!isNaN(d1) && !isNaN(d2)) elapsed = Math.max(0, Math.floor((d2 - d1) / 86400000));
-                            }
-                        }
-                        const stability = c.fsrs_stability || 1;
-                        const R = Math.pow(0.9, elapsed / stability);
-                        const D = c.fsrs_difficulty || 5;
-                        const peso = Math.max(0.5, (1 - R) * D);
-                        
-                        deudaTotal += peso;
-                        if (R < 0.8) { contadores.criticas++; deudaDesglose.criticas += peso; } 
-                        else { contadores.repasoNormal++; deudaDesglose.repasoNormal += peso; }
-                    }
-                }
-            });
-
-            if (typeof UI !== 'undefined' && typeof UI.updateDeudaEstudio === 'function') {
-                UI.updateDeudaEstudio(deudaTotal, contadores, deudaDesglose);
-            }
-        } catch (err) {
-            if (typeof Logger !== 'undefined') Logger.error("Telemetría (Deuda): Ejecución abortada.", err);
-        }
+    if (!asigActual || !bib[asigActual]) {
+        UI.updateDeudaEstudio(0, { nuevas:0, learning:0, repasoNormal:0, criticas:0 }, { nuevas:0, learning:0, repasoNormal:0, criticas:0 });
+        return;
     }
+
+    try {
+        const todayVal = fechaValor(getFechaHoy());
+        let deudaTotal = 0;
+        let contadores  = { nuevas:0, learning:0, repasoNormal:0, criticas:0 };
+        let deudaDesglose = { nuevas:0, learning:0, repasoNormal:0, criticas:0 };
+
+        bib[asigActual].forEach(c => {
+            if (!c.ProximoRepaso || fechaValor(c.ProximoRepaso) > todayVal) return;
+
+            const isNew = c.fsrs_state === 'new' || (!c.fsrs_state && !c.UltimoRepaso);
+            if (isNew) {
+                deudaTotal += 1.0; contadores.nuevas++; deudaDesglose.nuevas += 1.0;
+            } else if (c.fsrs_state === 'learning') {
+                deudaTotal += 4.0; contadores.learning++; deudaDesglose.learning += 4.0;
+            } else {
+                const R = Scheduler.retencionActual(c) ?? 0.9;
+                const D = c.fsrs_difficulty || 5;
+                const peso = Math.max(0.5, (1 - R) * D);
+                deudaTotal += peso;
+                if (R < 0.8) { contadores.criticas++; deudaDesglose.criticas += peso; }
+                else         { contadores.repasoNormal++; deudaDesglose.repasoNormal += peso; }
+            }
+        });
+
+        UI.updateDeudaEstudio(deudaTotal, contadores, deudaDesglose);
+    } catch (err) {
+        Logger.error("Telemetría (Deuda): Ejecución abortada.", err);
+    }
+}
     
     function updateEficienciaWidget() {
         const pomoLogHoy = JSON.parse(localStorage.getItem('pomo_log_today') || '{"count":0,"details":{}}');
@@ -359,7 +338,7 @@ const Telemetry = (() => {
         const sessionData = State.get('sessionData') || { tarjetas: 0, faciles: 0, dificiles: 0, criticas: 0, deudaInicial: 0 };
         const asig = State.get('nombreAsignaturaActual');
         const biblio = State.get('biblioteca');
-        const deudaAhora = typeof window.calcularDeuda === 'function' ? window.calcularDeuda(asig, biblio) : 0; 
+        const deudaAhora = typeof Domain.calcularDeuda === 'function' ? Domain.calcularDeuda(asig, biblio) : 0; 
         
         // Delegación estricta a la capa de UI.
         UI.showResumenSesion(sessionData, deudaAhora);
@@ -386,27 +365,30 @@ const Telemetry = (() => {
  * @returns {number}
  */
 function _calcularRachaDesdeEstado(biblioteca) {
-    const todayStr = window.getFechaHoy();
-    let doneMap = {};
+        const todayStr = Domain.getFechaHoy();
+        let doneMap = {};
 
-    Object.values(biblioteca || {}).forEach(tarjetas => {
-        (tarjetas || []).forEach(c => {
-            if (c.UltimoRepaso) doneMap[window.toISODateString(c.UltimoRepaso)] = true;
+        Object.values(biblioteca || {}).forEach(tarjetas => {
+            (tarjetas || []).forEach(c => {
+                if (c.UltimoRepaso) doneMap[Domain.toISODateString(c.UltimoRepaso)] = true;
+            });
         });
-    });
 
-    let streak = doneMap[todayStr] ? 1 : 0;
-    let check  = new Date();
-    check.setDate(check.getDate() - 1);
+        let streak = 0;
+        let check = new Date();
+        
+        // Aplica el mismo pivote lógico para el resumen público
+        const estudiadoHoy = !!doneMap[todayStr];
+        check.setDate(check.getDate() - (estudiadoHoy ? 0 : 1));
 
-    for (let i = 0; i < 365; i++) {
-        const d = window.formatearFecha(check);
-        if (!doneMap[d]) break;
-        streak++;
-        check.setDate(check.getDate() - 1);
+        for (let i = 0; i < 365; i++) {
+            const d = Domain.formatearFecha(check);
+            if (!doneMap[d]) break;
+            streak++;
+            check.setDate(check.getDate() - 1);
+        }
+        return streak;
     }
-    return streak;
-}
 
 /**
  * Construye el objeto de estadísticas públicas del usuario para Firestore.
@@ -419,7 +401,7 @@ function construirResumenPublico() {
 
     const todayLog   = JSON.parse(localStorage.getItem('pomo_log_today') || '{"count":0}');
     const biblioteca = State.get('biblioteca') || {};
-    const todayVal   = window.fechaValor(window.getFechaHoy());
+    const todayVal   = Domain.fechaValor(Domain.getFechaHoy());
 
     const resumen = {
         isPrivate:     false,
@@ -436,34 +418,19 @@ function construirResumenPublico() {
         const tarjetas = Array.isArray(biblioteca[asig]) ? biblioteca[asig] : [];
         if (!tarjetas.length) return;
 
-        let pendientes = 0, dominadas = 0, deudaLocal = 0;
+        let pendientes = 0, dominadas = 0
 
         tarjetas.forEach(c => {
-            if (!c?.ProximoRepaso || window.fechaValor(c.ProximoRepaso) <= todayVal) pendientes++;
+            if (!c?.ProximoRepaso || Domain.fechaValor(c.ProximoRepaso) <= todayVal) pendientes++;
 
             if      (c.fsrs_state === 'review' && c.fsrs_stability > 21) dominadas++;
             else if (!c.fsrs_state && (c?.EtapaRepaso || 0) >= 5)        dominadas++;
-
-            if (c.ProximoRepaso && window.fechaValor(c.ProximoRepaso) <= todayVal) {
-                const isNew = c.fsrs_state === 'new' || (!c.fsrs_state && !c.UltimoRepaso);
-                if (isNew) {
-                    deudaLocal += 1.0;
-                } else if (c.fsrs_state === 'learning') {
-                    deudaLocal += 4.0;
-                } else {
-                    const elapsed = c.UltimoRepaso
-                        ? Math.max(0, window.diffDiasCalendario(c.UltimoRepaso, window.getFechaHoy()))
-                        : 0;
-                    const R = Math.pow(0.9, elapsed / (c.fsrs_stability || 1));
-                    deudaLocal += Math.max(0.5, (1 - R) * (c.fsrs_difficulty || 5));
-                }
-            }
         });
-
+        
         resumen.totalTarjetas += tarjetas.length;
         resumen.pendientesHoy += pendientes;
         resumen.dominadas     += dominadas;
-        resumen.deudaTotal    += deudaLocal;
+        resumen.deudaTotal    += Scheduler.calcularDeudaArray(tarjetas);
         resumen.asignaturas.push({
             nombre:        asig,
             totalTarjetas: tarjetas.length,

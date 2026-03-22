@@ -77,3 +77,11 @@ function cerrarPanelesMoviles() {
     document.getElementById('sidebar')?.classList.remove('mobile-open');
     document.getElementById('dashboard-col')?.classList.remove('mobile-active');
 }
+
+CommandRegistry.register('nav-mobile',    ({target}) => manejarNavegacionMovil(target));
+CommandRegistry.register('abrir-ajustes', ()         => { manejarNavegacionMovil('study'); window.abrirAjustes(); });
+CommandRegistry.register('toggle-pomodoro', () => {
+    manejarNavegacionMovil('study');
+    const pomoCard = document.getElementById('pomodoro-card');
+    if (pomoCard) { pomoCard.classList.remove('collapsed'); pomoCard.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+});

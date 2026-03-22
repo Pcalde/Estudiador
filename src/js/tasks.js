@@ -219,3 +219,7 @@ window.toggleDone            = (i)   => Tasks.toggleHecha(i);
 window.editTask              = (i,e) => Tasks.editar(i, e);
 window.deleteTask            = (i)   => Tasks.eliminar(i);
 window.activarTareaDesdeMini = (s)   => Tasks.activarDesdeMini(s);
+
+CommandRegistry.register('editTask',   ({idx}) => Tasks.editar(Number(idx)));
+CommandRegistry.register('toggleDone', ({idx}) => Tasks.toggleHecha(Number(idx)));
+CommandRegistry.register('deleteTask', ({idx}) => Tasks.eliminar(Number(idx)));

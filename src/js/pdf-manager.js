@@ -207,3 +207,5 @@ window.crearSlotRecurso = PDFManager.crearSlot;
 window.borrarSlot = PDFManager.borrarSlot;
 window.clickEnSlot = PDFManager.clickEnSlot;
 window.cargarPDFEnSlot = PDFManager.cargarPDFEnSlot;
+
+CommandRegistry.register('borrarSlot', ({idx}) => PDFManager.borrarSlot(Number(idx)));

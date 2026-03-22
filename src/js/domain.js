@@ -489,7 +489,7 @@ const Scheduler = {
             now.setSeconds(now.getSeconds() + timeSeconds);
             return now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
         } catch (error) {
-            if (typeof Logger !== 'undefined') Logger.error("Error en calcularHoraFinPomodoro:", error);
+            Logger.error("Error en calcularHoraFinPomodoro:", error);
             return null;
         }
     }
@@ -575,6 +575,18 @@ const Domain = {
     calcularHoraFinPomodoro,
     esAsignaturaValida,
     resolverAsignaturaDeTarea,
+    parseDateSafe,
+    toISODateString,
+    formatDateForUI,
+    getFechaHoy,
+    formatearFecha,
+    fechaValor,
+    esVencido,
+    diffDiasCalendario,
+    normalizarPomoFechas,
+    normalizarBibliotecaFechas,
+    normalizarFechasClave,
+    calcularDeuda,
 };
 
 // Exposición segura al objeto global para que otros scripts (pomodoro.js) lo detecten

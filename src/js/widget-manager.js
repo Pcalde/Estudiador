@@ -244,3 +244,8 @@ const WidgetManager = (() => {
 })();
 
 window.openWidgetManagePanel = () => WidgetManager.openManagePanel();
+
+CommandRegistry.register('minimizeWidget',         ({widgetId}) => WidgetManager.toggleMinimize(widgetId));
+CommandRegistry.register('hideWidget',             ({widgetId}) => WidgetManager.toggleHide(widgetId));
+CommandRegistry.register('restoreWidget',          ({widgetId}) => WidgetManager.toggleHide(widgetId));
+CommandRegistry.register('restaurarWidgetsOcultos',()           => WidgetManager.restaurarWidgets());

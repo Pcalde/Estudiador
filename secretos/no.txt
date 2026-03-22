@@ -1,14 +1,14 @@
 ESTUDIADOR PRO - AUDITORÍA TÉCNICA Y BACKLOG DE MEJORAS (v1.18)
 ==============================================================
 
-1. PURGADO DE LÓGICA SRS EN CAPA DE TELEMETRÍA
+1. PURGADO DE LÓGICA SRS EN CAPA DE TELEMETRÍA ****
    - Dónde: telemetry.js (funciones updateDeudaEstudio y updateEficienciaWidget).
    - Qué: Eliminar cálculos manuales de retención (R) y pesos de deuda basados en Math.pow.
    - Por qué: Violación de SoC (Separation of Concerns). La lógica matemática del algoritmo 
      FSRS-6 debe ser exclusiva de domain.js. Telemetry solo debe invocar métodos 
      del Scheduler/Domain.
 
-2. DESACOPLAMIENTO DOM/UI DEL MOTOR DE ESTUDIO
+2. DESACOPLAMIENTO DOM/UI DEL MOTOR DE ESTUDIO ??????????
    - Dónde: study-engine.js (función aplicarFiltros).
    - Qué: Eliminar la llamada directa a UI.getEstadoFiltros() y las invocaciones de 
      renderizado (UI.renderEstadoFiltros).
@@ -16,100 +16,100 @@ ESTUDIADOR PRO - AUDITORÍA TÉCNICA Y BACKLOG DE MEJORAS (v1.18)
      desde State y emitir eventos vía EventBus cuando la cola cambie, permitiendo que 
      app.js orqueste la actualización visual.
 
-3. SANEAMIENTO DE OBJETOS NO SERIALIZABLES EN STATE.JS
+3. SANEAMIENTO DE OBJETOS NO SERIALIZABLES EN STATE.JS            ********************
    - Dónde: state.js (definición de _s) y firebase.js.
    - Qué: Extraer las instancias de 'db' (Firestore) y 'auth' del objeto de estado.
    - Por qué: El State debe ser una fuente de datos pura y serializable. Las conexiones 
      a Firebase son infraestructura y deben vivir en su propio módulo o en un 
      Service Locator, no en el árbol de estado.
 
-4. REFACTOR DE CONTROLADOR DE TECLADO (CONTEXT-AWARE)
+4. REFACTOR DE CONTROLADOR DE TECLADO (CONTEXT-AWARE) ****
    - Dónde: app.js (EventListener 'keydown').
    - Qué: Sustituir las comprobaciones de visibilidad de clases CSS (ej. .classList.contains('hidden')) 
      por una propiedad de contexto en el Estado (ej. State.currentContext).
    - Por qué: El flujo de control actual es frágil y depende de que el DOM esté en un 
      estado visual específico, lo que dificulta el testing y la mantenibilidad.
 
-5. OPTIMIZACIÓN DE SINCRONIZACIÓN (DEBOUNCED CLOUD SYNC)
+5. OPTIMIZACIÓN DE SINCRONIZACIÓN (DEBOUNCED CLOUD SYNC)            ***************
    - Dónde: firebase.js (función _manejarCambioAuth y auto-save).
    - Qué: Eliminar el setInterval ciego de 15 minutos. Implementar un suscriptor al evento 
      'DATA_REQUIRES_SAVE' con un debounce de 3-5 minutos.
    - Por qué: El intervalo actual genera peticiones innecesarias a Firestore o arriesga 
      pérdida de datos si el usuario cierra la pestaña antes del ciclo.
 
-6. CENTRALIZACIÓN DE PERSISTENCIA DE TELEMETRÍA
+6. CENTRALIZACIÓN DE PERSISTENCIA DE TELEMETRÍA ?????
    - Dónde: telemetry.js (uso de localStorage para 'dist_snap' y 'pomo_history').
    - Qué: Migrar el almacenamiento de snapshots de telemetría hacia State o IndexedDB (db.js).
    - Por qué: Bypass de la arquitectura centralizada. El uso directo de localStorage en 
      módulos de lógica ensucia el flujo de datos y genera I/O síncrono bloqueante.
 
-7. PARAMETRIZACIÓN DE PESOS FSRS-6
+7. PARAMETRIZACIÓN DE PESOS FSRS-6 
    - Dónde: domain.js (FSRS6_W_DEFAULT) y state.js (pomoSettings).
    - Qué: Mover los 21 parámetros del algoritmo al State y permitir su edición en Ajustes.
    - Por qué: El algoritmo es actualmente rígido. Usuarios avanzados necesitan inyectar 
      sus propios pesos optimizados para que la curva de olvido sea realmente 
      personalizada.
 
-8. ELIMINACIÓN DE HARDCODING EN DOMINIO ("GENERAL")
+8. ELIMINACIÓN DE HARDCODING EN DOMINIO ("GENERAL") ???
    - Dónde: domain.js (getObjetivoContextual).
    - Qué: Eliminar la referencia explícita a la asignatura 'General'.
    - Por qué: El dominio no debe conocer nombres específicos de datos del usuario. 
      Debe usar flags lógicas (ej. isDefaultAssignment) para manejar comportamientos 
      especiales.
 
-9. MEJORA DEL MANEJO DE ERRORES EN CARGA DE NUBE
+9. MEJORA DEL MANEJO DE ERRORES EN CARGA DE NUBE ????
    - Dónde: firebase.js (cargarDatosUsuario).
    - Qué: Implementar un sistema de versionado de datos en el documento del usuario.
    - Por qué: Si se cambia la estructura del objeto 'biblioteca' en una actualización, 
      la bajada de datos de la nube podría corromper el estado local sin un 
      MigrationEngine que actúe sobre los datos remotos.
 
-10. FUGA DE MANIPULACIÓN DOM Y UI EN CAPA DE DATOS (DATA-IO)
+10. FUGA DE MANIPULACIÓN DOM Y UI EN CAPA DE DATOS (DATA-IO)            ********************
     - Dónde: data-io.js (procesarImportacionLatex y procesarImportacion).
     - Qué: La capa de entrada/salida está leyendo directamente del DOM (ej: document.getElementById('import-area').value) y ejecutando mutaciones visuales o alertas.
     - Por qué: DataIO es infraestructura pura. Su responsabilidad es recibir un string (payload) desde el orquestador, parsearlo y mutar el State. Tocar el DOM rompe la barrera vista/modelo. 
 
-11. ACOPLAMIENTO INVERSO DEL MOTOR DE ESTUDIO HACIA LA INTERFAZ
+11. ACOPLAMIENTO INVERSO DEL MOTOR DE ESTUDIO HACIA LA INTERFAZ      *****************
     - Dónde: study-engine.js (función aplicarFiltros).
     - Qué: El motor de estudio invoca `UI.getEstadoFiltros()` para decidir cómo filtrar la cola.
     - Por qué: El Motor (Lógica) nunca debe preguntar a la Interfaz (Vista) qué hacer. Los filtros seleccionados por el usuario deben guardarse en el State (ej: State.get('filtrosActivos')). La UI debe mutar el estado de los filtros y el motor debe reaccionar a ese estado.
 
-12. DUPLICACIÓN CRÍTICA DEL ALGORITMO FSRS-6 EN TELEMETRÍA
+12. DUPLICACIÓN CRÍTICA DEL ALGORITMO FSRS-6 EN TELEMETRÍA      *********************************
     - Dónde: telemetry.js (función construirResumenPublico).
     - Qué: Se está recalculando manualmente la matemática de retención (R) y deuda SRS en lugar de usar el motor.
     - Por qué: Violación del principio DRY. Toda la matemática FSRS-6 es jurisdicción de domain.js. Si se modifican los 21 parámetros del algoritmo, la telemetría pública enviará a Firestore datos desincronizados. Debe invocar a `Scheduler.calcularDeudaArray`.
 
-13. ANTIPATRÓN DE DELEGACIÓN GLOBAL (GOD-SWITCH) EN EL ORQUESTADOR
+13. ANTIPATRÓN DE DELEGACIÓN GLOBAL (GOD-SWITCH) EN EL ORQUESTADOR ****************
     - Dónde: app.js (EventListener 'click' en el documento).
     - Qué: Existe un gigantesco `switch (action)` que procesa más de 30 acciones de interfaz.
     - Por qué: Viola el Principio Abierto/Cerrado (OCP). app.js está acoplado a cada botón. Se requiere un patrón CommandRegistry o que cada módulo de UI registre sus handlers durante su inicialización.
 
-14. INYECCIÓN DE DEPENDENCIAS GLOBALES INCONTROLADAS
+14. INYECCIÓN DE DEPENDENCIAS GLOBALES INCONTROLADAS *********
     - Dónde: study-engine.js y telemetry.js.
     - Qué: Uso de funciones de dominio colgadas en `window`, como `window.esVencido(c.ProximoRepaso)`.
     - Por qué: Contamina el global namespace y oculta dependencias. Las funciones de fechas de domain.js deben consumirse mediante un namespace explícito (ej. Domain.esVencido()) para facilitar el testing.
 
-15. PERSISTENCIA DESCENTRALIZADA DE CACHÉ DE SESIÓN
+15. PERSISTENCIA DESCENTRALIZADA DE CACHÉ DE SESIÓN ?????
     - Dónde: telemetry.js (updateDifficultyStats, registrarPomoCompletado).
     - Qué: Uso directo de localStorage.setItem() en medio de funciones de cálculo.
     - Por qué: Bypass de la arquitectura de persistencia. Los datos transaccionales deben subirse vía State.set() y guardarse cuando el EventBus emita 'DATA_REQUIRES_SAVE'. El I/O directo es bloqueante.
 
-16. LÓGICA DE NEGOCIO ENCAPSULADA EN CONTROLADORES DE TECLADO
+16. LÓGICA DE NEGOCIO ENCAPSULADA EN CONTROLADORES DE TECLADO ***********
     - Dónde: app.js (listener de 'keydown').
     - Qué: Se evalúa si aplicar lógica leyendo si una clase de CSS está presente (!document.getElementById('concepto-contenido')?.classList.contains('hidden')).
     - Por qué: Control de hardware acoplado al estado visual. Se debe leer el contexto lógico desde State.get('currentContext').
 
-17. FALLO DE SECUENCIA DE ARRANQUE (SILENT FAILURES EN LOGGER)
+17. FALLO DE SECUENCIA DE ARRANQUE (SILENT FAILURES EN LOGGER)   ***********
     - Dónde: app.js (definición de Logger) vs db.js / state.js.
     - Qué: Logger se define en app.js (último archivo en el orden de carga según la documentación del archivo). Sin embargo, módulos inferiores como db.js intentan hacer logging usando un salvavidas `if (typeof Logger !== 'undefined')`.
     - Por qué: Inversión de dependencias de infraestructura. Si db.js o state.js fallan al inicializar, el error se traga silenciosamente porque Logger aún no existe en memoria. El sistema de telemetría interna (Logger) debe ser el primer script en cargarse.
 
-18. ANTIPATRÓN DE CONTROL DE FLUJO POR EVENTOS VISUALES (GHOST CLICKING)
+18. ANTIPATRÓN DE CONTROL DE FLUJO POR EVENTOS VISUALES (GHOST CLICKING) ************
     - Dónde: app.js (listener 'keydown' para Modo Examen/Pomodoro).
     - Qué: Se usa intensivamente `simularClickVisual('#ex-f-btn-revelar')` para forzar que avance la lógica de la aplicación.
     - Por qué: Programación espagueti. Obligar al DOM a simular un clic programático para que se dispare un handler que ejecuta la lógica real es inaceptable. El atajo de teclado debe invocar directamente la función de lógica en el dominio/controlador, y la UI debe actualizarse reaccionando al cambio de estado.
 
-19. FUGA DE MUTABILIDAD EN LA FUENTE DE LA VERDAD (STATE.JS)
+19. FUGA DE MUTABILIDAD EN LA FUENTE DE LA VERDAD (STATE.JS) *******
     - Dónde: state.js (método `get`).
     - Qué: `State.get('biblioteca')` devuelve la referencia directa al objeto en memoria. 
     - Por qué: Cualquier módulo (o la propia UI) puede hacer `const bib = State.get('biblioteca'); bib.Matematicas[0].Titulo = 'Hack';` y modificar el estado sin pasar por `State.set()`. Esto evade las transacciones (batch), no dispara eventos en el EventBus y rompe la sincronización. State debe devolver clones profundos (structuredClone) o congelar los objetos (Object.freeze) al entregarlos para forzar la inmutabilidad de lectura.

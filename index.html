@@ -952,6 +952,7 @@
                 <ul style="list-style: none; padding: 0; font-size: 0.85em; color: #eee; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                     <li><kbd style="background: #333; padding: 2px 5px; border-radius: 3px;">Espacio</kbd> Pausar/Reanudar Pomodoro</li>
                     <li><kbd style="background: #333; padding: 2px 5px; border-radius: 3px;">Enter</kbd> Revelar/Ocultar respuesta</li>
+                    <li><kbd style="background: #333; padding: 2px 5px; border-radius: 3px;">←/→</kbd> Navegar entre tarjetas</li>
                     <li><kbd style="background: #333; padding: 2px 5px; border-radius: 3px;">1 - 4</kbd> Calificar dificultad</li>
                     <li><kbd style="background: #333; padding: 2px 5px; border-radius: 3px;">L</kbd> Alternar Modo Lectura</li>
                     <li><kbd style="background: #333; padding: 2px 5px; border-radius: 3px;">S</kbd> Alternar Modo Secuencial</li>
@@ -1026,7 +1027,38 @@
                 </div>
                 
             </div>
-        </div>
+            </div>
+            <div class="info-section" style="margin-top: 20px;">
+                <h5 style="color:var(--accent); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+                    <i class="fa-solid fa-chart-bar"></i> Widget de Distribución de Tarjetas
+                </h5>
+                <p style="font-size:0.85em; color:#bbb; line-height:1.5; margin-bottom:10px;">
+                    El widget muestra en qué fase del aprendizaje se encuentra cada tarjeta según el algoritmo FSRS-6:
+                </p>
+                <div style="display:flex; flex-direction:column; gap:8px; font-size:0.82em;">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span style="width:12px;height:12px;border-radius:2px;background:var(--border);flex-shrink:0;"></span>
+                        <span><strong style="color:#ccc;">Nuevas</strong> — Nunca repasadas. El algoritmo no tiene datos sobre ellas.</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span style="width:12px;height:12px;border-radius:2px;background:var(--status-red);flex-shrink:0;"></span>
+                        <span><strong style="color:#ccc;">Reaprendizaje</strong> — Falladas recientemente. El algoritmo las reprograma con intervalos cortos para reforzar la conexión.</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span style="width:12px;height:12px;border-radius:2px;background:var(--status-yellow);flex-shrink:0;"></span>
+                        <span><strong style="color:#ccc;">Consolidando</strong> — En repaso espaciado pero con estabilidad baja (menos de 7 días). Aún frágiles.</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span style="width:12px;height:12px;border-radius:2px;background:var(--status-green);flex-shrink:0;"></span>
+                        <span><strong style="color:#ccc;">Revisión</strong> — Estabilidad media (7-21 días). Bien asentadas pero con revisión periódica necesaria.</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span style="width:12px;height:12px;border-radius:2px;background:var(--status-blue);flex-shrink:0;"></span>
+                        <span><strong style="color:#ccc;">Dominadas</strong> — Estabilidad alta (más de 21 días). El concepto está sólidamente en memoria a largo plazo.</span>
+                    </div>
+                </div>
+            </div>
+        
         </div>
         
         <!-- BOTÓN DE GUARDAR; LO PONEMOS SIN TAB Y APARECE EN TODAS LAS PESTAÑAS -->
@@ -1039,7 +1071,7 @@
     </div>
 </div>
 
-<div id="pomodoro-modal" class="hidden" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:2000; display:flex; justify-content:center; align-items:center;">
+<div id="pomodoro-modal" class="hidden" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); display:flex; justify-content:center; align-items:center;">
     <div class="modal-content" style="max-width:600px; width:95%; border:1px solid #444; background:var(--card-bg);">
         <div class="modal-header">
             <h3>Gestión Pomodoro</h3>
@@ -1505,6 +1537,8 @@
 
 
 <!-- Módulos cargados en orden de dependencias -->
+<script src="src/js/logger.js"></script>
+<script src="src/js/command-registry.js"></script>
 <script src="src/js/event-bus.js"></script>
 <script src="src/js/state.js"></script>
 <script src="src/js/db.js" defer></script>

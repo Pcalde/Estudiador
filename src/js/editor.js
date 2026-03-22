@@ -67,7 +67,7 @@ function guardarDatosEditorAmigable(cerrar = true) {
     if (!concepto || !asigActual) return false;
 
     if (typeof UI === 'undefined' || !UI.getEditorData) {
-        Logger.error("Arquitectura: UI.getEditorData no disponible.");
+        if (typeof Logger !== 'undefined') Logger.error("Arquitectura: UI.getEditorData no disponible.");
         return false;
     }
 
@@ -77,11 +77,19 @@ function guardarDatosEditorAmigable(cerrar = true) {
         return false;
     }
 
+    let success = false;
     State.batch(() => {
         const biblioteca = State.get('biblioteca');
-        const targetIdx  = biblioteca[asigActual].findIndex(
-            c => c.id === concepto.id || (c.Titulo === concepto.Titulo && c.Contenido === concepto.Contenido)
-        );
+        
+        // Identidad estricta priorizando los identificadores únicos
+        const matcher = (c) => {
+            if (c.id && concepto.id && c.id === concepto.id) return true;
+            if (c._idx !== undefined && concepto._idx !== undefined && c._idx === concepto._idx) return true;
+            if (c.IndiceGlobal !== undefined && concepto.IndiceGlobal !== undefined && c.IndiceGlobal === concepto.IndiceGlobal) return true;
+            return c.Titulo === concepto.Titulo && c.Contenido === concepto.Contenido;
+        };
+
+        const targetIdx = biblioteca[asigActual].findIndex(matcher);
 
         if (targetIdx !== -1) {
             const updatedCard = {
@@ -96,21 +104,24 @@ function guardarDatosEditorAmigable(cerrar = true) {
             State.set('conceptoActual', structuredClone(updatedCard));
 
             let cola = State.get('colaEstudio') || [];
-            const colaIdx = cola.findIndex(
-                c => c.id === concepto.id || (c.Titulo === concepto.Titulo && c.Contenido === concepto.Contenido)
-            );
+            const colaIdx = cola.findIndex(matcher);
             if (colaIdx !== -1) {
                 cola[colaIdx] = updatedCard;
                 State.set('colaEstudio', cola);
             }
+            success = true;
+        } else {
+            if (typeof Logger !== 'undefined') Logger.error("Editor: Índice objetivo no localizado. Abortando mutación para evitar duplicados.");
         }
     });
 
-    EventBus.emit('DATA_REQUIRES_SAVE');
-    if (typeof window.updateDashboard === 'function') window.updateDashboard();
-    if (typeof UI !== 'undefined' && UI.mostrarFeedbackGuardadoEditor) UI.mostrarFeedbackGuardadoEditor();
-    if (cerrar) cancelarEdicion();
-    return true;
+    if (success) {
+        if (typeof EventBus !== 'undefined') EventBus.emit('DATA_REQUIRES_SAVE');
+        if (typeof window.updateDashboard === 'function') window.updateDashboard();
+        if (typeof UI !== 'undefined' && UI.mostrarFeedbackGuardadoEditor) UI.mostrarFeedbackGuardadoEditor();
+        if (cerrar) cancelarEdicion();
+    }
+    return success;
 }
 
 function navegarEditor(delta) {
@@ -134,6 +145,14 @@ function navegarEditor(delta) {
 async function guardarNuevoConcepto() {
     if (typeof UI === 'undefined' || !UI.getEditorData) return;
 
+    // INTERCEPTOR ARQUITECTÓNICO: Redirección forzosa.
+    // Si la UI invoca esto por error pero hay un concepto activo, se trata de una edición.
+    if (State.get('conceptoActual')) {
+        if (typeof Logger !== 'undefined') Logger.info("Interceptado intento de crear nueva tarjeta durante edición. Redirigiendo...");
+        guardarDatosEditorAmigable(true);
+        return;
+    }
+
     const formData = UI.getEditorData();
     let t = formData.titulo;
     const c = formData.contenido;
@@ -156,24 +175,29 @@ async function guardarNuevoConcepto() {
 
     State.batch(() => {
         const biblioteca = State.get('biblioteca');
+        const maxIdx = biblioteca[asigActual].reduce((max, card) => Math.max(max, card.IndiceGlobal || card._idx || 0), 0);
+        
         biblioteca[asigActual].push({
             "Titulo":       t,
-            "Contenido":    _procesarContenido(c),
+            "Contenido":    typeof _procesarContenido === 'function' ? _procesarContenido(c) : c,
             "Tema":         formData.tema || 1,
             "Apartado":     formData.apartado || "Concepto",
             "EtapaRepaso":  0,
             "Dificultad":   2,
             "UltimoRepaso": null,
-            "ProximoRepaso": window.getFechaHoy()
+            "ProximoRepaso": typeof window.getFechaHoy === 'function' ? window.getFechaHoy() : new Date().toISOString().split('T')[0],
+            "IndiceGlobal": maxIdx + 1,
+            "_idx":         maxIdx + 1
         });
         State.set('biblioteca', biblioteca);
     });
 
-    EventBus.emit('DATA_REQUIRES_SAVE');
+    if (typeof EventBus !== 'undefined') EventBus.emit('DATA_REQUIRES_SAVE');
     if (typeof UI.limpiarEditorData === 'function') UI.limpiarEditorData();
     alert("Tarjeta guardada: " + t);
     cancelarEdicion();
     if (typeof window.aplicarFiltros === 'function') window.aplicarFiltros();
+    if (typeof window.updateDashboard === 'function') window.updateDashboard();
 }
 
 function setImportMode(mode) {

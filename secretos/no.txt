@@ -63,3 +63,59 @@ ESTUDIADOR PRO - AUDITORÍA TÉCNICA Y BACKLOG DE MEJORAS (v1.18)
    - Por qué: Si se cambia la estructura del objeto 'biblioteca' en una actualización, 
      la bajada de datos de la nube podría corromper el estado local sin un 
      MigrationEngine que actúe sobre los datos remotos.
+
+10. FUGA DE MANIPULACIÓN DOM Y UI EN CAPA DE DATOS (DATA-IO)
+
+Dónde: data-io.js (en procesarImportacionLatex y procesarImportacion).
+
+Qué: La capa de entrada/salida está leyendo directamente del DOM (const raw = document.getElementById('import-area').value;) y ejecutando mutaciones visuales como vaciar inputs (document.getElementById('import-area-latex').value = "";) e invocando alert(...).
+
+Por qué: DataIO debe ser una capa de infraestructura pura. Su responsabilidad es recibir un string (payload), parsearlo y mutar el State. Interactuar con el DOM o disparar alertas viola la regla estricta de que solo ui.js dibuja en pantalla. Las notificaciones deben delegarse mediante EventBus.emit() o retornando objetos de resultado al controlador.
+
+11. ACOPLAMIENTO INVERSO DEL MOTOR DE ESTUDIO HACIA LA INTERFAZ
+
+Dónde: study-engine.js (función aplicarFiltros).
+
+Qué: El motor de estudio invoca const f = UI.getEstadoFiltros(); para decidir cómo filtrar la cola.
+
+Por qué: El Motor (Lógica) nunca debe preguntar a la Interfaz (Vista) qué hacer. Es una fuga de dependencia inaceptable. Los filtros seleccionados por el usuario deben guardarse en el estado (State.get('filtrosActivos')). La UI debe mutar el estado de los filtros y el motor debe reaccionar a ese estado, asegurando que StudyEngine siga siendo agnóstico al entorno gráfico.
+
+12. DUPLICACIÓN CRÍTICA DEL ALGORITMO FSRS-6 EN TELEMETRÍA
+
+Dónde: telemetry.js (función construirResumenPublico).
+
+Qué: Se está recalculando manualmente la matemática de retención y deuda SRS: const R = Math.pow(0.9, elapsed / (c.fsrs_stability || 1)); y calculando el peso de deuda deudaLocal += Math.max(0.5, (1 - R) * (c.fsrs_difficulty || 5));.
+
+Por qué: Violación flagrante del principio DRY. Toda la matemática FSRS-6 es jurisdicción exclusiva de domain.js. Si el día de mañana se modifican los 21 parámetros del algoritmo, la telemetría pública enviará a Firestore datos erróneos y desincronizados respecto al planificador local. Se debe invocar a Scheduler.calcularDeudaArray.
+
+13. ANTIPATRÓN DE DELEGACIÓN GLOBAL (GOD-SWITCH) EN EL ORQUESTADOR
+
+Dónde: app.js (Bloque de Event Delegation document.addEventListener('click', ...)).
+
+Qué: Existe un gigantesco switch (action) que procesa más de 30 acciones de interfaz, desde renombrarAsignatura hasta pz-btn-lapiz.
+
+Por qué: Esto viola el Principio Abierto/Cerrado (OCP). app.js está acoplado a cada botón microscópico de la aplicación. Se requiere implementar un patrón de CommandRegistry. Cada módulo de UI (ej. pizarra.js, amigos.js) debe registrar sus propios handlers durante su inicialización, liberando a app.js de conocer los detalles de implementación de cada click.
+
+14. INYECCIÓN DE DEPENDENCIAS GLOBALES INCONTROLADAS
+
+Dónde: study-engine.js y telemetry.js.
+
+Qué: Uso indiscriminado de funciones matemáticas y de dominio colgadas en window, como window.esVencido(c.ProximoRepaso) o window.fechaValor(a.ProximoRepaso).
+
+Por qué: Contamina el objeto global y oculta el grafo de dependencias reales. Las funciones de fechas y utilidades de SRS declaradas en domain.js deben consumirse a través del namespace explícito (ej. Domain.esVencido()) para garantizar la trazabilidad estricta y facilitar el unit testing.
+
+15. PERSISTENCIA DESCENTRALIZADA DE CACHÉ DE SESIÓN
+
+Dónde: telemetry.js (funciones updateDifficultyStats, registrarPomoCompletado).
+
+Qué: Se lee y escribe directamente en localStorage mediante localStorage.setItem('dist_snap_' + asig, ...) y localStorage.setItem('pomo_log_today', ...).
+
+Por qué: El acceso directo a disco en medio de funciones de procesamiento interfiere con la arquitectura de persistencia híbrida. Estos datos transaccionales deben subirse al State.set(). Es el bus de eventos (EventBus.on('DATA_REQUIRES_SAVE')) el que debe decidir cuándo y cómo volcar el árbol de estado completo hacia IndexedDB o localStorage.
+
+16. LÓGICA DE NEGOCIO ENCAPTULADA EN CONTROLADORES DE TECLADO
+
+Dónde: app.js (listener de 'keydown').
+
+Qué: El event listener evalúa directamente si una tarjeta está en pantalla interactuando con las clases de CSS del DOM (!document.getElementById('concepto-contenido')?.classList.contains('hidden')) para decidir si aplicar lógica de "revelar" o "puntuar".
+
+Por qué: El controlador de hardware está actuando según el estado visual en lugar del estado de los datos. Esta lectura síncrona del DOM es lenta y propensa a fallos si el HTML cambia. Se debe leer el flujo lógico desde State.get('currentContext') o State.get('faseEstudio') (ej. "front" o "back" de la tarjeta).

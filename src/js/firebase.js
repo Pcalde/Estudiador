@@ -74,28 +74,30 @@ window.addEventListener('load', () => {
 
 function _manejarCambioAuth(user) {
     if (user) {
-        const esNuevoLogin = !State.get('currentUser');
-        State.set('currentUser', user);
-
-        const db = State.get('db');
-        if (db) db.collection('emailIndex').doc(user.email).set({ uid: user.uid }).catch(() => {});
-
-        UI.renderAuthEstado(user);
-
-        if (_autoSaveInterval) clearInterval(_autoSaveInterval);
-        _autoSaveInterval = setInterval(() => {
-            Logger.info("Ejecutando Auto-Save de seguridad en la nube...");
-            sincronizar();
-        }, INTERVALO_AUTOSAVE_MS);
-
-        if (esNuevoLogin) comprobarNubeAlIniciar();
-
+        // Mapeamos el objeto sucio de Firebase a un objeto plano 100% serializable
+        const pureUser = {
+            uid: user.uid,
+            email: user.email,
+            displayName: user.displayName || null,
+            photoURL: user.photoURL || null,
+            emailVerified: user.emailVerified || false
+        };
+        
+        State.set('currentUser', pureUser);
+        
+        // Arrancamos sincronización si procede
+        if (typeof sincronizarTelemetriaFSRS === 'function') {
+            sincronizarTelemetriaFSRS();
+        }
+        if (!_autoSaveInterval) {
+            _autoSaveInterval = setInterval(guardarDatosUsuario, 15 * 60 * 1000);
+        }
     } else {
         State.set('currentUser', null);
-
-        if (_autoSaveInterval) { clearInterval(_autoSaveInterval); _autoSaveInterval = null; }
-
-        UI.renderAuthEstado(null);
+        if (_autoSaveInterval) {
+            clearInterval(_autoSaveInterval);
+            _autoSaveInterval = null;
+        }
     }
 }
 
@@ -294,7 +296,8 @@ async function sincronizarTelemetriaFSRS() {
 async function asegurarFirebaseInit() {
     if (State.get('auth')) return true;
     const configStr = document.getElementById('set-firebase-config')?.value.trim()
-                   || localStorage.getItem('firebase_config');
+                   || localStorage.getItem('firebase_config')
+                   || JSON.stringify(FIREBASE_CONFIG_EMBEBIDA);
     if (!configStr) {
         alert("Firebase no está configurado.\n\nVe a Ajustes → Cuenta → pega el objeto de configuración y guarda.");
         return false;

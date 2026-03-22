@@ -74,7 +74,11 @@ window.addEventListener('load', () => {
 function _manejarCambioAuth(user) {
     if (user) {
         const esNuevoLogin = !State.get('currentUser');
-        State.set('currentUser', user);
+        State.set('currentUser', user ? {
+            uid:         user.uid,
+            email:       user.email,
+            displayName: user.displayName || null,
+        } : null);
 
         const db = _db;
         if (db) db.collection('emailIndex').doc(user.email).set({ uid: user.uid }).catch(() => {});

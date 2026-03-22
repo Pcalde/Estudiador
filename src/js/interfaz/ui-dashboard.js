@@ -4,40 +4,38 @@
 
 const UIDashboard = (() => {
 
-    function updateDifficultyStats(counts, prevSnap, total, pendientesHoy) {
+    function updateDifficultyStats(counts, total, pendientesHoy) {
         const elTotal = document.getElementById('total-cards-count');
         const elHoy   = document.getElementById('today-cards-count');
         if (elTotal) elTotal.innerText = escapeHtml(String(total || 0));
         if (elHoy)   elHoy.innerText   = escapeHtml(String(pendientesHoy || 0));
 
-        const labels = { 0:'Nuevas', 1:'Fáciles', 2:'Bien', 3:'Difíciles', 4:'Críticas' };
+        const labels = {
+            new:          'Nuevas',
+            learning:     'Reaprendizaje',
+            consolidando: 'Consolidando',
+            revision:     'Revisión',
+            dominadas:    'Dominadas'
+        };
         const colors = {
-            0: 'var(--border)',
-            1: 'var(--status-blue)',
-            2: 'var(--status-green)',
-            3: 'var(--status-yellow)',
-            4: 'var(--status-red)'
+            new:          'var(--border)',
+            learning:     'var(--status-red)',
+            consolidando: 'var(--status-yellow)',
+            revision:     'var(--status-green)',
+            dominadas:    'var(--status-blue)'
         };
 
         let html = '';
-        [0, 4, 3, 2, 1].forEach(k => {
+        ['dominadas', 'revision', 'consolidando', 'learning', 'new'].forEach(k => {
             const val = counts[k] || 0;
             const pct = total > 0 ? (val / total) * 100 : 0;
-            let deltaHtml = '<span class="diff-delta neutral">—</span>';
-            if (prevSnap) {
-                const diff = val - (prevSnap[k] || 0);
-                if      (diff > 0) deltaHtml = `<span class="diff-delta up">+${escapeHtml(String(diff))}</span>`;
-                else if (diff < 0) deltaHtml = `<span class="diff-delta down">${escapeHtml(String(diff))}</span>`;
-                else               deltaHtml = `<span class="diff-delta neutral">·</span>`;
-            }
             html += `
                 <div class="diff-bar-row">
-                    <div class="diff-label">${labels[k]}</div>
+                    <div class="diff-label" style="width:90px;">${labels[k]}</div>
                     <div class="diff-track">
                         <div class="diff-fill" style="width:${pct}%;background:${colors[k]};transition:width 0.3s ease;"></div>
                     </div>
                     <div class="diff-val">${escapeHtml(String(val))}</div>
-                    ${deltaHtml}
                 </div>`;
         });
 

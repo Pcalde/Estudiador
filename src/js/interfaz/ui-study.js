@@ -19,25 +19,29 @@ const UIStudy = (() => {
         };
     }
 
-    function renderEstadoFiltros(activos, isSecuencial) {
-        const icon  = document.getElementById('icon-filtro');
-        const count = document.getElementById('contador-filtro');
-        if (!icon || !count) return;
+    function renderEstadoFiltros(filtros, totalTarjetas, isSecuencial) {
+    const icon  = document.getElementById('filtros-icon');
+    const count = document.getElementById('contador-filtro');
+    if (!icon || !count) return;
 
-        let nFiltros = 0;
-        if (activos.temas        && activos.temas.length > 0)        nFiltros++;
-        if (activos.dificultades && activos.dificultades.length > 0) nFiltros++;
-        if (activos.tipos        && activos.tipos.length > 0)        nFiltros++;
+    const hayFiltros = filtros.hoy || filtros.nuevas || filtros.tema || 
+                       filtros.rango || filtros.tipo || filtros.dificultad;
 
-        icon.style.color  = nFiltros > 0 ? 'var(--status-green)' : 'var(--status-red)';
-        count.innerText   = nFiltros > 0 ? `${nFiltros} filtros` : 'Off';
+    icon.style.color = hayFiltros ? 'var(--status-green)' : 'var(--status-red)';
+    count.innerText  = `${totalTarjetas} tarjetas`;
 
-        const btnSeq = document.getElementById('btn-modo-secuencial');
-        if (btnSeq) {
-            btnSeq.style.color       = isSecuencial ? 'var(--status-green)' : 'var(--text-muted)';
-            btnSeq.style.borderColor = isSecuencial ? 'var(--status-green)' : 'var(--border)';
-        }
+    const btnFiltros = document.getElementById('btn-filtros-dropdown');
+    if (btnFiltros) {
+        btnFiltros.style.borderColor = hayFiltros ? 'var(--status-green)' : '';
+        btnFiltros.style.color       = hayFiltros ? 'var(--status-green)' : '';
     }
+
+    const btnSeq = document.getElementById('btn-modo-secuencial');
+    if (btnSeq) {
+        btnSeq.style.color       = isSecuencial ? 'var(--status-green)' : 'var(--text-muted)';
+        btnSeq.style.borderColor = isSecuencial ? 'var(--status-green)' : 'var(--border)';
+    }
+}
 
     function renderizarConceptoActual(tarjeta, modoLec, tiposConfig = {}) {
         if (!tarjeta) return;

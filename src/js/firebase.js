@@ -72,9 +72,9 @@ window.addEventListener('load', () => {
 // MANEJADOR DE ESTADO DE AUTENTICACIÓN
 // ─────────────────────────────────────────────────────────────
 
+// REEMPLAZAR EN firebase.js
 function _manejarCambioAuth(user) {
     if (user) {
-        // Mapeamos el objeto sucio de Firebase a un objeto plano 100% serializable
         const pureUser = {
             uid: user.uid,
             email: user.email,
@@ -83,18 +83,20 @@ function _manejarCambioAuth(user) {
             emailVerified: user.emailVerified || false
         };
         
+        // El State ahora recibe un objeto 100% plano y serializable
         State.set('currentUser', pureUser);
         
-        // Arrancamos sincronización si procede
+        // Arrancamos procesos dependientes
         if (typeof sincronizarTelemetriaFSRS === 'function') {
             sincronizarTelemetriaFSRS();
         }
-        if (!_autoSaveInterval) {
+        
+        if (typeof _autoSaveInterval !== 'undefined' && !_autoSaveInterval) {
             _autoSaveInterval = setInterval(guardarDatosUsuario, 15 * 60 * 1000);
         }
     } else {
         State.set('currentUser', null);
-        if (_autoSaveInterval) {
+        if (typeof _autoSaveInterval !== 'undefined' && _autoSaveInterval) {
             clearInterval(_autoSaveInterval);
             _autoSaveInterval = null;
         }

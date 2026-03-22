@@ -507,11 +507,11 @@ document.addEventListener('DOMContentLoaded', () => {
     on('#btn-mode-short',          'click',  () => setPomoMode('short'));
     on('#btn-mode-long',           'click',  () => setPomoMode('long'));
     on('#btn-pomo-action',         'click',  toggleTimer);
-    on('#add-task-trigger',        'click',  showTaskForm);
+    on('#add-task-trigger',        'click',  () => showTaskForm());
     on('#btn-adjpomo',             'click',  () => adjPomo(1));
     on('#btn-adjpomo-2',           'click',  () => adjPomo(-1));
-    on('#btn-hidetaskform',        'click',  hideTaskForm);
-    on('#btn-savenewtask',         'click',  saveNewTask);
+    on('#btn-hidetaskform',        'click',  () => hideTaskForm());
+    on('#btn-savenewtask',         'click',  () => saveNewTask());
 
     // Calendario y fechas
     on('#btn-cambiarmes',        'click', () => cambiarMes(-1));

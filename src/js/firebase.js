@@ -36,6 +36,7 @@ const INTERVALO_AUTOSAVE_MS = 15 * 60 * 1000; // 15 minutos
 
 // ── Variables privadas al módulo ──────────────────────────────
 let _syncTimeout   = null;
+let _autoSaveInterval = null;
 
 // ─────────────────────────────────────────────────────────────
 // INICIALIZACIÓN
@@ -74,42 +75,25 @@ window.addEventListener('load', () => {
 function _manejarCambioAuth(user) {
     if (user) {
         const esNuevoLogin = !State.get('currentUser');
-        State.set('currentUser', user ? {
-            uid:         user.uid,
-            email:       user.email,
-            displayName: user.displayName || null,
-        } : null);
+        State.set('currentUser', user);
 
-        const db = _db;
+        const db = State.get('db');
         if (db) db.collection('emailIndex').doc(user.email).set({ uid: user.uid }).catch(() => {});
 
         UI.renderAuthEstado(user);
 
+        if (_autoSaveInterval) clearInterval(_autoSaveInterval);
+        _autoSaveInterval = setInterval(() => {
+            Logger.info("Ejecutando Auto-Save de seguridad en la nube...");
+            sincronizar();
+        }, INTERVALO_AUTOSAVE_MS);
 
-        if (esNuevoLogin) {
-            comprobarNubeAlIniciar();
-            
-            // Guardar en nube 3 minutos después del último cambio
-            EventBus.on('DATA_REQUIRES_SAVE', () => {
-                if (!State.get('currentUser')) return;
-                if (_syncTimeout) clearTimeout(_syncTimeout);
-                _syncTimeout = setTimeout(() => {
-                    guardarDatosUsuario().catch(e => Logger.error("Fallo auto-save nube:", e));
-                }, 3 * 60 * 1000);
-            });
-
-            // Guardar inmediatamente al cerrar la pestaña
-            window.addEventListener('beforeunload', () => {
-                if (State.get('currentUser')) {
-                    guardarDatosUsuario().catch(() => {});
-                }
-            });
-        }
+        if (esNuevoLogin) comprobarNubeAlIniciar();
 
     } else {
         State.set('currentUser', null);
 
-        if (_syncTimeout) { clearTimeout(_syncTimeout); _syncTimeout = null; }
+        if (_autoSaveInterval) { clearInterval(_autoSaveInterval); _autoSaveInterval = null; }
 
         UI.renderAuthEstado(null);
     }
@@ -121,7 +105,7 @@ function _manejarCambioAuth(user) {
 
 async function comprobarNubeAlIniciar() {
     const currentUser = State.get('currentUser');
-    const db = _db;
+    const db = State.get('db');
     if (!currentUser || !db) return;
 
     try {
@@ -146,7 +130,7 @@ async function comprobarNubeAlIniciar() {
 
 async function guardarDatosUsuario() {
     const currentUser = State.get('currentUser');
-    const db          = _db;
+    const db          = State.get('db');
     if (!currentUser || !db) return;
 
     // FIX: todas las lecturas via State.get()
@@ -181,7 +165,7 @@ async function guardarDatosUsuario() {
 
 async function cargarDatosUsuario() {
     const currentUser = State.get('currentUser');
-    const db          = _db;
+    const db          = State.get('db');
     if (!currentUser || !db) return;
 
     try {
@@ -194,7 +178,7 @@ async function cargarDatosUsuario() {
             State.batch(() => {
                 const biblio = data.biblioteca || {};
                 // FIX: normalizar con argumentos correctos
-                Domain.normalizarBibliotecaFechas(biblio);
+                window.normalizarBibliotecaFechas(biblio);
                 State.set('biblioteca', biblio);
 
                 State.set('projects',      data.projects      || []);
@@ -203,7 +187,7 @@ async function cargarDatosUsuario() {
                 State.set('pomoSettings',  data.pomoSettings  || State.get('pomoSettings'));
                 State.set('taskList',      data.taskList      || []);
 
-                const fechasSaneadas = Domain.normalizarFechasClave(data.fechasClave || []);
+                const fechasSaneadas = window.normalizarFechasClave(data.fechasClave || []);
                 State.set('fechasClave', fechasSaneadas);
             });
 
@@ -271,7 +255,7 @@ function forzarBajada() {
 // ─────────────────────────────────────────────────────────────
 
 async function sincronizarTelemetriaFSRS() {
-    const db          = _db;
+    const db          = State.get('db');
     const currentUser = State.get('currentUser');
     if (!db || !currentUser || typeof DB === 'undefined') return;
 
@@ -308,7 +292,7 @@ async function sincronizarTelemetriaFSRS() {
 // ─────────────────────────────────────────────────────────────
 
 async function asegurarFirebaseInit() {
-    if (_auth) return true;
+    if (State.get('auth')) return true;
     const configStr = document.getElementById('set-firebase-config')?.value.trim()
                    || localStorage.getItem('firebase_config');
     if (!configStr) {
@@ -317,7 +301,7 @@ async function asegurarFirebaseInit() {
     }
     inicializarFirebase(configStr);
     for (let i = 0; i < 30; i++) {
-        if (_auth) return true;
+        if (State.get('auth')) return true;
         await new Promise(r => setTimeout(r, 100));
     }
     alert("No se pudo inicializar Firebase. Comprueba la configuración.");
@@ -332,7 +316,7 @@ async function procesarLogin() {
     if (!await asegurarFirebaseInit()) return;
     btn.innerText = "Conectando...";
     try {
-        await _auth.signInWithEmailAndPassword(email, pass);
+        await State.get('auth').signInWithEmailAndPassword(email, pass);
     } catch (error) {
         Logger.error("Error en login:", error);
         alert("Error de acceso. Verifica tu correo y contraseña.");
@@ -349,8 +333,8 @@ async function procesarRegistro() {
     if (!await asegurarFirebaseInit()) return;
     btn.innerText = "Creando...";
     try {
-        const cred = await _auth.createUserWithEmailAndPassword(email, pass);
-        const db   = _db;
+        const cred = await State.get('auth').createUserWithEmailAndPassword(email, pass);
+        const db   = State.get('db');
         const ts   = firebase.firestore.FieldValue.serverTimestamp();
         await db.collection('users').doc(cred.user.uid).set({
             biblioteca: {}, projects: [], fechasClave: [], horarioGlobal: {},
@@ -376,9 +360,9 @@ async function procesarLoginGoogle() {
     const btn = document.getElementById('btn-login-google');
     if (btn) btn.innerText = "Conectando...";
     try {
-        const result = await _auth.signInWithPopup(provider);
+        const result = await State.get('auth').signInWithPopup(provider);
         const user   = result.user;
-        const db     = _db;
+        const db     = State.get('db');
         const ts     = firebase.firestore.FieldValue.serverTimestamp();
 
         // FIX: additionalUserInfo.isNewUser es frágil en v9+; usamos get() como comprobación robusta
@@ -413,7 +397,7 @@ function cerrarSesion() {
     if (!confirm("¿Seguro que deseas cerrar sesión? Dejarás de sincronizar con la nube.")) return;
     // Detener auto-save antes de cerrar
     if (_autoSaveInterval) { clearInterval(_autoSaveInterval); _autoSaveInterval = null; }
-    _auth.signOut().then(() => {
+    State.get('auth').signOut().then(() => {
         State.set('currentUser', null);
         location.reload();
     });

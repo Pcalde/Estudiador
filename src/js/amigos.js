@@ -6,7 +6,7 @@
 
 const Amigos = (() => {
 
-    const _db   = () => getDb;
+    const _db   = () => window.getDb();
     const _user = () => State.get('currentUser');
 
     // ── Modal ─────────────────────────────────────────────────────

@@ -57,8 +57,7 @@
     --nav-height:  65px;
 
     /* ── Z-Index estratificado ── */
-    --z-base:    10;
-    --z-pdf:     1000;
+    --z-pdf:     100;
     --z-nav:     6000;
     --z-modal:   9000;
     --z-top:     9999;
@@ -865,9 +864,10 @@ body.style-material .btn-modern:active::after { opacity: 1; transition: none; }
     align-items: center; gap: 8px; letter-spacing: 0.5px;
     transition: all var(--t-base) var(--ease-out);
     box-shadow: var(--shadow-sm);
+    z-index: var(--z-pdf);
 }
 #pdf-toggle-mini:hover { background: var(--dynamic-color, var(--accent)); color: var(--bg-color); box-shadow: var(--shadow-md); }
-#modulo-pdf.pdf-collapsed #pdf-toggle-mini { display: flex; }
+#modulo-pdf.pdf-collapsed #pdf-toggle-mini { display: flex;  z-index: var(--z-pdf);}
 
 #pdf-header-bar {
     padding: 10px 15px; cursor: pointer;
@@ -1126,7 +1126,7 @@ iframe#pdf-frame { width: 100%; height: 100%; border: none; display: none; }
 #pomodoro-modal,
 #fechas-modal {z-index: var(--z-modal);}
 #resumen-sesion-modal,
-#modal-filtros {z-index: calc(var(--z-nav)+100);}
+#modal-filtros {z-index: var(--z-top);}
 #modal-amigos { z-index: var(--z-top); }
 
 #ajustes-modal {

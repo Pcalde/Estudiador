@@ -1,21 +1,6 @@
 // ════════════════════════════════════════════════════════════════
 // FIREBASE.JS — Capa de red: autenticación, persistencia en nube y funciones sociales
 //
-// CAMBIOS v2 (auditoría):
-//   - cargarDatosUsuario: mutaciones via State.set() + EventBus en lugar de globales directos
-//   - guardarDatosUsuario: lecturas via State.get()
-//   - normalizarBibliotecaFechas / normalizarFechasClave: se pasan argumentos
-//   - sincronizarTelemetriaFSRS: reescrita con API compat v8
-//   - onAuthStateChanged: registrado ANTES de setPersistence (no dentro del .then)
-//   - setInterval de auto-save: arranca solo tras login, se cancela en cerrarSesion
-//   - syncTimeout: privado (_syncTimeout), fuera de window
-//   - construirResumenPublicoUsuario: lee de State.get() en lugar del DOM
-//   - importarAsignaturaCompartida: sustituye guardarEnLocal por EventBus
-//   - aceptarSolicitud: firma corregida (solo docId)
-// ════════════════════════════════════════════════════════════════
-// ════════════════════════════════════════════════════════════════
-// FIREBASE.JS — Capa de red: autenticación, persistencia en nube y funciones sociales
-// Arquitectura v2: Adaptador estricto. Cero inyecciones de red en State.
 // ════════════════════════════════════════════════════════════════
 let _db   = null;
 let _auth = null;
@@ -44,6 +29,7 @@ let _autoSaveInterval = null;
 // ─────────────────────────────────────────────────────────────
 // INICIALIZACIÓN
 // ─────────────────────────────────────────────────────────────
+// ✅ REEMPLAZAR LA FUNCIÓN inicializarFirebase EN firebase.js
 function inicializarFirebase(configStr) {
     if (_auth) return; // Evita inicializaciones dobles
     try {
@@ -51,11 +37,37 @@ function inicializarFirebase(configStr) {
         if (typeof firebase === 'undefined') { console.error('SDK no disponible'); return; }
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         
-        // Uso estricto de variables privadas del módulo
         _db   = firebase.firestore();
         _auth = firebase.auth();
         _auth.onAuthStateChanged(_manejarCambioAuth);
         _auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(console.warn);
+
+        _auth.getRedirectResult().then(async (result) => {
+            if (result && result.user) {
+                const user = result.user;
+                const ts = firebase.firestore.FieldValue.serverTimestamp();
+                const existing = await _db.collection('users').doc(user.uid).get();
+                
+                if (!existing.exists) {
+                    Logger.info("Nuevo usuario Google (Redirect). Inicializando BD...");
+                    await _db.collection('users').doc(user.uid).set({
+                        biblioteca: {}, projects: [], fechasClave: [], horarioGlobal: {},
+                        userColors: {}, pomoSettings: State.get('pomoSettings') || {},
+                        taskList: [], createdAt: ts
+                    });
+                    await _db.collection('usersPublic').doc(user.uid).set({
+                        email: user.email,
+                        stats: { totalTarjetas: 0, pendientesHoy: 0, dominadas: 0, asignaturas: [] },
+                        lastUpdated: ts
+                    });
+                    await _db.collection('emailIndex').doc(user.email).set({ uid: user.uid });
+                    await guardarDatosUsuario();
+                }
+            }
+        }).catch(error => {
+            Logger.error("Error en redirección de Google:", error);
+        });
+
     } catch (e) {
         console.error('Error al inicializar Firebase:', e);
     }
@@ -335,39 +347,17 @@ async function procesarRegistro() {
     }
 }
 
+
 async function procesarLoginGoogle() {
     if (!await asegurarFirebaseInit()) return;
     const provider = new firebase.auth.GoogleAuthProvider();
     const btn = document.getElementById('btn-login-google');
-    if (btn) btn.innerText = "Conectando...";
+    if (btn) btn.innerText = "Redirigiendo...";
     try {
-        const result = await _auth.signInWithPopup(provider);
-        const user   = result.user;
-        const ts     = firebase.firestore.FieldValue.serverTimestamp();
-
-        const existing = await _db.collection('users').doc(user.uid).get();
-        if (!existing.exists) {
-            Logger.info("Nuevo usuario Google. Inicializando base de datos...");
-            await _db.collection('users').doc(user.uid).set({
-                biblioteca: {}, projects: [], fechasClave: [], horarioGlobal: {},
-                userColors: {}, pomoSettings: State.get('pomoSettings') || {},
-                taskList: [], createdAt: ts
-            });
-            await _db.collection('usersPublic').doc(user.uid).set({
-                email: user.email,
-                stats: { totalTarjetas: 0, pendientesHoy: 0, dominadas: 0, asignaturas: [] },
-                lastUpdated: ts
-            });
-            await _db.collection('emailIndex').doc(user.email).set({ uid: user.uid });
-            alert("Cuenta creada con Google. Realizando primera subida local...");
-            await guardarDatosUsuario();
-        }
+        // Cambiamos a Redirect para sortear la cabecera COOP/COEP
+        await _auth.signInWithRedirect(provider);
     } catch (error) {
-        Logger.error("Error en Google Auth:", error);
-        if (error.code !== 'auth/popup-closed-by-user') {
-            alert("Error de acceso con Google: " + error.message);
-        }
-    } finally {
+        Logger.error("Error iniciando Google Redirect:", error);
         if (btn) btn.innerHTML = '<i class="fa-brands fa-google"></i> Acceder con Google';
     }
 }

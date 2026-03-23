@@ -13,15 +13,18 @@
 //   - importarAsignaturaCompartida: sustituye guardarEnLocal por EventBus
 //   - aceptarSolicitud: firma corregida (solo docId)
 // ════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════
+// FIREBASE.JS — Capa de red: autenticación, persistencia en nube y funciones sociales
+// Arquitectura v2: Adaptador estricto. Cero inyecciones de red en State.
+// ════════════════════════════════════════════════════════════════
 let _db   = null;
 let _auth = null;
 
-// Getters públicos para los demás módulos
+// Getters públicos para los demás módulos (Ej: amigos.js)
 const getDb   = () => _db;
 const getAuth = () => _auth;
 window.getDb   = getDb;
 window.getAuth = getAuth;
-
 
 const FIREBASE_CONFIG_EMBEBIDA = {
     apiKey: "AIzaSyBZJar5Z82Fb8lvPaYc2BOMpjGMF2PM0jY",
@@ -41,25 +44,20 @@ let _autoSaveInterval = null;
 // ─────────────────────────────────────────────────────────────
 // INICIALIZACIÓN
 // ─────────────────────────────────────────────────────────────
-
 function inicializarFirebase(configStr) {
+    if (_auth) return; // Evita inicializaciones dobles
     try {
         const firebaseConfig = JSON.parse(configStr);
-        if (typeof firebase === 'undefined') return;
-
-        if (!firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-        }
+        if (typeof firebase === 'undefined') { console.error('SDK no disponible'); return; }
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        
+        // Uso estricto de variables privadas del módulo
         _db   = firebase.firestore();
         _auth = firebase.auth();
-
         _auth.onAuthStateChanged(_manejarCambioAuth);
-
-        _auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-            .catch(err => Logger.warn('setPersistence falló (modo privado?):', err));
-
+        _auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(console.warn);
     } catch (e) {
-        Logger.error('Error al inicializar Firebase:', e);
+        console.error('Error al inicializar Firebase:', e);
     }
 }
 
@@ -71,10 +69,9 @@ window.addEventListener('load', () => {
 // ─────────────────────────────────────────────────────────────
 // MANEJADOR DE ESTADO DE AUTENTICACIÓN
 // ─────────────────────────────────────────────────────────────
-
-// REEMPLAZAR EN firebase.js
 function _manejarCambioAuth(user) {
     if (user) {
+        // DTO: Objeto plano 100% serializable
         const pureUser = {
             uid: user.uid,
             email: user.email,
@@ -83,20 +80,17 @@ function _manejarCambioAuth(user) {
             emailVerified: user.emailVerified || false
         };
         
-        // El State ahora recibe un objeto 100% plano y serializable
+        // Uso estricto del State
         State.set('currentUser', pureUser);
         
-        // Arrancamos procesos dependientes
-        if (typeof sincronizarTelemetriaFSRS === 'function') {
-            sincronizarTelemetriaFSRS();
-        }
+        if (typeof sincronizarTelemetriaFSRS === 'function') sincronizarTelemetriaFSRS();
         
-        if (typeof _autoSaveInterval !== 'undefined' && !_autoSaveInterval) {
-            _autoSaveInterval = setInterval(guardarDatosUsuario, 15 * 60 * 1000);
+        if (!_autoSaveInterval) {
+            _autoSaveInterval = setInterval(guardarDatosUsuario, INTERVALO_AUTOSAVE_MS);
         }
     } else {
         State.set('currentUser', null);
-        if (typeof _autoSaveInterval !== 'undefined' && _autoSaveInterval) {
+        if (_autoSaveInterval) {
             clearInterval(_autoSaveInterval);
             _autoSaveInterval = null;
         }
@@ -106,14 +100,12 @@ function _manejarCambioAuth(user) {
 // ─────────────────────────────────────────────────────────────
 // COMPROBACIÓN INICIAL DE NUBE v2
 // ─────────────────────────────────────────────────────────────
-
 async function comprobarNubeAlIniciar() {
     const currentUser = State.get('currentUser');
-    const db = State.get('db');
-    if (!currentUser || !db) return;
+    if (!currentUser || !_db) return;
 
     try {
-        const doc = await db.collection('users').doc(currentUser.uid).get();
+        const doc = await _db.collection('users').doc(currentUser.uid).get();
         if (doc.exists) {
             Toast.ask(
                 'Se ha detectado una copia en la nube. ¿Deseas sobreescribir tus datos locales?',
@@ -131,13 +123,10 @@ async function comprobarNubeAlIniciar() {
 // ─────────────────────────────────────────────────────────────
 // SUBIDA DE DATOS
 // ─────────────────────────────────────────────────────────────
-
 async function guardarDatosUsuario() {
     const currentUser = State.get('currentUser');
-    const db          = State.get('db');
-    if (!currentUser || !db) return;
+    if (!currentUser || !_db) return;
 
-    // FIX: todas las lecturas via State.get()
     const data = {
         biblioteca:   State.get('biblioteca')   || {},
         projects:     State.get('projects')     || [],
@@ -150,8 +139,8 @@ async function guardarDatosUsuario() {
     };
 
     try {
-        await db.collection('users').doc(currentUser.uid).set(data, { merge: true });
-        await db.collection('usersPublic').doc(currentUser.uid).set({
+        await _db.collection('users').doc(currentUser.uid).set(data, { merge: true });
+        await _db.collection('usersPublic').doc(currentUser.uid).set({
             email: currentUser.email,
             stats: Telemetry.construirResumenPublico(),
             lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
@@ -166,23 +155,19 @@ async function guardarDatosUsuario() {
 // ─────────────────────────────────────────────────────────────
 // BAJADA DE DATOS
 // ─────────────────────────────────────────────────────────────
-
 async function cargarDatosUsuario() {
     const currentUser = State.get('currentUser');
-    const db          = State.get('db');
-    if (!currentUser || !db) return;
+    if (!currentUser || !_db) return;
 
     try {
-        const doc = await db.collection('users').doc(currentUser.uid).get();
+        const doc = await _db.collection('users').doc(currentUser.uid).get();
 
         if (doc.exists) {
             const data = doc.data();
 
-            // FIX: mutaciones a través de State.set() en un batch atómico
             State.batch(() => {
                 const biblio = data.biblioteca || {};
-                // FIX: normalizar con argumentos correctos
-                window.normalizarBibliotecaFechas(biblio);
+                if (typeof window.normalizarBibliotecaFechas === 'function') window.normalizarBibliotecaFechas(biblio);
                 State.set('biblioteca', biblio);
 
                 State.set('projects',      data.projects      || []);
@@ -191,18 +176,17 @@ async function cargarDatosUsuario() {
                 State.set('pomoSettings',  data.pomoSettings  || State.get('pomoSettings'));
                 State.set('taskList',      data.taskList      || []);
 
-                const fechasSaneadas = window.normalizarFechasClave(data.fechasClave || []);
-                State.set('fechasClave', fechasSaneadas);
+                if (typeof window.normalizarFechasClave === 'function') {
+                    const fechasSaneadas = window.normalizarFechasClave(data.fechasClave || []);
+                    State.set('fechasClave', fechasSaneadas);
+                }
             });
 
             EventBus.emit('DATA_REQUIRES_SAVE');
-            EventBus.emit('DATOS_NUBE_CARGADOS', {
-                asigActual: State.get('nombreAsignaturaActual')
-            });
+            EventBus.emit('DATOS_NUBE_CARGADOS', { asigActual: State.get('nombreAsignaturaActual') });
 
             Logger.info('Datos cargados desde Firebase y volcados al estado local.');
         } else {
-            // Primera vez: subir lo que hay localmente
             await guardarDatosUsuario();
         }
     } catch (error) {
@@ -213,8 +197,6 @@ async function cargarDatosUsuario() {
 // ─────────────────────────────────────────────────────────────
 // SINCRONIZACIÓN
 // ─────────────────────────────────────────────────────────────
-
-// FIX: _syncTimeout es privado, no contamina window
 function sincronizar() {
     if (!State.get('currentUser')) return;
     if (_syncTimeout) clearTimeout(_syncTimeout);
@@ -225,10 +207,7 @@ function sincronizar() {
 window.sincronizar = sincronizar;
 
 async function forzarRespaldoNube() {
-    if (!State.get('currentUser')) {
-        alert("Debes iniciar sesión para respaldar en la nube.");
-        return;
-    }
+    if (!State.get('currentUser')) return alert("Debes iniciar sesión para respaldar en la nube.");
     const btn = document.getElementById('btn-sync-nube');
     if (btn) btn.innerText = "Subiendo...";
     try {
@@ -257,34 +236,28 @@ function forzarBajada() {
 // ─────────────────────────────────────────────────────────────
 // TELEMETRÍA FSRS — Batch Firestore (API compat v8)
 // ─────────────────────────────────────────────────────────────
-
 async function sincronizarTelemetriaFSRS() {
-    const db          = State.get('db');
     const currentUser = State.get('currentUser');
-    if (!db || !currentUser || typeof DB === 'undefined') return;
+    if (!_db || !currentUser || typeof DB === 'undefined') return;
 
     try {
         const pendientes = await DB.getUnsyncedRevlogs();
         if (!pendientes || pendientes.length === 0) return;
 
-        // Firestore limita 500 ops por batch
         const limite = pendientes.slice(0, 450);
-
-        // FIX: API compat v8 (db.batch(), db.collection().doc())
-        const batch    = db.batch();
+        const batch    = _db.batch();
         const basePath = `users/${currentUser.uid}/fsrs_revlogs`;
 
         limite.forEach(log => {
             const { id, synced, ...cleanLog } = log;
             batch.set(
-                db.collection(basePath).doc(),
+                _db.collection(basePath).doc(),
                 { ...cleanLog, syncedAt: Date.now() }
             );
         });
 
         await batch.commit();
         Logger.info(`Telemetría FSRS: Batch subido con ${limite.length} registros.`);
-
         await DB.markRevlogsAsSynced(limite.map(l => l.id));
     } catch (error) {
         Logger.error("Fallo crítico en sincronizarTelemetriaFSRS:", error);
@@ -294,21 +267,25 @@ async function sincronizarTelemetriaFSRS() {
 // ─────────────────────────────────────────────────────────────
 // AUTENTICACIÓN
 // ─────────────────────────────────────────────────────────────
-
 async function asegurarFirebaseInit() {
-    if (State.get('auth')) return true;
+    if (_auth) return true;
+    
     const configStr = document.getElementById('set-firebase-config')?.value.trim()
                    || localStorage.getItem('firebase_config')
                    || JSON.stringify(FIREBASE_CONFIG_EMBEBIDA);
+                   
     if (!configStr) {
         alert("Firebase no está configurado.\n\nVe a Ajustes → Cuenta → pega el objeto de configuración y guarda.");
         return false;
     }
+    
     inicializarFirebase(configStr);
+    
     for (let i = 0; i < 30; i++) {
-        if (State.get('auth')) return true;
+        if (_auth) return true;
         await new Promise(r => setTimeout(r, 100));
     }
+    
     alert("No se pudo inicializar Firebase. Comprueba la configuración.");
     return false;
 }
@@ -317,11 +294,11 @@ async function procesarLogin() {
     const email = document.getElementById('login-email').value.trim();
     const pass  = document.getElementById('login-password').value;
     const btn   = document.getElementById('btn-login');
-    if (!email || !pass) { alert("Rellena el correo y la contraseña."); return; }
+    if (!email || !pass) return alert("Rellena el correo y la contraseña."); 
     if (!await asegurarFirebaseInit()) return;
     btn.innerText = "Conectando...";
     try {
-        await State.get('auth').signInWithEmailAndPassword(email, pass);
+        await _auth.signInWithEmailAndPassword(email, pass);
     } catch (error) {
         Logger.error("Error en login:", error);
         alert("Error de acceso. Verifica tu correo y contraseña.");
@@ -338,15 +315,14 @@ async function procesarRegistro() {
     if (!await asegurarFirebaseInit()) return;
     btn.innerText = "Creando...";
     try {
-        const cred = await State.get('auth').createUserWithEmailAndPassword(email, pass);
-        const db   = State.get('db');
+        const cred = await _auth.createUserWithEmailAndPassword(email, pass);
         const ts   = firebase.firestore.FieldValue.serverTimestamp();
-        await db.collection('users').doc(cred.user.uid).set({
+        await _db.collection('users').doc(cred.user.uid).set({
             biblioteca: {}, projects: [], fechasClave: [], horarioGlobal: {},
             userColors: {}, pomoSettings: State.get('pomoSettings') || {},
             taskList: [], createdAt: ts
         });
-        await db.collection('usersPublic').doc(cred.user.uid).set({
+        await _db.collection('usersPublic').doc(cred.user.uid).set({
             email, stats: { totalTarjetas: 0, pendientesHoy: 0, dominadas: 0, asignaturas: [] },
             lastUpdated: ts
         });
@@ -365,26 +341,24 @@ async function procesarLoginGoogle() {
     const btn = document.getElementById('btn-login-google');
     if (btn) btn.innerText = "Conectando...";
     try {
-        const result = await State.get('auth').signInWithPopup(provider);
+        const result = await _auth.signInWithPopup(provider);
         const user   = result.user;
-        const db     = State.get('db');
         const ts     = firebase.firestore.FieldValue.serverTimestamp();
 
-        // FIX: additionalUserInfo.isNewUser es frágil en v9+; usamos get() como comprobación robusta
-        const existing = await db.collection('users').doc(user.uid).get();
+        const existing = await _db.collection('users').doc(user.uid).get();
         if (!existing.exists) {
             Logger.info("Nuevo usuario Google. Inicializando base de datos...");
-            await db.collection('users').doc(user.uid).set({
+            await _db.collection('users').doc(user.uid).set({
                 biblioteca: {}, projects: [], fechasClave: [], horarioGlobal: {},
                 userColors: {}, pomoSettings: State.get('pomoSettings') || {},
                 taskList: [], createdAt: ts
             });
-            await db.collection('usersPublic').doc(user.uid).set({
+            await _db.collection('usersPublic').doc(user.uid).set({
                 email: user.email,
                 stats: { totalTarjetas: 0, pendientesHoy: 0, dominadas: 0, asignaturas: [] },
                 lastUpdated: ts
             });
-            await db.collection('emailIndex').doc(user.email).set({ uid: user.uid });
+            await _db.collection('emailIndex').doc(user.email).set({ uid: user.uid });
             alert("Cuenta creada con Google. Realizando primera subida local...");
             await guardarDatosUsuario();
         }
@@ -400,18 +374,23 @@ async function procesarLoginGoogle() {
 
 function cerrarSesion() {
     if (!confirm("¿Seguro que deseas cerrar sesión? Dejarás de sincronizar con la nube.")) return;
-    // Detener auto-save antes de cerrar
     if (_autoSaveInterval) { clearInterval(_autoSaveInterval); _autoSaveInterval = null; }
-    State.get('auth').signOut().then(() => {
+    _auth.signOut().then(() => {
         State.set('currentUser', null);
         location.reload();
     });
 }
 
-
 // ─────────────────────────────────────────────────────────────
 // EXPOSICIÓN PÚBLICA
 // ─────────────────────────────────────────────────────────────
-
 window.procesarLoginGoogle        = procesarLoginGoogle;
 window.sincronizarTelemetriaFSRS  = sincronizarTelemetriaFSRS;
+window.procesarLogin              = procesarLogin;
+window.procesarRegistro           = procesarRegistro;
+window.cerrarSesion               = cerrarSesion;
+window.forzarRespaldoNube         = forzarRespaldoNube;
+window.forzarBajada               = forzarBajada;
+window.sincronizar                = sincronizar;
+window.cargarDatosUsuario         = cargarDatosUsuario;
+window.guardarDatosUsuario        = guardarDatosUsuario;

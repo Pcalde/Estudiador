@@ -101,13 +101,12 @@ const UIStudy = (() => {
             btnOcultar?.classList.add('hidden');
         }
 
-        if (typeof MathJax !== 'undefined') {
+        if (typeof UI !== 'undefined' && UI.renderizarMatematicas) {
             const target = document.getElementById('study-card');
             if (target) {
-                MathJax.typesetClear([target]);
-                MathJax.typesetPromise([target]).catch(err => {
+                UI.renderizarMatematicas(target).catch(err => {
                     if (err?.message?.includes('replaceChild') || err?.stack?.includes('replaceChild')) return;
-                    if (typeof Logger !== 'undefined') Logger.error('Error MathJax:', err);
+                    if (typeof Logger !== 'undefined') Logger.error('Error MathJax en Estudio:', err);
                 });
             }
         }

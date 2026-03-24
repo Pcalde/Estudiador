@@ -699,8 +699,8 @@ const UIDashboard = (() => {
         });
         listContainer.appendChild(fragment);
 
-        if (typeof MathJax !== 'undefined') {
-            MathJax.typesetPromise([listContainer]).catch(err => Logger.error(err));
+        if (typeof UI !== 'undefined' && UI.renderizarMatematicas) {
+            UI.renderizarMatematicas(listContainer).catch(err => Logger.error(err)); // o el nodo que estés renderizando
         }
     }
 

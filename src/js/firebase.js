@@ -47,9 +47,13 @@ window.addEventListener('load', () => {
 // ─────────────────────────────────────────────────────────────
 // MANEJADOR DE ESTADO DE AUTENTICACIÓN
 // ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// MANEJADOR DE ESTADO DE AUTENTICACIÓN
+// ─────────────────────────────────────────────────────────────
 function _manejarCambioAuth(user) {
     if (user) {
-        // DTO: Objeto plano 100% serializable
+        const esNuevoLogin = !State.get('currentUser');
+
         const pureUser = {
             uid: user.uid,
             email: user.email,
@@ -58,16 +62,28 @@ function _manejarCambioAuth(user) {
             emailVerified: user.emailVerified || false
         };
         
-        // Uso estricto del State
+        // Mutación centralizada
         State.set('currentUser', pureUser);
+        if (typeof UI !== 'undefined' && typeof UI.renderAuthEstado === 'function') {
+            UI.renderAuthEstado(pureUser);
+        }
         
         if (typeof sincronizarTelemetriaFSRS === 'function') sincronizarTelemetriaFSRS();
         
         if (!_autoSaveInterval) {
             _autoSaveInterval = setInterval(guardarDatosUsuario, INTERVALO_AUTOSAVE_MS);
         }
+        if (esNuevoLogin && typeof comprobarNubeAlIniciar === 'function') {
+            comprobarNubeAlIniciar();
+        }
+
     } else {
         State.set('currentUser', null);
+        
+        if (typeof UI !== 'undefined' && typeof UI.renderAuthEstado === 'function') {
+            UI.renderAuthEstado(null);
+        }
+
         if (_autoSaveInterval) {
             clearInterval(_autoSaveInterval);
             _autoSaveInterval = null;

@@ -349,27 +349,32 @@ async function procesarRegistro() {
 
 
 // firebase.js
+// firebase.js
 async function procesarLoginGoogle() {
-    // Selecciona el botón según tu DOM (ajusta el selector si es necesario)
-    const btn = document.querySelector('#btn-google-login') || document.querySelector('.btn-google');
-    if (btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Conectando...';
+    const btn = document.querySelector('#btn-google-login') || document.querySelector('.btn-google') || this;
+    const textoOriginal = btn.innerHTML;
+    
+    if (btn && btn.innerHTML) {
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Conectando...';
+    }
 
     try {
-        const auth = State.get('auth');
-        if (!auth) throw new Error("Capa Auth no inicializada en State.");
+        // FALLBACK ARQUITECTÓNICO: Si el State no ha sido hidratado con auth, usamos la instancia global
+        const auth = (typeof State !== 'undefined' && State.get('auth')) ? State.get('auth') : firebase.auth();
+        if (!auth) throw new Error("No se pudo obtener la instancia de Firebase Auth.");
 
         const provider = new firebase.auth.GoogleAuthProvider();
-        // Fuerza el selector de cuentas y evita bloqueos de auto-login
         provider.setCustomParameters({ prompt: 'select_account' });
         
-        // REGLA DE ARQUITECTURA: Uso estricto de Popup en SPA
+        // Ejecución estricta mediante Popup
         const result = await auth.signInWithPopup(provider);
         const user = result.user;
 
         if (typeof Logger !== 'undefined') Logger.info("Auth: Login Google OK", user.email);
 
-        const db = State.get('db');
-        if (!db) return;
+        // FALLBACK ARQUITECTÓNICO: Recuperación de instancia de base de datos
+        const db = (typeof State !== 'undefined' && State.get('db')) ? State.get('db') : firebase.firestore();
+        if (!db) throw new Error("No se pudo obtener la instancia de Firestore.");
 
         // Verificación e inicialización de nuevo usuario
         const userDoc = await db.collection('usersPublic').doc(user.uid).get();
@@ -397,15 +402,15 @@ async function procesarLoginGoogle() {
     } catch (error) {
         if (typeof Logger !== 'undefined') Logger.error("Error Auth Google:", error);
         
-        // Ignorar el error si el usuario cierra el popup intencionalmente
         if (error.code !== 'auth/popup-closed-by-user') {
             alert("Error de acceso: " + error.message);
         }
     } finally {
-        if (btn) btn.innerHTML = '<i class="fa-brands fa-google"></i> Acceder con Google';
+        if (btn && btn.innerHTML) {
+            btn.innerHTML = textoOriginal; // Restaura el botón a su estado original
+        }
     }
 }
-
 function cerrarSesion() {
     if (!confirm("¿Seguro que deseas cerrar sesión? Dejarás de sincronizar con la nube.")) return;
     if (_autoSaveInterval) { clearInterval(_autoSaveInterval); _autoSaveInterval = null; }

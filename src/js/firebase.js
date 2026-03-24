@@ -348,16 +348,60 @@ async function procesarRegistro() {
 }
 
 
+// firebase.js
 async function procesarLoginGoogle() {
-    if (!await asegurarFirebaseInit()) return;
-    const provider = new firebase.auth.GoogleAuthProvider();
-    const btn = document.getElementById('btn-login-google');
-    if (btn) btn.innerText = "Redirigiendo...";
+    // Selecciona el botón según tu DOM (ajusta el selector si es necesario)
+    const btn = document.querySelector('#btn-google-login') || document.querySelector('.btn-google');
+    if (btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Conectando...';
+
     try {
-        // Cambiamos a Redirect para sortear la cabecera COOP/COEP
-        await _auth.signInWithRedirect(provider);
+        const auth = State.get('auth');
+        if (!auth) throw new Error("Capa Auth no inicializada en State.");
+
+        const provider = new firebase.auth.GoogleAuthProvider();
+        // Fuerza el selector de cuentas y evita bloqueos de auto-login
+        provider.setCustomParameters({ prompt: 'select_account' });
+        
+        // REGLA DE ARQUITECTURA: Uso estricto de Popup en SPA
+        const result = await auth.signInWithPopup(provider);
+        const user = result.user;
+
+        if (typeof Logger !== 'undefined') Logger.info("Auth: Login Google OK", user.email);
+
+        const db = State.get('db');
+        if (!db) return;
+
+        // Verificación e inicialización de nuevo usuario
+        const userDoc = await db.collection('usersPublic').doc(user.uid).get();
+        if (!userDoc.exists) {
+            const ts = firebase.firestore.FieldValue.serverTimestamp();
+            
+            await db.collection('users').doc(user.uid).set({
+                email: user.email,
+                biblioteca: {},
+                taskList: [],
+                createdAt: ts
+            });
+            
+            await db.collection('usersPublic').doc(user.uid).set({
+                email: user.email,
+                stats: { totalTarjetas: 0, pendientesHoy: 0, dominadas: 0, asignaturas: [] },
+                lastUpdated: ts
+            });
+            
+            await db.collection('emailIndex').doc(user.email).set({ uid: user.uid });
+            alert("Cuenta creada con Google. Realizando primera subida local...");
+            
+            if (typeof guardarDatosUsuario === 'function') await guardarDatosUsuario();
+        }
     } catch (error) {
-        Logger.error("Error iniciando Google Redirect:", error);
+        if (typeof Logger !== 'undefined') Logger.error("Error Auth Google:", error);
+        
+        // Ignorar el error si el usuario cierra el popup intencionalmente
+        if (error.code !== 'auth/popup-closed-by-user') {
+            alert("Error de acceso: " + error.message);
+        }
+    } finally {
         if (btn) btn.innerHTML = '<i class="fa-brands fa-google"></i> Acceder con Google';
     }
 }

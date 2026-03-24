@@ -124,10 +124,14 @@ const State = (() => {
 
     return {
         /** Lee un valor del estado */
-        get(key) {
-            const val = window[key];
-            if (val === null || val === undefined || typeof val !== 'object') return val;
-            return structuredClone(val);
+        get(key) { 
+            if (key in _s) {
+                if (_s[key] === null && _lazyInits[key]) {
+                    _s[key] = _lazyInits[key]();
+                }
+                return _s[key];
+            }
+            return window[key]; // Fallback para propiedades no mapeadas
         },
         getRef(key) {
             return window[key];

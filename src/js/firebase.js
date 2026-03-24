@@ -2,14 +2,10 @@
 // FIREBASE.JS — Capa de red: autenticación, persistencia en nube y funciones sociales
 //
 // ════════════════════════════════════════════════════════════════
-let _db   = null;
-let _auth = null;
-
-// Getters públicos para los demás módulos (Ej: amigos.js)
-const getDb   = () => _db;
-const getAuth = () => _auth;
-window.getDb   = getDb;
-window.getAuth = getAuth;
+let _syncTimeout     = null;
+let _autoSaveInterval = null;
+let _auth            = null;
+let _db              = null;
 
 const FIREBASE_CONFIG_EMBEBIDA = {
     apiKey: "AIzaSyBZJar5Z82Fb8lvPaYc2BOMpjGMF2PM0jY",
@@ -29,50 +25,34 @@ let _autoSaveInterval = null;
 // ─────────────────────────────────────────────────────────────
 // INICIALIZACIÓN
 // ─────────────────────────────────────────────────────────────
-// ✅ REEMPLAZAR LA FUNCIÓN inicializarFirebase EN firebase.js
 function inicializarFirebase(configStr) {
-    if (_auth) return; // Evita inicializaciones dobles
     try {
+        if (typeof firebase === 'undefined') {
+            Logger.warn('Firebase global no detectado.');
+            return;
+        }
+
         const firebaseConfig = JSON.parse(configStr);
-        if (typeof firebase === 'undefined') { console.error('SDK no disponible'); return; }
-        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-        
+
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+
         _db   = firebase.firestore();
         _auth = firebase.auth();
-        _auth.onAuthStateChanged(_manejarCambioAuth);
-        _auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(console.warn);
 
-        _auth.getRedirectResult().then(async (result) => {
-            if (result && result.user) {
-                const user = result.user;
-                const ts = firebase.firestore.FieldValue.serverTimestamp();
-                const existing = await _db.collection('users').doc(user.uid).get();
-                
-                if (!existing.exists) {
-                    Logger.info("Nuevo usuario Google (Redirect). Inicializando BD...");
-                    await _db.collection('users').doc(user.uid).set({
-                        biblioteca: {}, projects: [], fechasClave: [], horarioGlobal: {},
-                        userColors: {}, pomoSettings: State.get('pomoSettings') || {},
-                        taskList: [], createdAt: ts
-                    });
-                    await _db.collection('usersPublic').doc(user.uid).set({
-                        email: user.email,
-                        stats: { totalTarjetas: 0, pendientesHoy: 0, dominadas: 0, asignaturas: [] },
-                        lastUpdated: ts
-                    });
-                    await _db.collection('emailIndex').doc(user.email).set({ uid: user.uid });
-                    await guardarDatosUsuario();
-                }
-            }
-        }).catch(error => {
-            Logger.error("Error en redirección de Google:", error);
-        });
+        State.set('db',   _db);
+        State.set('auth', _auth);
+
+        _auth.onAuthStateChanged(_manejarCambioAuth);
+
+        _auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+            .catch(err => Logger.warn('setPersistence falló (modo privado?):', err));
 
     } catch (e) {
-        console.error('Error al inicializar Firebase:', e);
+        Logger.error('Error al inicializar Firebase:', e);
     }
 }
-
 window.addEventListener('load', () => {
     const savedConfig = localStorage.getItem('firebase_config');
     inicializarFirebase(savedConfig || JSON.stringify(FIREBASE_CONFIG_EMBEBIDA));
@@ -281,24 +261,18 @@ async function sincronizarTelemetriaFSRS() {
 // ─────────────────────────────────────────────────────────────
 async function asegurarFirebaseInit() {
     if (_auth) return true;
-    
     const configStr = document.getElementById('set-firebase-config')?.value.trim()
-                   || localStorage.getItem('firebase_config')
-                   || JSON.stringify(FIREBASE_CONFIG_EMBEBIDA);
-                   
+                   || localStorage.getItem('firebase_config');
     if (!configStr) {
-        alert("Firebase no está configurado.\n\nVe a Ajustes → Cuenta → pega el objeto de configuración y guarda.");
+        alert("Firebase no configurado. Ve a Ajustes → Cuenta.");
         return false;
     }
-    
     inicializarFirebase(configStr);
-    
     for (let i = 0; i < 30; i++) {
         if (_auth) return true;
         await new Promise(r => setTimeout(r, 100));
     }
-    
-    alert("No se pudo inicializar Firebase. Comprueba la configuración.");
+    alert("No se pudo inicializar Firebase.");
     return false;
 }
 
@@ -360,7 +334,7 @@ async function procesarLoginGoogle() {
 
     try {
         // FALLBACK ARQUITECTÓNICO: Si el State no ha sido hidratado con auth, usamos la instancia global
-        const auth = (typeof State !== 'undefined' && State.get('auth')) ? State.get('auth') : firebase.auth();
+        const auth = (typeof State !== 'undefined' && _auth) ? _auth : firebase.auth();
         if (!auth) throw new Error("No se pudo obtener la instancia de Firebase Auth.");
 
         const provider = new firebase.auth.GoogleAuthProvider();
@@ -373,7 +347,7 @@ async function procesarLoginGoogle() {
         if (typeof Logger !== 'undefined') Logger.info("Auth: Login Google OK", user.email);
 
         // FALLBACK ARQUITECTÓNICO: Recuperación de instancia de base de datos
-        const db = (typeof State !== 'undefined' && State.get('db')) ? State.get('db') : firebase.firestore();
+        const db = (typeof State !== 'undefined' && _db) ? _db : firebase.firestore();
         if (!db) throw new Error("No se pudo obtener la instancia de Firestore.");
 
         // Verificación e inicialización de nuevo usuario

@@ -418,7 +418,7 @@ function construirResumenPublico() {
         const tarjetas = Array.isArray(biblioteca[asig]) ? biblioteca[asig] : [];
         if (!tarjetas.length) return;
 
-        let pendientes = 0, dominadas = 0
+        let pendientes = 0, dominadas = 0;
 
         tarjetas.forEach(c => {
             if (!c?.ProximoRepaso || Domain.fechaValor(c.ProximoRepaso) <= todayVal) pendientes++;
@@ -427,10 +427,16 @@ function construirResumenPublico() {
             else if (!c.fsrs_state && (c?.EtapaRepaso || 0) >= 5)        dominadas++;
         });
         
+        // EXTRACCIÓN Y CÁLCULO DE DEUDA LOCAL
+        const deudaLocal = (typeof Scheduler !== 'undefined' && typeof Scheduler.calcularDeudaArray === 'function') 
+                           ? Scheduler.calcularDeudaArray(tarjetas) 
+                           : 0;
+
         resumen.totalTarjetas += tarjetas.length;
         resumen.pendientesHoy += pendientes;
         resumen.dominadas     += dominadas;
-        resumen.deudaTotal    += Scheduler.calcularDeudaArray(tarjetas);
+        resumen.deudaTotal    += deudaLocal;
+        
         resumen.asignaturas.push({
             nombre:        asig,
             totalTarjetas: tarjetas.length,

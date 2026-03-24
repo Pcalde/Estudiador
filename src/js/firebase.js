@@ -18,10 +18,6 @@ const FIREBASE_CONFIG_EMBEBIDA = {
 
 const INTERVALO_AUTOSAVE_MS = 15 * 60 * 1000; // 15 minutos
 
-// ── Variables privadas al módulo ──────────────────────────────
-let _syncTimeout   = null;
-let _autoSaveInterval = null;
-
 // ─────────────────────────────────────────────────────────────
 // INICIALIZACIÓN
 // ─────────────────────────────────────────────────────────────
@@ -321,57 +317,50 @@ async function procesarRegistro() {
     }
 }
 
-
-// firebase.js
-// firebase.js
+// ─────────────────────────────────────────────────────────────
+// AUTENTICACIÓN GOOGLE
+// ─────────────────────────────────────────────────────────────
 async function procesarLoginGoogle() {
-    const btn = document.querySelector('#btn-google-login') || document.querySelector('.btn-google') || this;
-    const textoOriginal = btn.innerHTML;
+    // 1. Orquestación estricta: Garantizar que la red está levantada
+    if (!await asegurarFirebaseInit()) return;
+
+    const btn = document.querySelector('#btn-google-login') || document.querySelector('.btn-google') || document.getElementById('btn-login-google');
+    const textoOriginal = btn ? btn.innerHTML : '';
     
-    if (btn && btn.innerHTML) {
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Conectando...';
-    }
+    if (btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Conectando...';
 
     try {
-        // FALLBACK ARQUITECTÓNICO: Si el State no ha sido hidratado con auth, usamos la instancia global
-        const auth = (typeof State !== 'undefined' && _auth) ? _auth : firebase.auth();
-        if (!auth) throw new Error("No se pudo obtener la instancia de Firebase Auth.");
-
         const provider = new firebase.auth.GoogleAuthProvider();
         provider.setCustomParameters({ prompt: 'select_account' });
         
-        // Ejecución estricta mediante Popup
-        const result = await auth.signInWithPopup(provider);
+        // 2. Uso directo de variables de módulo (ya garantizadas por asegurarFirebaseInit)
+        const result = await _auth.signInWithPopup(provider);
         const user = result.user;
 
         if (typeof Logger !== 'undefined') Logger.info("Auth: Login Google OK", user.email);
 
-        // FALLBACK ARQUITECTÓNICO: Recuperación de instancia de base de datos
-        const db = (typeof State !== 'undefined' && _db) ? _db : firebase.firestore();
-        if (!db) throw new Error("No se pudo obtener la instancia de Firestore.");
-
-        // Verificación e inicialización de nuevo usuario
-        const userDoc = await db.collection('usersPublic').doc(user.uid).get();
+        const userDoc = await _db.collection('usersPublic').doc(user.uid).get();
+        
+        // 3. Inicialización completa del documento de usuario (Evita null pointers en UI)
         if (!userDoc.exists) {
             const ts = firebase.firestore.FieldValue.serverTimestamp();
             
-            await db.collection('users').doc(user.uid).set({
-                email: user.email,
-                biblioteca: {},
-                taskList: [],
-                createdAt: ts
+            await _db.collection('users').doc(user.uid).set({
+                biblioteca: {}, projects: [], fechasClave: [], horarioGlobal: {},
+                userColors: {}, pomoSettings: State.get('pomoSettings') || {},
+                taskList: [], createdAt: ts
             });
             
-            await db.collection('usersPublic').doc(user.uid).set({
+            await _db.collection('usersPublic').doc(user.uid).set({
                 email: user.email,
                 stats: { totalTarjetas: 0, pendientesHoy: 0, dominadas: 0, asignaturas: [] },
                 lastUpdated: ts
             });
             
-            await db.collection('emailIndex').doc(user.email).set({ uid: user.uid });
-            alert("Cuenta creada con Google. Realizando primera subida local...");
+            await _db.collection('emailIndex').doc(user.email).set({ uid: user.uid });
             
-            if (typeof guardarDatosUsuario === 'function') await guardarDatosUsuario();
+            alert("Cuenta creada con Google. Realizando primera subida local...");
+            await guardarDatosUsuario();
         }
     } catch (error) {
         if (typeof Logger !== 'undefined') Logger.error("Error Auth Google:", error);
@@ -380,11 +369,10 @@ async function procesarLoginGoogle() {
             alert("Error de acceso: " + error.message);
         }
     } finally {
-        if (btn && btn.innerHTML) {
-            btn.innerHTML = textoOriginal; // Restaura el botón a su estado original
-        }
+        if (btn) btn.innerHTML = textoOriginal;
     }
 }
+
 function cerrarSesion() {
     if (!confirm("¿Seguro que deseas cerrar sesión? Dejarás de sincronizar con la nube.")) return;
     if (_autoSaveInterval) { clearInterval(_autoSaveInterval); _autoSaveInterval = null; }

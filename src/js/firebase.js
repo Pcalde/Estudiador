@@ -23,27 +23,17 @@ const INTERVALO_AUTOSAVE_MS = 15 * 60 * 1000; // 15 minutos
 // ─────────────────────────────────────────────────────────────
 function inicializarFirebase(configStr) {
     try {
-        if (typeof firebase === 'undefined') {
-            Logger.warn('Firebase global no detectado.');
-            return;
-        }
-
+        if (typeof firebase === 'undefined') return;
         const firebaseConfig = JSON.parse(configStr);
-
-        if (!firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-        }
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 
         _db   = firebase.firestore();
         _auth = firebase.auth();
-
-        State.set('db',   _db);
-        State.set('auth', _auth);
-
         _auth.onAuthStateChanged(_manejarCambioAuth);
-
         _auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-            .catch(err => Logger.warn('setPersistence falló (modo privado?):', err));
+            .catch(err => Logger.warn('setPersistence falló:', err));
+        window._fbDB   = _db;
+        window._fbAuth = _auth;
 
     } catch (e) {
         Logger.error('Error al inicializar Firebase:', e);

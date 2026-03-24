@@ -120,6 +120,22 @@ const UICore = (() => {
     function cerrarResumenSesion() {
         document.getElementById('resumen-sesion-modal')?.classList.remove('visible');
     }
+    renderizarMatematicas: async (nodo) => {
+        if (!nodo) return;
+        
+        // Prevención estricta: Si MathJax v3 aún no ha instanciado sus métodos, ignoramos la mutación.
+        // El escáner automático de arranque de MathJax procesará el DOM pendiente en cuanto el CDN termine.
+        if (typeof MathJax !== 'undefined' && typeof MathJax.typesetPromise === 'function') {
+            try {
+                if (typeof MathJax.typesetClear === 'function') {
+                    MathJax.typesetClear([nodo]);
+                }
+                await MathJax.typesetPromise([nodo]);
+            } catch (err) {
+                if (typeof Logger !== 'undefined') Logger.warn("UI MathJax Render Error:", err);
+            }
+        }
+    }
 
     return {
         ocultarTodo,

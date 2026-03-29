@@ -1352,17 +1352,10 @@ iframe#pdf-frame { width: 100%; height: 100%; border: none; display: none; }
 .color-Observación { color: #7242A3; }
 .color-Nota        { color: #9e9e9e; }
 .color-Ejemplo     { color: #3CAF6E; }
-
-[class^="color-Dem"] {
-    font-style: italic; padding-left: 15px;
-    border-left-width: 3px; border-left-style: solid;
-    display: block; margin-top: 5px; background: rgba(255,255,255,0.03);
-}
 .color-Demot           { color: #1e4fb2; border-left-color: #1e4fb2; }
 .color-Demop           { color: #16a116; border-left-color: #16a116; }
 .color-Demol           { color: #20603D; border-left-color: #20603D; }
 .color-Democ           { color: #3883c2; border-left-color: #3883c2; }
-.color-Demostración    { color: #aab0b6; border-left: 3px solid var(--border-light); font-style: italic; padding-left: 10px; }
 
 /* ════════════════════════════════════════════════════════════════
    UTILIDADES SEMÁNTICAS

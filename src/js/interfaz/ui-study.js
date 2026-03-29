@@ -47,16 +47,19 @@ const UIStudy = (() => {
         if (!tarjeta) return;
 
         const tipo = tarjeta.Apartado || 'Concepto';
-        // Normalización estricta (ej: "Fórmula" -> "formula", "Teorema Clave" -> "teorema-clave")
-        const tipoNormalizado = tipo.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, '-');
+        const tit  = document.getElementById('concepto-titulo');
 
-        const tit = document.getElementById('concepto-titulo');
         if (tit) {
-            // 1. Limpiamos cualquier rastro de estilos JS en línea
-            tit.style.color = '';
-            // 2. Delegamos la responsabilidad visual al CSS creando un hook semántico
-            tit.setAttribute('data-apartado', tipoNormalizado);
+            // 1. Reset de estilos e inyección de clase semántica
+            // Eliminamos cualquier clase color- previa para evitar conflictos al navegar
+            const classesToRemove = Array.from(tit.classList).filter(c => c.startsWith('color-'));
+            classesToRemove.forEach(c => tit.classList.remove(c));
             
+            // Añadimos la clase exacta que coincide con tu CSS (ej: color-Definición)
+            tit.classList.add(`color-${tipo}`);
+            tit.style.color = ''; // Limpieza de rastro de estilos en línea previos
+
+            // 2. Construcción del HTML semántico
             tit.innerHTML = `<span class="etiqueta-apartado" style="font-size:0.6em;opacity:0.8;text-transform:uppercase;display:block;margin-bottom:5px;">${escapeHtml(tipo)}</span>${escapeHtml(tarjeta.Titulo || '')}`;
         }
 
@@ -71,8 +74,8 @@ const UIStudy = (() => {
         if (metaTema) metaTema.innerText = `Tema ${tarjeta.Tema}`;
 
         const fElem  = document.getElementById('meta-fecha');
-        if (fElem && typeof fechaValor === 'function' && typeof getFechaHoy === 'function') {
-            const hoyVal = fechaValor(getFechaHoy());
+        if (fElem && typeof getFechaHoy === 'function') {
+            const hoyVal  = fechaValor(getFechaHoy());
             const proxVal = fechaValor(tarjeta.ProximoRepaso);
 
             if (proxVal < hoyVal) {
@@ -105,7 +108,7 @@ const UIStudy = (() => {
             if (target) {
                 MathJax.typesetClear([target]);
                 MathJax.typesetPromise([target]).catch(err => {
-                    if (err?.message?.includes('replaceChild') || err?.stack?.includes('replaceChild')) return;
+                    if (err?.message?.includes('replaceChild')) return;
                     if (typeof Logger !== 'undefined') Logger.error('Error MathJax:', err);
                 });
             }

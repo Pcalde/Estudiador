@@ -455,6 +455,15 @@
                     </div>
                 </div>
             </div>
+            <div class="glass-card stat-widget">
+                <div class="stat-title">Probabilidad de Aprobado</div>
+                
+                <div id="widget-montecarlo-container">
+                    <div class="stat-value" style="font-size: 1rem; color: var(--text-muted);">
+                        <i class="fa-solid fa-circle-notch fa-spin"></i> Inicializando motor...
+                    </div>
+                </div>
+            </div>
             <div class="stat-widget" data-widget-id="widget-progreso" style="text-align:center;">
                 <div class="stat-title">Progreso diario</div>
                 
@@ -1535,6 +1544,22 @@
     </div>
 </div>
 
+<div id="modal-montecarlo" class="modal-overlay">
+    <div class="modal-content glass-card" style="max-width: 650px; width: 95%;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
+            <h2 style="margin: 0; color: var(--accent); font-size: 1.2rem;">
+                <i class="fa-solid fa-microchip"></i> Motor de Simulación FSRS
+            </h2>
+            <button onclick="window.cerrarModalMonteCarlo()" style="background: transparent; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer; transition: color 0.2s;">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        
+        <div id="montecarlo-modal-body"></div>
+        
+    </div>
+</div>
+<div id="modal-montecarlo" class="modal-overlay"></div>
 
 <!-- Módulos cargados en orden de dependencias -->
 <script src="src/js/logger.js"></script>

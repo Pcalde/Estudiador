@@ -46,8 +46,9 @@ const UIStudy = (() => {
     function renderizarConceptoActual(tarjeta, modoLec) {
         if (!tarjeta) return;
 
+        const config = tiposConfig || {};
         const tipo = tarjeta.Apartado || 'Concepto';
-        const tit  = document.getElementById('concepto-titulo');
+        const colorTipo = config[tipo]?.color || 'var(--accent)';
 
         if (tit) {
             // 1. Reset de estilos e inyección de clase semántica

@@ -47,26 +47,30 @@ const UIStudy = (() => {
         if (!tarjeta) return;
 
         const tipo = String(tarjeta.Apartado || 'Concepto').trim();
-        let colorTipo = 'var(--accent)'; // Fallback arquitectónico (hereda color de la asignatura)
+        let colorTipo = null;
 
-        // PROTECCIÓN ARQUITECTÓNICA: Resolución polimórfica y case-insensitive
+        // 1. Intentar resolver desde tiposConfig (Formato estricto)
         if (tiposConfig) {
             if (Array.isArray(tiposConfig)) {
-                // Si la configuración viene como Array [{nombre: 'Concepto', color: '#ff0000'}, ...]
-                const match = tiposConfig.find(t => 
-                    String(t.nombre || t.tipo || t.id || '').toLowerCase() === tipo.toLowerCase()
-                );
+                const match = tiposConfig.find(t => String(t.nombre || t.tipo || t.id || '').toLowerCase() === tipo.toLowerCase());
                 if (match && match.color) colorTipo = match.color;
             } else if (typeof tiposConfig === 'object') {
-                // Si la configuración viene como Diccionario {'Concepto': {color: '#ff0000'}}
-                const key = Object.keys(tiposConfig).find(k => 
-                    String(k).toLowerCase() === tipo.toLowerCase()
-                );
-                if (key && tiposConfig[key] && tiposConfig[key].color) {
-                    colorTipo = tiposConfig[key].color;
+                const key = Object.keys(tiposConfig).find(k => String(k).toLowerCase() === tipo.toLowerCase());
+                if (key) {
+                    colorTipo = typeof tiposConfig[key] === 'object' ? tiposConfig[key].color : tiposConfig[key];
                 }
             }
         }
+
+        // 2. FALLBACK AGRESIVO: Buscar en userColors si UI los guardó como colores generales
+        if (!colorTipo && typeof State !== 'undefined') {
+            const userColors = State.get('userColors') || {};
+            const match = Object.keys(userColors).find(k => String(k).toLowerCase() === tipo.toLowerCase());
+            if (match && userColors[match]) colorTipo = userColors[match];
+        }
+
+        // 3. Resolución final de arquitectura
+        if (!colorTipo) colorTipo = 'var(--accent)';
 
         const tit = document.getElementById('concepto-titulo');
         if (tit) {

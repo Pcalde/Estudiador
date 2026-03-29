@@ -43,16 +43,19 @@ const UIStudy = (() => {
     }
 }
 
-    function renderizarConceptoActual(tarjeta, modoLec) {
+    function renderizarConceptoActual(tarjeta, modoLec, tiposConfig) {
         if (!tarjeta) return;
 
-        // LECTURA SEGURA: Obtenemos los colores directamente del Estado. 
-        // Si no está listo, usamos un objeto vacío para evitar ReferenceError.
-        const configTipos = (typeof State !== 'undefined' ? State.get('tiposTarjeta') : null) || {};
+        // PROTECCIÓN ARQUITECTÓNICA: Saneamiento estricto contra Null/Undefined
+        const safeTiposConfig = tiposConfig || {};
+        const tipo            = tarjeta.Apartado || 'Concepto';
         
-        const tipo      = tarjeta.Apartado || 'Concepto';
-        const colorTipo = configTipos[tipo]?.color || 'var(--accent)'; // Fallback nativo
-        const tit       = document.getElementById('concepto-titulo');
+        // Resolución de color: Si no hay color específico del tipo, hereda el de la asignatura (--accent)
+        const colorTipo = (safeTiposConfig[tipo] && safeTiposConfig[tipo].color) 
+                            ? safeTiposConfig[tipo].color 
+                            : 'var(--accent)';
+
+        const tit = document.getElementById('concepto-titulo');
 
         if (tit) {
             tit.style.color = colorTipo;
@@ -69,12 +72,12 @@ const UIStudy = (() => {
         const metaTema = document.getElementById('meta-tema');
         if (metaTema) metaTema.innerText = `Tema ${tarjeta.Tema}`;
 
-        // Fechas con protecciones contra nulos
-        const fElem = document.getElementById('meta-fecha');
-        if (fElem && typeof fechaValor === 'function' && typeof getFechaHoy === 'function') {
-            const hoyVal  = fechaValor(getFechaHoy());
-            const proxVal = fechaValor(tarjeta.ProximoRepaso);
+        const fElem   = document.getElementById('meta-fecha');
+        // Aseguramos que las funciones de fecha existan en el scope o perdonamos el error
+        const hoyVal  = typeof fechaValor === 'function' ? fechaValor(getFechaHoy()) : 0;
+        const proxVal = typeof fechaValor === 'function' && tarjeta.ProximoRepaso ? fechaValor(tarjeta.ProximoRepaso) : 0;
 
+        if (fElem && proxVal) {
             if (proxVal < hoyVal) {
                 fElem.innerText   = 'Retraso: ' + formatDateForUI(tarjeta.ProximoRepaso);
                 fElem.style.color = 'var(--status-red)';
@@ -106,7 +109,7 @@ const UIStudy = (() => {
                 MathJax.typesetClear([target]);
                 MathJax.typesetPromise([target]).catch(err => {
                     if (err?.message?.includes('replaceChild') || err?.stack?.includes('replaceChild')) return;
-                    if (typeof Logger !== 'undefined') Logger.error('Error MathJax:', err);
+                    Logger.error('Error MathJax:', err);
                 });
             }
         }

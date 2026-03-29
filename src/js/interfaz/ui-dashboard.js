@@ -79,6 +79,27 @@ const UIDashboard = (() => {
             }
         }
     }
+    // Añadir al namespace UI / UI_Dashboard
+    function updateProbabilidadAprobado(porcentaje) {
+        const labelElem = document.getElementById('dash-prob-aprobado-val');
+        const barraElem = document.getElementById('dash-prob-aprobado-bar'); // Opcional para barra visual
+        
+        if (!labelElem) return;
+
+        labelElem.innerText = `${porcentaje}%`;
+
+        // Lógica de colores semánticos (Rojo -> Naranja -> Verde)
+        let color = 'var(--text-color)';
+        if (porcentaje >= 80) color = '#4ade80'; // Verde (Listo para examen)
+        else if (porcentaje >= 50) color = '#facc15'; // Amarillo/Naranja (Estudiando)
+        else color = '#f87171'; // Rojo (Riesgo de suspenso)
+
+        labelElem.style.color = color;
+        if (barraElem) {
+            barraElem.style.width = `${porcentaje}%`;
+            barraElem.style.backgroundColor = color;
+        }
+    }
 
     function updateCalendarHeatmap(bib, asigActual, fechas, viewDate) {
         const container = document.getElementById('calendar-heatmap');
@@ -703,7 +724,280 @@ const UIDashboard = (() => {
             UI.renderizarMatematicas(listContainer).catch(err => Logger.error(err)); // o el nodo que estés renderizando
         }
     }
+    // ════════════════════════════════════════════════════════════════
+    // UI MONTE CARLO (Módulo Interno - v4 UX Optimizada)
+    // ════════════════════════════════════════════════════════════════
+    function _generarColorPorTag(tag) {
+        if (!tag || tag === 'General') return '#888888';
+        if (tag === 'Demostraciones') return '#e09f12'; 
+        let hash = 0;
+        for (let i = 0; i < tag.length; i++) hash = tag.charCodeAt(i) + ((hash << 5) - hash);
+        const h = Math.abs(hash) % 360;
+        return `hsl(${h}, 70%, 65%)`; // Colores pastel generados matemáticamente
+    }
+    function renderWidgetMonteCarlo(res) {
+        const contenedor = document.getElementById('widget-montecarlo-container');
+        if (!contenedor) return;
 
+        if (!res) {
+            contenedor.innerHTML = `
+                <div class="stat-value" style="font-size: 1rem; color: #888;">Pendiente de cálculo</div>
+                <button onclick="window.abrirModalMonteCarlo()" class="btn-glass" style="margin-top: 10px; width: 100%;">
+                    <i class="fa-solid fa-microchip"></i> Lanzar Simulación
+                </button>
+            `;
+            return;
+        }
+
+        let color = res.probabilidad >= 80 ? '#4ade80' : (res.probabilidad >= 50 ? '#facc15' : '#f87171');
+        
+        contenedor.innerHTML = `
+            <div style="font-size: 0.9rem; color: #ccc;">
+                Aprobarías el <strong style="color: ${color}; font-size: 1.2rem;">${res.probabilidad}%</strong> de los exámenes.
+            </div>
+            <div style="font-size: 0.8rem; color: #888; margin-top: 5px;">
+                Nota media estimada: <strong>${res.notaMedia} / ${res.notaMaxima}</strong>
+            </div>
+            <button onclick="window.abrirModalMonteCarlo()" class="btn-glass" style="margin-top: 10px; font-size: 0.8rem;">
+                <i class="fa-solid fa-rotate-right"></i> Recalcular
+            </button>
+        `;
+    }
+
+    function _renderEstructuraModal(titulo, icono, cuerpoHtml, footerHtml) {
+        return `
+        <div style="background:var(--card-bg); border:1px solid #444; border-radius:10px; width:95%; max-width:500px; max-height:88vh; display:flex; flex-direction:column; overflow:hidden; margin:auto; box-shadow: 0 10px 40px rgba(0,0,0,0.8);">
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-bottom:1px solid #333; flex-shrink:0;">
+                <h3 style="margin:0; font-size:0.9em; color:var(--text-main);">
+                    <i class="${icono}" style="color:var(--accent); margin-right:6px;"></i>${titulo}
+                </h3>
+                <button onclick="window.cerrarModalMonteCarlo()" style="background:rgba(255,82,82,0.15); border:1px solid rgba(255,82,82,0.5); color:#ff5252; border-radius:6px; width:28px; height:28px; cursor:pointer; font-size:1em; display:flex; align-items:center; justify-content:center; flex-shrink:0; line-height:1; transition: 0.2s;">✕</button>
+            </div>
+            <div style="overflow-y:auto; padding:10px 14px; display:flex; flex-direction:column; gap:10px;">
+                ${cuerpoHtml}
+            </div>
+            ${footerHtml ? `
+            <div style="display:flex; justify-content:flex-end; align-items:center; padding:8px 14px; border-top:1px solid #333; flex-shrink:0;">
+                ${footerHtml}
+            </div>` : ''}
+        </div>
+        `;
+    }
+
+    function mostrarCargaMonteCarlo(simulaciones = 5000) {
+        const modalOverlay = document.getElementById('modal-montecarlo');
+        if (!modalOverlay) return;
+        
+        const formatNum = simulaciones.toLocaleString('es-ES');
+        const cuerpo = `
+            <div style="text-align: center; padding: 40px 10px;">
+                <i class="fa-solid fa-circle-notch fa-spin" style="font-size: 2.5rem; color: var(--accent);"></i>
+                <p style="margin-top: 20px; font-weight:bold; color:var(--text-main);">Procesando ${formatNum} simulaciones...</p>
+                <p style="font-size: 0.8em; color: #888;">Aplicando restricciones FSRS y calculando varianza.</p>
+            </div>
+        `;
+        modalOverlay.innerHTML = _renderEstructuraModal("Motor FSRS", "fa-solid fa-microchip", cuerpo, "");
+    }
+
+    function renderModalMonteCarlo(res) {
+        const modalOverlay = document.getElementById('modal-montecarlo');
+        if (!modalOverlay || !res) return;
+
+        if (res.error) {
+            const cuerpoError = `
+                <div style="background:rgba(244,67,54,0.1); border:1px solid rgba(244,67,54,0.4); border-radius:8px; padding:20px; text-align:center; color:#f44336; margin: 20px 0;">
+                    <i class="fa-solid fa-triangle-exclamation" style="font-size:2em; margin-bottom:10px;"></i>
+                    <h4 style="margin:0 0 10px 0;">Simulación Abortada</h4>
+                    <p style="font-size:0.85em; margin:0;">${res.msg}</p>
+                </div>
+            `;
+            const footerError = `
+                <button onclick="window.abrirModalMonteCarlo(true)" style="background:rgba(143, 47, 162,0.15); border:1px solid #AE39C6; color:#AE39C6; font-size:0.8em; cursor:pointer; padding:6px 14px; border-radius:6px; font-weight:bold;">
+                    <i class="fa-solid fa-gear"></i> Ajustar Restricciones
+                </button>
+            `;
+            modalOverlay.innerHTML = _renderEstructuraModal("Conflicto de Reglas", "fa-solid fa-bug", cuerpoError, footerError);
+            return;
+        }
+
+        let cuerpo = `
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:15px;">
+                <div style="background:rgba(255,255,255,0.05); border-radius:8px; padding:10px; text-align:center;">
+                    <div style="font-size:0.7em; color:#888; text-transform:uppercase; font-weight:bold;">Media Esperada</div>
+                    <div style="font-size:1.6em; font-weight:bold; color:var(--accent);">${res.notaMedia} <span style="font-size:0.5em; color:#666;">/ ${res.notaMaxima}</span></div>
+                </div>
+                <div style="background:rgba(255,255,255,0.05); border-radius:8px; padding:10px; text-align:center;">
+                    <div style="font-size:0.7em; color:#888; text-transform:uppercase; font-weight:bold;">Varianza (Riesgo)</div>
+                    <div style="font-size:1.6em; font-weight:bold; color:#facc15;">± ${res.desviacion}</div>
+                </div>
+                <div style="background:rgba(255,255,255,0.05); border-radius:8px; padding:10px; text-align:center; grid-column: span 2; border: 1px solid rgba(76,175,80,0.3);">
+                    <div style="font-size:0.7em; color:#888; text-transform:uppercase; font-weight:bold;">Intervalo de Confianza (95%)</div>
+                    <div style="font-size:1.2em; font-weight:bold; color:#4caf50;">
+                        Tus notas fluctuarán entre [ ${res.icMin} — ${res.icMax} ]
+                    </div>
+                </div>
+            </div>
+            <p style="font-size:0.8em; color:#888; margin-top:-5px; margin-bottom:10px; text-align:center;">
+                *Auditoría real: 3 exámenes extraídos de la simulación múltiple.
+            </p>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+        `;
+
+        res.ejemplos.forEach(ex => {
+            const color = ex.aprobado ? '#4caf50' : '#f44336';
+            const bgClass = ex.aprobado ? 'rgba(76,175,80,0.05)' : 'rgba(244,67,54,0.05)';
+            cuerpo += `
+                <div style="background:${bgClass}; border:1px solid ${color}40; border-radius:6px; padding:10px; border-left: 4px solid ${color};">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px;">
+                        <strong style="font-size:0.85em;">Examen #${ex.id}</strong>
+                        <span style="color: ${color}; font-weight: bold; font-size:0.85em;">Obtenido: ${ex.nota} / ${res.notaMaxima}</span>
+                    </div>
+                    <div style="font-size: 0.78em; color: #bbb; max-height: 180px; overflow-y: auto; padding-right:5px;">
+            `;
+            ex.detalles.forEach((d) => {
+                const icon = d.acertada ? '<i class="fa-solid fa-check" style="color:#4caf50"></i>' : '<i class="fa-solid fa-xmark" style="color:#f44336"></i>';
+                // Reutilizamos la función nativa de colores del sistema si existe, si no fallback
+                const tagColor = _generarColorPorTag(d.tipo);
+                
+                cuerpo += `
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px; align-items:flex-start;">
+                        <span style="flex:1; line-height:1.2; padding-right:8px;">
+                            <span style="color:${tagColor}; font-weight:bold; margin-right:4px;">[${escapeHtml(d.tipo)}]</span>
+                            ${escapeHtml(d.titulo)} 
+                            <span style="color:#666; font-size:0.9em;">(${d.peso}pts)</span>
+                        </span>
+                        <span>${icon}</span>
+                    </div>`;
+            });
+            cuerpo += `</div></div>`;
+        });
+        cuerpo += `</div>`;
+
+        const footer = `
+            <button onclick="window.abrirModalMonteCarlo(true)" class="btn-glass" style="font-size:0.85em; padding:6px 14px;">
+                <i class="fa-solid fa-gear"></i> Ajustar Restricciones
+            </button>
+        `;
+
+        modalOverlay.innerHTML = _renderEstructuraModal("Resultados (Motor Monte Carlo)", "fa-solid fa-chart-pie", cuerpo, footer);
+    }
+
+    function lanzarSimulacionDesdeUI() {
+        const config = {
+            notaMaxima: parseFloat(document.getElementById('mc-nota-max').value) || 10.0,
+            notaObjetivo: parseFloat(document.getElementById('mc-nota-obj').value) || 7.0,
+            maxTarjetas: parseInt(document.getElementById('mc-max-preguntas').value) || 50,
+            maxPeso: parseFloat(document.getElementById('mc-max-peso').value) || 3.0,
+            simulaciones: parseInt(document.getElementById('mc-simulaciones').value) || 5000,
+            reglas: []
+        };
+        
+        document.querySelectorAll('.mc-regla-row').forEach(row => {
+            const excluido = row.getAttribute('data-excluido') === 'true';
+            const tipo = row.getAttribute('data-tipo');
+            const total = parseFloat(row.querySelector('.mc-total').value) || 0;
+            const valor = parseFloat(row.querySelector('.mc-valor').value) || 0;
+            
+            if (excluido || total > 0 || valor > 0) {
+                config.reglas.push({ tipo, excluido, total, valor });
+            }
+        });
+
+        if (typeof window.lanzarSimulacionMonteCarlo === 'function') {
+            window.lanzarSimulacionMonteCarlo(config);
+        }
+    }
+
+    function abrirModalMonteCarlo(forzarConfig = false) {
+        const modalOverlay = document.getElementById('modal-montecarlo');
+        if (modalOverlay) modalOverlay.classList.add('visible');
+        
+        const asigActual = State.get('nombreAsignaturaActual');
+        const cacheResultados = State.get('resultadosMonteCarlo') || {};
+        
+        if (!forzarConfig && cacheResultados[asigActual]) {
+            renderModalMonteCarlo(cacheResultados[asigActual]);
+            return;
+        }
+
+        const tarjetas = State.get('biblioteca')[asigActual] || [];
+        const tiposSet = new Set();
+        tarjetas.forEach(c => {
+            let t = c.Apartado ? c.Apartado.trim().toLowerCase() : '';
+            if (!t) tiposSet.add('General');
+            else if (t.startsWith('demo')) tiposSet.add('Demostraciones');
+            else tiposSet.add(t.charAt(0).toUpperCase() + t.slice(1));
+        });
+        const tipos = Array.from(tiposSet);
+
+        let cuerpo = `
+            <p style="font-size:0.8em; color:#888; margin-top:0;">Fija la estructura de tu examen. Para descartar temas que no entran, marca la X.</p>
+            
+            <div style="background:#1a1a1a; border:1px solid #2a2a2a; border-radius:6px; padding:10px; margin-bottom:5px;">
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+                    <div style="display:flex; flex-direction:column; gap:3px;">
+                        <label style="font-size:0.7em; color:#888;">Nota Máxima</label>
+                        <input type="number" id="mc-nota-max" value="10.0" step="0.5" class="input-glass" style="width:100%; font-size:0.8em; padding:5px;">
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:3px;">
+                        <label style="font-size:0.7em; color:#888;">Corte Aprobado</label>
+                        <input type="number" id="mc-nota-obj" value="5.0" class="input-glass" style="width:100%; font-size:0.8em; padding:5px;">
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:3px;">
+                        <label style="font-size:0.7em; color:#888;">Límite Preguntas</label>
+                        <input type="number" id="mc-max-preguntas" value="10" class="input-glass" style="width:100%; font-size:0.8em; padding:5px;">
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:3px;">
+                        <label style="font-size:0.7em; color:#888;">Pts/Tarjeta Máx.</label>
+                        <input type="number" id="mc-max-peso" value="3.0" step="0.25" class="input-glass" style="width:100%; font-size:0.8em; padding:5px;">
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:3px; grid-column: span 2;">
+                        <label style="font-size:0.7em; color:#888;">Nº de Simulaciones (Iteraciones)</label>
+                        <input type="number" id="mc-simulaciones" value="5000" step="1000" class="input-glass" style="width:100%; font-size:0.8em; padding:5px;">
+                    </div>
+                </div>
+            </div>
+
+            <div style="background:#1a1a1a; border:1px solid #2a2a2a; border-radius:6px; padding:10px;">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+                    <i class="fa-solid fa-layer-group" style="color:var(--accent); font-size:0.9em;"></i>
+                    <span style="font-size:0.85em; color:#ccc; font-weight:bold;">Matriz de Exclusión y Reglas</span>
+                </div>
+                <div style="max-height:220px; overflow-y:auto; display:flex; flex-direction:column; gap:6px;">
+        `;
+
+        tipos.forEach(t => {
+            const tagColor = (typeof window.getColorAsignatura === 'function') ? window.getColorAsignatura(t) : '#e09f12';
+            cuerpo += `
+                <div class="mc-regla-row" data-tipo="${escapeHtml(t)}" data-excluido="false" style="display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:6px; background:#111; border:1px solid #333;">
+                    <button class="mc-btn-exclude" onclick="window.toggleExcludeMC(this)" style="background:transparent; border:none; color:${tagColor}; cursor:pointer; font-size:1.1em; width:24px; display:flex; justify-content:center; transition:0.2s;" title="En la bolsa">
+                        <i class="fa-solid fa-check-circle"></i>
+                    </button>
+                    <span style="font-size:0.8em; color:#ccc; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:bold;">${escapeHtml(t)}</span>
+                    <input type="number" class="mc-total input-glass" placeholder="Puntos totales" step="0.25" min="0.25" style="width:85px; font-size:0.75em; padding:4px;">
+                    <input type="number" class="mc-valor input-glass" placeholder="Peso c/u" step="0.25" min="0.25" style="width:80px; font-size:0.75em; padding:4px;">
+                </div>
+            `;
+        });
+        
+        if (tipos.length === 0) cuerpo += `<p style="color:#888; font-size:0.75em;">No tienes tarjetas con apartado asignado.</p>`;
+        cuerpo += `</div></div>`;
+
+        const footer = `
+            <button onclick="window.lanzarSimulacionDesdeUI()" style="background:rgba(143, 47, 162,0.15); border:1px solid #AE39C6; color:#AE39C6; font-size:0.85em; cursor:pointer; padding:6px 16px; border-radius:6px; font-weight:bold; display:flex; align-items:center; gap:6px;">
+                <i class="fa-solid fa-play"></i> Simular Examen
+            </button>
+        `;
+
+        modalOverlay.innerHTML = _renderEstructuraModal("Arquitectura Estocástica", "fa-solid fa-gears", cuerpo, footer);
+    }
+
+    function cerrarModalMonteCarlo() {
+        const modal = document.getElementById('modal-montecarlo');
+        if (modal) modal.classList.remove('visible');
+    }
+
+    // ── RETORNO DEL MÓDULO ──────────
     return {
         updateDifficultyStats,
         updateGlobalStats,
@@ -716,5 +1010,40 @@ const UIDashboard = (() => {
         updateMapaHoras,
         updatePomoStats,
         updatePendingWindow,
+        updateProbabilidadAprobado,
+        renderWidgetMonteCarlo,
+        mostrarCargaMonteCarlo,
+        renderModalMonteCarlo,
+        lanzarSimulacionDesdeUI,
+        abrirModalMonteCarlo,
+        cerrarModalMonteCarlo
     };
-})();
+})(); // <--- FIN DEL IIFE UIDashboard
+
+// ════════════════════════════════════════════════════════════════
+// PROXIES GLOBALES DEL DOM 
+// ════════════════════════════════════════════════════════════════
+
+window.lanzarSimulacionDesdeUI = () => UIDashboard.lanzarSimulacionDesdeUI();
+window.abrirModalMonteCarlo    = (forzar) => UIDashboard.abrirModalMonteCarlo(forzar);
+window.cerrarModalMonteCarlo   = () => UIDashboard.cerrarModalMonteCarlo();
+
+window.toggleExcludeMC = function(btn) {
+    const row = btn.closest('.mc-regla-row');
+    const isExcluido = row.getAttribute('data-excluido') === 'true';
+    
+    if (isExcluido) {
+        row.setAttribute('data-excluido', 'false');
+        btn.innerHTML = '<i class="fa-solid fa-check-circle"></i>';
+        btn.style.color = btn.getAttribute('data-color-orig');
+        row.style.opacity = '1';
+        row.querySelectorAll('input').forEach(i => i.disabled = false);
+    } else {
+        if (!btn.getAttribute('data-color-orig')) btn.setAttribute('data-color-orig', btn.style.color);
+        row.setAttribute('data-excluido', 'true');
+        btn.innerHTML = '<i class="fa-solid fa-ban"></i>';
+        btn.style.color = '#f44336';
+        row.style.opacity = '0.5';
+        row.querySelectorAll('input').forEach(i => { i.disabled = true; i.value = ''; });
+    }
+};

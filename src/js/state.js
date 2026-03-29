@@ -16,6 +16,27 @@ const State = (() => {
         indiceNavegacion:        0,
         modoSecuencial:          false,
         modoLectura:             false,
+        // Configuración de Dominio (Ontología de tarjetas expandida)
+        tiposTarjeta: {
+            // Entidades Principales
+            'Definición':   { color: '#c40202', comandoLatex: '\\defi' },
+            'Teorema':      { color: '#1e4fb2', comandoLatex: '\\teorema' },
+            'Proposición':  { color: '#16a116', comandoLatex: '\\prop' },
+            'Propiedad':    { color: '#16a116', comandoLatex: '\\propiedaddequemecomasloscojones' },
+            'Lema':         { color: '#20603D', comandoLatex: '\\lema' },
+            'Corolario':    { color: '#3883c2', comandoLatex: '\\coro' },
+            'Axioma':       { color: '#dabcfa', comandoLatex: '\\axioma' },
+            'Observación':  { color: '#7242A3', comandoLatex: '\\obs' },
+            'Nota':         { color: '#9e9e9e', comandoLatex: '\\nota' },
+            'Ejemplo':      { color: '#3CAF6E', comandoLatex: '\\ejemplo' },
+
+            // Bloques de Demostración (Herencia de color y comandos específicos)
+            'Dem. Teorema':      { color: '#1e4fb2', comandoLatex: '\\begin{demot}' },
+            'Dem. Proposición':  { color: '#16a116', comandoLatex: '\\begin{demop}' },
+            'Dem. Propiedad':    { color: '#16a116', comandoLatex: '\\begin{demop}' },
+            'Dem. Lema':         { color: '#20603D', comandoLatex: '\\begin{demol}' },
+            'Dem. Corolario':    { color: '#3883c2', comandoLatex: '\\begin{democ}' }
+        },
 
         // Variables dinámicas de UI del Controlador
         tiposTarjeta:            [],

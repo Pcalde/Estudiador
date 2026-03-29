@@ -45,13 +45,13 @@ function modoEdicionJSON() {
 }
 
 function cancelarEdicion() {
-    // Lectura segura a través del gestor de estado centralizado
+    // Acceso correcto al estado centralizado v2.0
     const asigActual = State.get('nombreAsignaturaActual');
     
     if (typeof UI !== 'undefined' && UI.cancelarEdicion) {
         UI.cancelarEdicion(!!asigActual);
     } else {
-        Logger.warn("Arquitectura: UI.cancelarEdicion no está disponible.");
+        if (typeof Logger !== 'undefined') Logger.error("Arquitectura: UI.cancelarEdicion no implementado.");
     }
 }
 

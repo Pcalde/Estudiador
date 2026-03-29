@@ -43,26 +43,21 @@ const UIStudy = (() => {
     }
 }
 
-    function renderizarConceptoActual(tarjeta, modoLec, tiposConfig = {}) {
+    function renderizarConceptoActual(tarjeta, modoLec) {
         if (!tarjeta) return;
 
         const tipo = tarjeta.Apartado || 'Concepto';
-        let colorTipo = tiposConfig[tipo]?.color;
-
-        // Fallback dinámico: Hash HSL si no hay configuración inyectada
-        if (!colorTipo) {
-            let hash = 0;
-            const str = tipo.toLowerCase();
-            for (let i = 0; i < str.length; i++) {
-                hash = str.charCodeAt(i) + ((hash << 5) - hash);
-            }
-            colorTipo = `hsl(${Math.abs(hash % 360)}, 65%, 65%)`; // Luminosidad ajustada para Dark Mode
-        }
+        // Normalización estricta (ej: "Fórmula" -> "formula", "Teorema Clave" -> "teorema-clave")
+        const tipoNormalizado = tipo.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, '-');
 
         const tit = document.getElementById('concepto-titulo');
         if (tit) {
-            tit.style.color = colorTipo;
-            tit.innerHTML   = `<span style="font-size:0.6em;opacity:0.8;text-transform:uppercase;display:block;margin-bottom:5px;">${escapeHtml(tipo)}</span>${escapeHtml(tarjeta.Titulo || '')}`;
+            // 1. Limpiamos cualquier rastro de estilos JS en línea
+            tit.style.color = '';
+            // 2. Delegamos la responsabilidad visual al CSS creando un hook semántico
+            tit.setAttribute('data-apartado', tipoNormalizado);
+            
+            tit.innerHTML = `<span class="etiqueta-apartado" style="font-size:0.6em;opacity:0.8;text-transform:uppercase;display:block;margin-bottom:5px;">${escapeHtml(tipo)}</span>${escapeHtml(tarjeta.Titulo || '')}`;
         }
 
         const cont = document.getElementById('concepto-contenido');

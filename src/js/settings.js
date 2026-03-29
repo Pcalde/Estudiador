@@ -13,6 +13,10 @@ function initAppState() {
         const colores = Util.loadLS('estudiador_colores');
         if (colores) State.set('userColors', colores);
 
+        // FIX ARQUITECTÓNICO: Hidratar los tipos de tarjeta que el sistema ignoraba
+        const tipos = Util.loadLS('estudiador_tipos_tarjeta');
+        if (tipos) State.set('tiposTarjeta', tipos);
+
         const proyectos = Util.loadLS('estudiador_proyectos');
         if (proyectos) State.set('projects', proyectos);
 
@@ -29,7 +33,6 @@ function initAppState() {
         if (savedModel) State.set('iaModel', savedModel);
     });
 
-    // Los proyectos necesitan renderizado fuera del batch (depende de UI)
     if (State.get('projects').length > 0) {
         if (typeof actualizarListaProyectos === 'function') actualizarListaProyectos();
     }
@@ -38,7 +41,6 @@ function initAppState() {
     }
 }
 
-/** Sincroniza los inputs de pomodoro con los valores guardados. */
 function _sincronizarInputsPomo(settings) {
     const campos = {
         'set-work':   'work',
@@ -62,7 +64,6 @@ function cargarApariencia() {
     const visualTheme  = saved.visual || 'style-glass';
     const clickEffect  = saved.click  || 'click-skeuo';
 
-    // FIX: Usar el State centralizado en lugar de globales legacy
     State.set('currentVisualTheme', visualTheme);
     State.set('currentClickEffect', clickEffect);
 
@@ -73,7 +74,6 @@ function guardarApariencia() {
     const visualTheme = document.getElementById('set-visual-theme').value;
     const clickEffect = document.getElementById('set-click-effect').value;
 
-    // FIX: Mutar a través del State
     State.batch(() => {
         State.set('currentVisualTheme', visualTheme);
         State.set('currentClickEffect', clickEffect);
@@ -125,7 +125,6 @@ function guardarHorarioDia(e) {
     const asig  = document.getElementById('sch-subject-select')?.value;
     const valor = parseInt(document.getElementById('sch-pomo-input')?.value) || 0;
 
-    // FIX: Reemplazar alert() nativo por Toast
     if (!asig) { Toast.show('Crea asignaturas primero.', 'error'); return; }
 
     const horario = State.get('horarioGlobal') || {};
@@ -138,7 +137,6 @@ function guardarHorarioDia(e) {
     renderHorarioGrid();
     if (typeof window.updatePomoStats === 'function') window.updatePomoStats();
 
-    // Feedback visual usando Toast en lugar de cambiar el botón
     Toast.show('Día guardado correctamente', 'success');
 }
 
@@ -167,13 +165,11 @@ function guardarAjustes() {
     const asigs    = ['General', ...Object.keys(State.get('biblioteca') || {})];
     const formData = UI.getAjustesData(asigs);
 
-    // 1. Validar antes de persistir nada
     if (formData.firebase.configStr) {
         try { JSON.parse(formData.firebase.configStr); }
         catch (e) { alert('La configuración de Firebase no es un JSON válido.'); return; }
     }
 
-    // 2. Persistir en State (batch atómico)
     State.batch(() => {
         const pomoSettings = { ...State.get('pomoSettings'), ...formData.pomo };
         State.set('pomoSettings', pomoSettings);
@@ -181,12 +177,14 @@ function guardarAjustes() {
         State.set('groqProxyUrl', formData.ia.proxyUrl);
         const userColors = { ...State.get('userColors'), ...formData.colores };
         State.set('userColors', userColors);
+
+        // FIX ARQUITECTÓNICO: Asegurar que los tipos de tarjeta entran al estado
+        const nuevosTipos = formData.tiposTarjeta || formData.tipos;
+        if (nuevosTipos) State.set('tiposTarjeta', nuevosTipos);
     });
 
-    // 3. Persistir en localStorage (efectos secundarios, fuera del batch)
     _persistirAjustesStorage(formData);
 
-    // 4. Notificar al orquestador para que actualice la UI
     const modoIA = State.get('groqProxyUrl')
         ? 'PROXY'
         : (State.get('groqApiKey') ? 'DIRECTO' : 'INACTIVO');
@@ -194,7 +192,6 @@ function guardarAjustes() {
     EventBus.emit('AJUSTES_GUARDADOS', { modoIA });
 }
 
-/** Persistencia pura en storage. Sin efectos secundarios de UI. */
 function _persistirAjustesStorage(formData) {
     localStorage.setItem('pomo_settings', JSON.stringify(State.get('pomoSettings')));
 
@@ -218,6 +215,12 @@ function _persistirAjustesStorage(formData) {
         localStorage.removeItem('firebase_config');
     }
 
-    localStorage.setItem('estudiador_colores',        JSON.stringify(State.get('userColors')));
-    localStorage.setItem('estudiador_privacy_stats',  formData.privacidad.shareStats ? 'true' : 'false');
+    localStorage.setItem('estudiador_colores', JSON.stringify(State.get('userColors')));
+    localStorage.setItem('estudiador_privacy_stats', formData.privacidad.shareStats ? 'true' : 'false');
+
+    // FIX ARQUITECTÓNICO: Guardado explícito para sobrevivir al F5
+    const tiposActivos = State.get('tiposTarjeta');
+    if (tiposActivos) {
+        localStorage.setItem('estudiador_tipos_tarjeta', JSON.stringify(tiposActivos));
+    }
 }

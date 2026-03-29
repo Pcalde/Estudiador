@@ -1,8 +1,7 @@
 // ════════════════════════════════════════════════════════════════
 // STATE.JS — Estado centralizado de la aplicación
-// v2.0 — Todos los globales viven aquí con acceso controlado.
-// El resto del código sigue leyendo/escribiendo por nombre gracias
-// a Object.defineProperty sobre window (retrocompatibilidad total).
+// v2.1 — Estructura Estricta. Cero contaminación del objeto window.
+// Las lecturas/escrituras DEBEN usar State.get(key) y State.set(key, val).
 // ════════════════════════════════════════════════════════════════
 
 const State = (() => {
@@ -17,11 +16,16 @@ const State = (() => {
         indiceNavegacion:        0,
         modoSecuencial:          false,
         modoLectura:             false,
-        
+
+        // Variables dinámicas de UI del Controlador
+        tiposTarjeta:            [],
+        currentContext:          null,
+        filtrosActivos:          {},
+        resultadosMonteCarlo:    {}, // Caché de simulaciones por asignatura
+
         // Apariencia
         currentVisualTheme:  'style-glass',
         currentClickEffect:  'click-skeuo',
-        currentContext: 'welcome', // 'welcome' | 'study' | 'editor' | 'import' | 'exam'
         userColors:          {},
 
         // Pomodoro & Tareas
@@ -36,23 +40,27 @@ const State = (() => {
         pomoHistory:     [],
         isPomoProcessing: false,
         sessionData:     { tarjetas: 0, faciles: 0, dificiles: 0, criticas: 0, deudaInicial: 0 },
-        iaModel: 'llama-3.3-70b-versatile',
+        iaModel:         'llama-3.3-70b-versatile',
 
         // Calendario & Horario
-        fechasClave:        null, // lazy: lee localStorage en primer acceso
-        horarioGlobal:      {},
-        calendarViewDate:   new Date(),
-        weeklyViewMode:     '7d',
+        fechasClave:          null, 
+        horarioGlobal:        {},
+        calendarViewDate:     new Date(),
+        weeklyViewMode:       '7d',
         diaSeleccionadoIndex: -1,
 
-        // Firebase
-        currentUser:        null,
+        // Firebase & Sync Flags
+        db:                  null,
+        auth:                null,
+        currentUser:         null,
         unsubscribeSnapshot: null,
-        primeraCarga:       true,
+        primeraCarga:        true,
+        isDirty:             false, 
+        isInitialized:       false, 
 
         // Groq / IA
-        groqApiKey:  null, // lazy
-        groqProxyUrl: null, // lazy
+        groqApiKey:   null, 
+        groqProxyUrl: null, 
 
         // Recursos / PDF
         recursosPorAsignatura: {},
@@ -62,32 +70,8 @@ const State = (() => {
         // Examen
         _examenActivo: false,
 
-        // Widget layout (orden, minimizado, oculto)
+        // Widget layout
         widgetConfig: null,
-
-        // Lista filtros
-        filtrosActivos: {
-            hoy: false, nuevas: false, tema: false, rango: false, tipo: false, dificultad: false,
-            temaVal: '', rangoVal: '', tiposSeleccionados: [], difsActivas: []
-        },
-        // Configuración de Dominio (Ontología de tarjetas)
-        tiposTarjeta: {
-            'Definición':   { color: '#c40202', comandoLatex: '\\defi' },
-            'Teorema':      { color: '#1e4fb2', comandoLatex: '\\teorema' },
-            'Proposición':  { color: '#16a116', comandoLatex: '\\prop' },
-            'Lema':         { color: '#3b9c67', comandoLatex: '\\lema' },
-            'Corolario':    { color: '#00bcd4', comandoLatex: '\\coro' },
-            'Axioma':       { color: '#9c27b0', comandoLatex: '\\axioma' },
-            'Observación':  { color: '#7242A3', comandoLatex: '\\obs' },
-            'Nota':         { color: '#9e9e9e', comandoLatex: '\\nota' },
-            'Ejemplo':      { color: '#3db370', comandoLatex: '\\ejemplo' }
-        },
-        // Configuración de Importación Masiva
-        importConfig: {
-            delimitador: '!!!!!',
-            formato: 'lineas', // 'lineas' o 'etiquetas'
-            orden: ['Titulo', 'Apartado', 'Contenido'] 
-        },
     };
 
     // ── Getters con lazy-init para valores de localStorage ────────
@@ -97,51 +81,35 @@ const State = (() => {
                             || localStorage.getItem('estudiador_groq_key') || '',
         groqProxyUrl: () => localStorage.getItem('estudiador_groq_proxy_url') || '',
         widgetConfig: () => JSON.parse(localStorage.getItem('estudiador_widget_config') || 'null'),
-        tiposTarjeta: () => JSON.parse(localStorage.getItem('estudiador_tipos_tarjeta')) || null, // Se fusionará con el default luego
     };
-
-    // ── Exponer cada clave como propiedad de window ───────────────
-    // Así todo el código existente (que usa `biblioteca`, `currentUser`, etc.)
-    // sigue funcionando sin cambios, pero ahora la mutación pasa por _s.
-    const _keys = Object.keys(_s);
-    _keys.forEach(key => {
-        Object.defineProperty(window, key, {
-            get() {
-                if (_s[key] === null && _lazyInits[key]) {
-                    _s[key] = _lazyInits[key]();
-                }
-                return _s[key];
-            },
-            set(v) { _s[key] = v; },
-            configurable: true,
-            enumerable:   true,
-        });
-    });
 
     // ── API pública de State ──────────────────────────────────────
     let _isBatching = false;
     let _pendingChanges = new Set();
+    const _keys = Object.keys(_s);
 
     return {
-        /** Lee un valor del estado */
+        /** Lee un valor del estado centralizado */
         get(key) { 
-            if (key in _s) {
-                if (_s[key] === null && _lazyInits[key]) {
-                    _s[key] = _lazyInits[key]();
-                }
-                return _s[key];
+            if (!(key in _s) && typeof Logger !== 'undefined') {
+                Logger.warn(`STATE: Intento de lectura de clave inexistente o no registrada: ${key}`);
             }
-            return window[key]; // Fallback para propiedades no mapeadas
-        },
-        getRef(key) {
-            return window[key];
+            // Lazy initialization si el valor es null
+            if (_s[key] === null && _lazyInits[key]) {
+                _s[key] = _lazyInits[key]();
+            }
+            return _s[key];
         },
         
-        /** Escribe un valor en el estado y notifica al bus si no hay transacción activa */
-        set(key, val) {
-            window[key] = (val !== null && val !== undefined && typeof val === 'object')
-                ? structuredClone(val)
-                : val;
+        /** Escribe un valor en el estado y notifica al bus */
+        set(key, val) { 
+            if (!(key in _s) && typeof Logger !== 'undefined') {
+                Logger.info(`STATE: Registrando nueva clave dinámica en el estado: ${key}`);
+            }
+            
+            _s[key] = val; 
+            _s.isDirty = true; // Marca que hay cambios pendientes de sincronizar
+
             if (_isBatching) {
                 _pendingChanges.add(key);
             } else if (typeof EventBus !== 'undefined') {
@@ -149,12 +117,10 @@ const State = (() => {
             }
         },
 
-        /** * Ejecuta múltiples mutaciones como una única transacción.
-         * Garantiza que la interfaz solo sea notificada una vez al finalizar.
-         */
+        /** Ejecuta múltiples mutaciones como una única transacción */
         batch(fn) {
             if (_isBatching) {
-                fn(); // Si ya estamos en una transacción anidada, continuar.
+                fn(); 
                 return;
             }
             
@@ -164,7 +130,7 @@ const State = (() => {
             try { 
                 fn(); 
             } catch(e) { 
-                Logger.error("State Batch Error:", e); 
+                if (typeof Logger !== 'undefined') Logger.error("State Batch Error:", e); 
                 throw e; 
             } finally {
                 _isBatching = false;
@@ -175,11 +141,18 @@ const State = (() => {
             }
         },
 
-        /** Snapshot para depuración */
+        /** Bloqueo/Desbloqueo de seguridad para Firebase */
+        setInitialized(status) {
+            _s.isInitialized = status;
+            _s.isDirty = false; // Al inicializar desde la nube, el estado arranca "limpio"
+            if (typeof Logger !== 'undefined') Logger.info(`STATE: Inicializado=${status}. Sincronización permitida.`);
+        },
+
+        /** Snapshot inmutable para depuración */
         snapshot() {
             const snap = {};
             _keys.forEach(k => { snap[k] = _s[k]; });
-            return snap;
+            return JSON.parse(JSON.stringify(snap)); // Evita mutaciones por referencia
         }
     };
 })();

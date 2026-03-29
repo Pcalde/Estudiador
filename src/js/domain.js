@@ -424,75 +424,71 @@ const Scheduler = {
 };
 
 /**
-     * @function calcularHoraFinPomodoro
-     * @description Calcula la hora estimada de finalización basándose en las tareas pendientes 
-     * y la configuración de ciclos FSRS/Pomodoro. Función pura, sin efectos secundarios.
-     * @param {Array} tasks - Lista de tareas del estado.
-     * @param {Object} config - Configuración del Pomodoro (work, short, long, cyclesBeforeLong).
-     * @param {number} ciclosActuales - Ciclos completados en la sesión actual.
-     * @returns {string|null} Hora formateada (ej. "18:45") o null si no hay tareas.
-     */
-    /**
-     * @function calcularHoraFinPomodoro
-     * @description Calcula la hora de finalización blindada. Corrige el contrato de datos (t.est).
-     */
-    function calcularHoraFinPomodoro(tasks, config, ciclosActuales, currentMode, timeLeftSeconds) {
-        try {
-            if (!tasks || !Array.isArray(tasks) || tasks.length === 0) return null;
-            
-            const safeConfig = config || {};
-            let remainingPomos = 0;
-            
-            tasks.forEach(t => { 
-                if (!t.done) {
-                    // FIX ARQUITECTÓNICO: Mapeo correcto de la propiedad heredada 'est'
-                    const est = Number(t.est) || 1; 
-                    const comp = Number(t.completed) || 0;
-                    const pendientes = est - comp;
-                    if (pendientes > 0) remainingPomos += pendientes;
-                }
-            });
-            
-            if (remainingPomos <= 0) return null;
-
-            let timeSeconds = 0;
-            const cbl = Number(safeConfig.cyclesBeforeLong) || 4;
-            const wSec = (Number(safeConfig.work) || 25) * 60;
-            const sSec = (Number(safeConfig.short) || 5) * 60;
-            const lSec = (Number(safeConfig.long) || 15) * 60;
-            
-            let currentCycle = Number(ciclosActuales) || 0;
-            const timeLeft = Number(timeLeftSeconds) || 0;
-
-            if (currentMode === 'work') {
-                timeSeconds += timeLeft;
-                remainingPomos -= 1; 
-                currentCycle += 1;
-                if (remainingPomos > 0) {
-                    timeSeconds += (currentCycle % cbl === 0) ? lSec : sSec;
-                }
-            } else {
-                timeSeconds += timeLeft;
+ * @function calcularHoraFinPomodoro
+ * @description Calcula la hora estimada de finalización basándose en las tareas pendientes 
+ * y la configuración de ciclos FSRS/Pomodoro. Función pura, sin efectos secundarios.
+ * @param {Array} tasks - Lista de tareas del estado.
+ * @param {Object} config - Configuración del Pomodoro (work, short, long, cyclesBeforeLong).
+ * @param {number} ciclosActuales - Ciclos completados en la sesión actual.
+ * @returns {string|null} Hora formateada (ej. "18:45") o null si no hay tareas.
+ */
+function calcularHoraFinPomodoro(tasks, config, ciclosActuales, currentMode, timeLeftSeconds) {
+    try {
+        if (!tasks || !Array.isArray(tasks) || tasks.length === 0) return null;
+        
+        const safeConfig = config || {};
+        let remainingPomos = 0;
+        
+        tasks.forEach(t => { 
+            if (!t.done) {
+                // FIX ARQUITECTÓNICO: Mapeo correcto de la propiedad heredada 'est'
+                const est = Number(t.est) || 1; 
+                const comp = Number(t.completed) || 0;
+                const pendientes = est - comp;
+                if (pendientes > 0) remainingPomos += pendientes;
             }
+        });
+        
+        if (remainingPomos <= 0) return null;
 
-            for (let i = 0; i < remainingPomos; i++) {
-                timeSeconds += wSec;
-                currentCycle += 1;
-                if (i < remainingPomos - 1) {
-                    timeSeconds += (currentCycle % cbl === 0) ? lSec : sSec;
-                }
+        let timeSeconds = 0;
+        const cbl = Number(safeConfig.cyclesBeforeLong) || 4;
+        const wSec = (Number(safeConfig.work) || 25) * 60;
+        const sSec = (Number(safeConfig.short) || 5) * 60;
+        const lSec = (Number(safeConfig.long) || 15) * 60;
+        
+        let currentCycle = Number(ciclosActuales) || 0;
+        const timeLeft = Number(timeLeftSeconds) || 0;
+
+        if (currentMode === 'work') {
+            timeSeconds += timeLeft;
+            remainingPomos -= 1; 
+            currentCycle += 1;
+            if (remainingPomos > 0) {
+                timeSeconds += (currentCycle % cbl === 0) ? lSec : sSec;
             }
-            
-            if (isNaN(timeSeconds)) return null;
-
-            const now = new Date();
-            now.setSeconds(now.getSeconds() + timeSeconds);
-            return now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
-        } catch (error) {
-            Logger.error("Error en calcularHoraFinPomodoro:", error);
-            return null;
+        } else {
+            timeSeconds += timeLeft;
         }
+
+        for (let i = 0; i < remainingPomos; i++) {
+            timeSeconds += wSec;
+            currentCycle += 1;
+            if (i < remainingPomos - 1) {
+                timeSeconds += (currentCycle % cbl === 0) ? lSec : sSec;
+            }
+        }
+        
+        if (isNaN(timeSeconds)) return null;
+
+        const now = new Date();
+        now.setSeconds(now.getSeconds() + timeSeconds);
+        return now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+    } catch (error) {
+        Logger.error("Error en calcularHoraFinPomodoro:", error);
+        return null;
     }
+}
 
     // ════════════════════════════════════════════════════════════════
 // RESOLUCIÓN DE CONTEXTO DE TAREAS POMODORO
@@ -568,6 +564,176 @@ function resolverAsignaturaDeTarea(taskText, fallback = 'General') {
 }
 
 // ════════════════════════════════════════════════════════════════
+// ANALÍTICA PREDICTIVA (FSRS-6 Monte Carlo Avanzado v4)
+// ════════════════════════════════════════════════════════════════
+
+function normalizarApartado(raw) {
+    if (!raw) return 'General';
+    let t = raw.trim().toLowerCase();
+    if (t.startsWith('demo')) return 'Demostraciones';
+    return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+// Transformación Box-Muller para generar números aleatorios con Distribución Normal
+function _sampleNormal(mean, stdDev) {
+    let u1 = Math.random();
+    let u2 = Math.random();
+    if (u1 === 0) u1 = 0.00001; // Evitar log(0)
+    let z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+    return mean + z0 * stdDev;
+}
+
+function _clamp(val, min, max) {
+    return Math.max(min, Math.min(max, val));
+}
+
+function calcularProbabilidadExito(tarjetas, config = {}) {
+    if (!tarjetas || !Array.isArray(tarjetas) || tarjetas.length === 0) return null;
+
+    const notaMaxima = config.notaMaxima || 10.0;
+    const notaObjetivo = config.notaObjetivo || 7.0;
+    const maxTarjetas = config.maxTarjetas || 50;
+    const maxPeso = config.maxPeso || 3.0;
+    const simulaciones = config.simulaciones || 5000;
+    const reglas = config.reglas || []; 
+
+    const pesosValidosBase = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.5, 4.0, 5.0];
+    const pesosValidos = pesosValidosBase.filter(p => p <= maxPeso);
+    if (pesosValidos.length === 0) pesosValidos.push(0.25);
+
+    const tagsExcluidos = reglas.filter(r => r.excluido).map(r => r.tipo);
+    const poolFiltrado = tarjetas.filter(c => !tagsExcluidos.includes(normalizarApartado(c.Apartado)));
+
+    const tarjetasPorTipo = {};
+    poolFiltrado.forEach(c => {
+        const tipo = normalizarApartado(c.Apartado);
+        if (!tarjetasPorTipo[tipo]) tarjetasPorTipo[tipo] = [];
+        tarjetasPorTipo[tipo].push(c);
+    });
+
+    const pesosFijos = {};
+    reglas.filter(r => !r.excluido && r.valor > 0).forEach(r => pesosFijos[r.tipo] = r.valor);
+    const reglasForzadas = reglas.filter(r => !r.excluido && r.total > 0);
+
+    // FASE 0: Pre-flight Check (Validación de Reglas Estrictas)
+    for (const r of reglasForzadas) {
+        const candidatas = tarjetasPorTipo[r.tipo] || [];
+        const cantidadNecesaria = Math.round(r.total / r.valor);
+        if (candidatas.length < cantidadNecesaria) {
+            return { 
+                error: true, 
+                msg: `Regla imposible: Exiges ${r.total} pts de [${r.tipo}] a ${r.valor} pts/c/u. Necesitas ${cantidadNecesaria} tarjetas pero solo hay ${candidatas.length} disponibles sin excluir.` 
+            };
+        }
+    }
+
+    let examenesAprobados = 0;
+    let sumaNotas = 0;
+    const ejemplos = [];
+    const todosLosScores = [];
+
+    for (let s = 0; s < simulaciones; s++) {
+        let examen = [];
+        let sumaPesos = 0;
+        let poolDisponible = [...poolFiltrado];
+
+        // FASE A: Obligatorias
+        for (const r of reglasForzadas) {
+            let candidatas = poolDisponible.filter(c => normalizarApartado(c.Apartado) === r.tipo);
+            const cantidadNecesaria = Math.round(r.total / r.valor);
+            for (let i = 0; i < cantidadNecesaria; i++) {
+                if (candidatas.length === 0) break; 
+                const randIdx = Math.floor(Math.random() * candidatas.length);
+                const c = candidatas.splice(randIdx, 1)[0]; 
+                poolDisponible.splice(poolDisponible.indexOf(c), 1);
+                examen.push({ c, peso: r.valor });
+                sumaPesos += r.valor;
+            }
+        }
+
+        // FASE B: Relleno
+        while (sumaPesos < notaMaxima && poolDisponible.length > 0 && examen.length < maxTarjetas) {
+            const randIdx = Math.floor(Math.random() * poolDisponible.length);
+            const c = poolDisponible.splice(randIdx, 1)[0];
+            const tipoCard = normalizarApartado(c.Apartado);
+            
+            let pesoRestante = notaMaxima - sumaPesos;
+            let pesoAsignado = pesosFijos[tipoCard] || pesosValidos[Math.floor(Math.random() * pesosValidos.length)];
+            
+            let pesoFinal = Math.min(pesoRestante, pesoAsignado);
+            pesoFinal = Math.round(pesoFinal * 4) / 4; 
+            if (pesoFinal <= 0) pesoFinal = 0.25;
+            if (sumaPesos + pesoFinal > notaMaxima) pesoFinal = notaMaxima - sumaPesos;
+
+            examen.push({ c, peso: pesoFinal });
+            sumaPesos += pesoFinal;
+        }
+
+        // FASE C: Simulación con Distribución Normal
+        let scoreObtenido = 0;
+        let desgloseEjemplo = [];
+
+        for (const item of examen) {
+            let r = 0;
+            
+            if (item.c.fsrs_stability != null && item.c.UltimoRepaso) {
+                // Tarjeta Consolidada: Retención real FSRS afectada por estrés gaussiano
+                const factorEstres = _clamp(_sampleNormal(0.92, 0.05), 0.70, 1.05);
+                r = _clamp((Scheduler.retencionActual(item.c) || 0) * factorEstres, 0, 1);
+            } else if (item.c.EtapaRepaso > 0) {
+                // Vista pero sin datos firmes
+                r = _clamp(_sampleNormal(0.35, 0.10), 0.05, 0.65);
+            } else {
+                // Nunca vista (Pura deducción)
+                r = _clamp(_sampleNormal(0.15, 0.05), 0.01, 0.35);
+            }
+
+            const acierto = Math.random() <= r;
+            if (acierto) scoreObtenido += item.peso;
+
+            if (s < 3) {
+                desgloseEjemplo.push({
+                    titulo: item.c.Titulo || item.c.Pregunta || 'Sin título',
+                    tipo: normalizarApartado(item.c.Apartado),
+                    peso: item.peso,
+                    r: Math.round(r * 100),
+                    acertada: acierto
+                });
+            }
+        }
+
+        // Ya NO normalizamos a 10. Mantenemos el score bruto en base a la notaMaxima
+        sumaNotas += scoreObtenido;
+        todosLosScores.push(scoreObtenido);
+        if (scoreObtenido >= notaObjetivo) examenesAprobados++;
+
+        if (s < 3) {
+            ejemplos.push({
+                id: s + 1,
+                nota: Math.round(scoreObtenido * 100) / 100,
+                aprobado: scoreObtenido >= notaObjetivo,
+                detalles: desgloseEjemplo
+            });
+        }
+    }
+
+    todosLosScores.sort((a, b) => a - b);
+    const mediaMedia = sumaNotas / simulaciones;
+    const varianza = todosLosScores.reduce((acc, val) => acc + Math.pow(val - mediaMedia, 2), 0) / simulaciones;
+    
+    return {
+        probabilidad: Math.round((examenesAprobados / simulaciones) * 1000) / 10,
+        notaMedia: Math.round(mediaMedia * 100) / 100,
+        desviacion: Math.round(Math.sqrt(varianza) * 100) / 100,
+        icMin: Math.round(todosLosScores[Math.floor(simulaciones * 0.025)] * 100) / 100,
+        icMax: Math.round(todosLosScores[Math.floor(simulaciones * 0.975)] * 100) / 100,
+        notaMaxima: notaMaxima,
+        notaObjetivo: notaObjetivo,
+        ejemplos: ejemplos
+    };
+}
+
+// ════════════════════════════════════════════════════════════════
 // NAMESPACE DE LA CAPA DE DOMINIO (Exportación explícita)
 // ════════════════════════════════════════════════════════════════
 
@@ -575,6 +741,7 @@ const Domain = {
     calcularHoraFinPomodoro,
     esAsignaturaValida,
     resolverAsignaturaDeTarea,
+    calcularProbabilidadExito,
     parseDateSafe,
     toISODateString,
     formatDateForUI,

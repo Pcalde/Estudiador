@@ -30,16 +30,21 @@ const StudyEngine = (() => {
         const todos = biblioteca[asigActual] || [];
         let filtrados = [...todos];
 
-        const f = State.get('filtrosActivos');
+        // LECTURA DEFENSIVA: Si UI.getEstadoFiltros() falla, aplicamos objeto vacío por defecto
+        const rawFiltros = (typeof UI !== 'undefined' && UI.getEstadoFiltros) ? UI.getEstadoFiltros() : null;
+        const f = rawFiltros || { 
+            hoy: false, nuevas: false, tema: false, rango: false, tipo: false, dificultad: false,
+            tiposSeleccionados: [], difsActivas: []
+        };
 
         // 1. Filtrado Matemático
-        if (f.hoy) filtrados = filtrados.filter(c => !c.ProximoRepaso || Domain.esVencido(c.ProximoRepaso));
+        if (f.hoy) filtrados = filtrados.filter(c => !c.ProximoRepaso || window.esVencido(c.ProximoRepaso));
         if (f.nuevas) filtrados = filtrados.filter(c => !c.UltimoRepaso);
-        if (f.tema) {
+        if (f.tema && f.temaVal) {
             const temasSet = _parsearListaNumeros(f.temaVal);
             if (temasSet.size > 0) filtrados = filtrados.filter(c => temasSet.has(parseInt(c.Tema)));
         }
-        if (f.rango) {
+        if (f.rango && f.rangoVal) {
             const idxSet = _parsearListaNumeros(f.rangoVal);
             if (idxSet.size > 0) {
                 filtrados = filtrados.filter(c => idxSet.has(c.IndiceGlobal !== undefined ? c.IndiceGlobal : 0));
@@ -54,17 +59,17 @@ const StudyEngine = (() => {
                 }
             }
         }
-        if (f.tipo && f.tiposSeleccionados.length > 0) {
+        if (f.tipo && Array.isArray(f.tiposSeleccionados) && f.tiposSeleccionados.length > 0) {
             filtrados = filtrados.filter(c => f.tiposSeleccionados.some(t => (c.Apartado || '').toLowerCase().startsWith(t)));
         }
-        if (f.dificultad && f.difsActivas.length > 0) {
+        if (f.dificultad && Array.isArray(f.difsActivas) && f.difsActivas.length > 0) {
             const REGLAS_DIFICULTAD = {
                 '1': c => c.fsrs_state === 'review' && (c.fsrs_difficulty || 5) <= 4.0,
                 '2': c => c.fsrs_state === 'review' && (c.fsrs_difficulty || 5) >  4.0 && (c.fsrs_difficulty || 5) <= 7.0,
                 '3': c => c.fsrs_state === 'review' && (c.fsrs_difficulty || 5) >  7.0,
                 '4': c => c.fsrs_state === 'learning',
             };
-            filtrados = filtrados.filter(c => f.difsActivas.some(d => REGLAS_DIFICULTAD[d](c)));
+            filtrados = filtrados.filter(c => f.difsActivas.some(d => REGLAS_DIFICULTAD[d] && REGLAS_DIFICULTAD[d](c)));
         }
 
         // 2. Lógica de Ordenación y Barajado
@@ -76,7 +81,6 @@ const StudyEngine = (() => {
                 return valA - valB;
             });
         } else {
-            // Algoritmo Fisher-Yates estricto para modo Random
             for (let i = filtrados.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [filtrados[i], filtrados[j]] = [filtrados[j], filtrados[i]];
@@ -86,7 +90,7 @@ const StudyEngine = (() => {
         // 3. Notificación a la Interfaz de Usuario
         const nFiltros = [f.hoy, f.nuevas, f.tema, f.rango, f.tipo, f.dificultad].filter(Boolean).length;
         if (typeof UI !== 'undefined') {
-            if (UI.renderEstadoFiltros) UI.renderEstadoFiltros(f, filtrados.length, isSecuencial);
+            if (UI.renderEstadoFiltros) UI.renderEstadoFiltros(nFiltros, filtrados.length);
             if (UI.renderControlesModoEstudio) UI.renderControlesModoEstudio(isSecuencial);
         }
 

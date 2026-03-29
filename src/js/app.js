@@ -321,94 +321,117 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 8. Controlador de teclado global
     // ESTAMOS CEDIENDO EN ESTE ASPECTO DEUDA TÉCNICA POR SER SIMPLEMENTE UNA TONTERÍA VISUAL: EL SIMULARCLICKVISUAL
     // GANAMOS POCO METIÉNDOLO EN UI EN COMPARACIÓN A DEJARLO AHÍ, NO ES IMPORTANTE
-    document.addEventListener('keydown', (e) => {
-        if (!e.key) return;
-        const key     = e.key.toLowerCase();
-        const tag     = e.target.tagName;
-        const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable || tag === 'SELECT';
-        const context = State.get('currentContext');
 
-        // ── Contexto: Examen ──────────────────────────────────────
-        if (context === 'exam') {
-            const isFlash = document.getElementById('examen-flash')?.style.display === 'block';
-            if (!isFlash || isInput) return;
-            const btnRevelar = document.getElementById('ex-f-btn-revelar');
-            const isRevelado = btnRevelar && btnRevelar.style.display === 'none';
-            if ((e.code === 'Space' || key === 'enter') && !isRevelado) {
-                e.preventDefault();
-                EXAM.flashRevelar();
-                simularClickVisual('#ex-f-btn-revelar');
-                return;
-            }
-            if (isRevelado && ['1','2','3','4'].includes(key)) {
-                e.preventDefault();
-                EXAM.flashPuntuar(parseInt(key));
-                simularClickVisual(`#btn-examenflashpuntuar${key === '1' ? '' : `-${key}`}`);
-            }
-            return;
-        }
+document.addEventListener('keydown', (e) => {
+    if (!e.key) return;
+    const key     = e.key.toLowerCase();
+    const tag     = e.target.tagName;
+    const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable || tag === 'SELECT';
+    
+    // Leemos el contexto de forma segura desde el nuevo State
+    const context = State.get('currentContext');
 
-        // ── Contexto: Editor ──────────────────────────────────────
-        if (context === 'editor') {
-            const nav = (delta) => navegarEditor(delta);
-            if (e.altKey && (key === 'a' || key === 'arrowleft'))  { e.preventDefault(); nav(-1); return; }
-            if (e.altKey && (key === 'd' || key === 'arrowright')) { e.preventDefault(); nav(1);  return; }
-            if (!isInput) {
-                if (key === 'a' || key === 'arrowleft')  { e.preventDefault(); nav(-1); return; }
-                if (key === 'd' || key === 'arrowright') { e.preventDefault(); nav(1);  return; }
-            }
-            return;
-        }
-
-        if (isInput) return;
-
-        // ── Global: Espacio → Pomodoro ────────────────────────────
-        if (key === ' ') {
+    // ── Contexto: Examen ──────────────────────────────────────
+    if (context === 'exam') {
+        const isFlash = document.getElementById('examen-flash')?.style.display === 'block';
+        if (!isFlash || isInput) return;
+        
+        const btnRevelar = document.getElementById('ex-f-btn-revelar');
+        const isRevelado = btnRevelar && btnRevelar.style.display === 'none';
+        
+        if ((e.code === 'Space' || key === 'enter') && !isRevelado) {
             e.preventDefault();
-            Timer.toggle();
+            if (typeof EXAM !== 'undefined') EXAM.flashRevelar();
+            if (typeof simularClickVisual === 'function') simularClickVisual('#ex-f-btn-revelar');
             return;
         }
-
-        // ── Global: L / S → modos lectura/secuencial ─────────────
-        if (key === 'l' || key === 's') {
+        if (isRevelado && ['1','2','3','4'].includes(key)) {
             e.preventDefault();
-            const id  = key === 'l' ? 'check-lectura' : 'check-secuencial';
-            const fn  = key === 'l' ? window.toggleModoLectura : window.toggleModoSecuencial;
-            const chk = document.getElementById(id);
-            if (chk) { chk.checked = !chk.checked; fn?.(chk.checked); }
+            if (typeof EXAM !== 'undefined') EXAM.flashPuntuar(parseInt(key));
+            if (typeof simularClickVisual === 'function') simularClickVisual(`#btn-examenflashpuntuar${key === '1' ? '' : `-${key}`}`);
+        }
+        return;
+    }
+
+    // ── Contexto: Editor ──────────────────────────────────────
+    if (context === 'editor') {
+        const nav = (delta) => { if (typeof navegarEditor === 'function') navegarEditor(delta); };
+        if (e.altKey && (key === 'a' || key === 'arrowleft'))  { e.preventDefault(); nav(-1); return; }
+        if (e.altKey && (key === 'd' || key === 'arrowright')) { e.preventDefault(); nav(1);  return; }
+        if (!isInput) {
+            if (key === 'a' || key === 'arrowleft')  { e.preventDefault(); nav(-1); return; }
+            if (key === 'd' || key === 'arrowright') { e.preventDefault(); nav(1);  return; }
+        }
+        return;
+    }
+
+    if (isInput) return;
+
+    // ── Global: Espacio → Pomodoro ────────────────────────────
+    if (key === ' ') {
+        e.preventDefault();
+        if (typeof Timer !== 'undefined' && Timer.toggle) Timer.toggle();
+        return;
+    }
+
+    // ── Global: L / S → modos lectura/secuencial ─────────────
+    if (key === 'l' || key === 's') {
+        e.preventDefault();
+        const id  = key === 'l' ? 'check-lectura' : 'check-secuencial';
+        const chk = document.getElementById(id);
+        if (chk) { 
+            chk.checked = !chk.checked; 
+            // Llamada directa al dominio, sin depender de proxies de window
+            if (key === 'l' && typeof StudyEngine !== 'undefined') StudyEngine.toggleModoLectura(chk.checked);
+            if (key === 's' && typeof StudyEngine !== 'undefined') StudyEngine.toggleModoSecuencial(chk.checked);
+        }
+        return;
+    }
+
+    // ── Contexto: Estudio (o fallback por defecto) ────────────
+    if (context === 'study' || !context) {
+        // BARRERA: No procesar atajos de estudio si no hay tarjeta
+        if (!State.get('conceptoActual')) return; 
+
+        if (key === 'enter') {
+            e.preventDefault();
+            const elm = document.getElementById('concepto-contenido');
+            if (!elm) return;
+            
+            const estaVisible = !elm.classList.contains('hidden');
+            if (estaVisible) { 
+                if (typeof UI !== 'undefined' && UI.ocultarRespuesta) UI.ocultarRespuesta(); 
+                if (typeof simularClickVisual === 'function') simularClickVisual('#btn-ocultar'); 
+            } else { 
+                if (typeof UI !== 'undefined' && UI.revelar) UI.revelar(); 
+                if (typeof simularClickVisual === 'function') simularClickVisual('#btn-main-revelar'); 
+            }
             return;
         }
-
-        // ── Contexto: Estudio ─────────────────────────────────────
-        if (context === 'study') {
-            if (key === 'enter') {
-                e.preventDefault();
-                const estaVisible = !document.getElementById('concepto-contenido')?.classList.contains('hidden');
-                if (estaVisible) { UI.ocultarRespuesta(); simularClickVisual('#btn-ocultar'); }
-                else             { UI.revelar(); simularClickVisual('#btn-main-revelar'); }
-                return;
+        if (key === 'd' || key === 'arrowright') {
+            e.preventDefault();
+            if (typeof StudyEngine !== 'undefined') StudyEngine.siguienteTarjeta();
+            if (typeof simularClickVisual === 'function') simularClickVisual('#btn-siguientetarjeta');
+            return;
+        }
+        if (key === 'a' || key === 'arrowleft') {
+            e.preventDefault();
+            if (State.get('modoSecuencial')) { 
+                if (typeof StudyEngine !== 'undefined') StudyEngine.anteriorTarjeta(); 
+                if (typeof simularClickVisual === 'function') simularClickVisual('#btn-prev'); 
             }
-            if (key === 'd' || key === 'arrowright') {
+            return;
+        }
+        if (['1','2','3','4'].includes(key)) {
+            const controles = document.getElementById('controles-respuesta');
+            if (controles && !controles.classList.contains('hidden')) {
                 e.preventDefault();
-                StudyEngine.siguienteTarjeta();
-                simularClickVisual('#btn-siguientetarjeta');
-                return;
-            }
-            if (key === 'a' || key === 'arrowleft') {
-                e.preventDefault();
-                if (State.get('modoSecuencial')) { StudyEngine.anteriorTarjeta(); simularClickVisual('#btn-prev'); }
-                return;
-            }
-            if (['1','2','3','4'].includes(key)) {
-                const controles = document.getElementById('controles-respuesta');
-                if (controles && !controles.classList.contains('hidden')) {
-                    e.preventDefault();
-                    StudyEngine.procesarRepaso(parseInt(key));
-                    simularClickVisual(`#btn-procesarrepaso${key === '1' ? '' : `-${key}`}`);
-                }
+                if (typeof StudyEngine !== 'undefined') StudyEngine.procesarRepaso(parseInt(key));
+                if (typeof simularClickVisual === 'function') simularClickVisual(`#btn-procesarrepaso${key === '1' ? '' : `-${key}`}`);
             }
         }
-    });
+    }
+});
 
     Logger.info("Estudiador: Teclado global listo.");
 });

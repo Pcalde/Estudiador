@@ -1,11 +1,9 @@
 // ════════════════════════════════════════════════════════════════
 // ASIGNATURAS.JS — Gestión de asignaturas y proyectos
-// Cargado después de: colors.js
-// Dependencias globales: State, UI, Logger, EventBus, getColorAsignatura
 // ════════════════════════════════════════════════════════════════
 
 function guardarProyectos() {
-    localStorage.setItem('estudiador_proyectos', JSON.stringify(projects));
+    localStorage.setItem('estudiador_proyectos', JSON.stringify(State.get('projects') || []));
 }
 
 function actualizarMenuLateral() {
@@ -13,11 +11,13 @@ function actualizarMenuLateral() {
 }
 
 function actualizarListaProyectos() {
-    UI.actualizarListaProyectos(projects);
+    UI.actualizarListaProyectos(State.get('projects') || []);
 }
 
 function borrarProyecto(i) {
-    projects.splice(i, 1);
+    const p = State.get('projects') || [];
+    p.splice(i, 1);
+    State.set('projects', p);
     guardarProyectos();
     actualizarListaProyectos();
 }
@@ -40,7 +40,7 @@ function renombrarAsignatura(oldName, ev) {
         }
     });
 
-    EventBus.emit('DATA_REQUIRES_SAVE');
+    if (typeof EventBus !== 'undefined') EventBus.emit('DATA_REQUIRES_SAVE');
     actualizarMenuLateral();
     if (State.get('nombreAsignaturaActual') === newName) cargarAsignatura(newName);
 }
@@ -60,50 +60,53 @@ function borrarAsignatura(nombre, ev) {
         }
     });
 
-    EventBus.emit('DATA_REQUIRES_SAVE');
+    if (typeof EventBus !== 'undefined') EventBus.emit('DATA_REQUIRES_SAVE');
     actualizarMenuLateral();
     if (typeof window.sincronizar === 'function') window.sincronizar();
 }
 
 function cargarAsignatura(nombre) {
-    Logger.info("Cargando asignatura:", nombre);
-    State.set('currentContext', 'study');
+    if (typeof Logger !== 'undefined') Logger.info("Cargando asignatura:", nombre);
 
-    nombreAsignaturaActual = nombre;
+    State.batch(() => {
+        State.set('nombreAsignaturaActual', nombre);
+        State.set('indiceNavegacion', 0);
+        State.set('conceptoActual', null);
+    });
+
     actualizarMenuLateral();
 
-    UI.ocultarTodo();
-    const studyCard = document.getElementById('study-card');
-    if (studyCard) studyCard.classList.remove('hidden');
+    if (typeof UI !== 'undefined') {
+        UI.ocultarTodo();
+        const studyCard = document.getElementById('study-card');
+        if (studyCard) studyCard.classList.remove('hidden');
 
-    try {
-        const color = getColorAsignatura(nombre);
-        UI.aplicarColorAsignaturaActiva(color);
+        try {
+            const color = typeof getColorAsignatura === 'function' ? getColorAsignatura(nombre) : '#4a90e2';
+            UI.aplicarColorAsignaturaActiva(color);
 
-        const modPdf = document.getElementById('modulo-pdf');
-        if (modPdf) modPdf.classList.add('pdf-collapsed');
+            const modPdf = document.getElementById('modulo-pdf');
+            if (modPdf) modPdf.classList.add('pdf-collapsed');
 
-        const frame = document.getElementById('pdf-frame');
-        if (frame) { frame.src = ""; frame.style.display = "none"; }
+            const frame = document.getElementById('pdf-frame');
+            if (frame) { frame.src = ""; frame.style.display = "none"; }
 
-        const ph = document.getElementById('pdf-placeholder');
-        if (ph) ph.style.display = "block";
+            const ph = document.getElementById('pdf-placeholder');
+            if (ph) ph.style.display = "block";
 
-        const arrowIcon = document.getElementById('pdf-arrow-icon');
-        if (arrowIcon) arrowIcon.innerHTML = '<i class="fa-solid fa-chevron-down"></i>';
+            const arrowIcon = document.getElementById('pdf-arrow-icon');
+            if (arrowIcon) arrowIcon.innerHTML = '<i class="fa-solid fa-chevron-down"></i>';
 
-        const statusText = document.getElementById('pdf-status-text');
-        if (statusText) statusText.innerText = "Desplegar";
+            const statusText = document.getElementById('pdf-status-text');
+            if (statusText) statusText.innerText = "Desplegar";
 
-        if (typeof renderSlots === 'function') renderSlots();
-        else if (typeof actualizarSlotsPdf === 'function') actualizarSlotsPdf();
+            if (typeof renderSlots === 'function') renderSlots();
+            else if (typeof actualizarSlotsPdf === 'function') actualizarSlotsPdf();
 
-    } catch (e) {
-        Logger.error("Error silenciado en módulo PDF:", e);
+        } catch (e) {
+            if (typeof Logger !== 'undefined') Logger.error("Error silenciado en UI PDF:", e);
+        }
     }
-
-    indiceNavegacion = 0;
-    conceptoActual   = null;
 
     if (typeof window.aplicarFiltros === 'function') window.aplicarFiltros();
     if (typeof window.updateDashboard === 'function') window.updateDashboard();
@@ -115,9 +118,10 @@ function crearProyecto() {
 
     const asigs = Object.keys(State.get('biblioteca') || {});
     let asigVinculada = "";
+    const asigActual = State.get('nombreAsignaturaActual');
 
     if (asigs.length > 0) {
-        const defaultAsig = nombreAsignaturaActual ? (asigs.indexOf(nombreAsignaturaActual) + 1) : "";
+        const defaultAsig = asigActual ? (asigs.indexOf(asigActual) + 1) : "";
         let msg = "Vincular a asignatura (número) o dejar vacío para General:\n";
         asigs.forEach((a, i) => msg += `${i + 1}. ${a}\n`);
         const resp = prompt(msg, defaultAsig);
@@ -125,15 +129,16 @@ function crearProyecto() {
         if (!isNaN(idx) && asigs[idx]) asigVinculada = asigs[idx];
     }
 
-    projects.push({ nombre, asignatura: asigVinculada });
+    const p = State.get('projects') || [];
+    p.push({ nombre, asignatura: asigVinculada });
+    State.set('projects', p);
+    
     guardarProyectos();
     actualizarListaProyectos();
 }
 
 function actualizarDesplegableMini() {
-    UI.actualizarDesplegableMini(taskList, State.get('userColors') || {});
+    if (typeof UI !== 'undefined' && UI.actualizarDesplegableMini) {
+        UI.actualizarDesplegableMini(State.get('taskList') || [], State.get('userColors') || {});
+    }
 }
-
-CommandRegistry.register('renombrarAsignatura', ({nombre}) => renombrarAsignatura(nombre));
-CommandRegistry.register('borrarAsignatura',    ({nombre}) => borrarAsignatura(nombre));
-CommandRegistry.register('borrarProyecto',      ({idx})    => borrarProyecto(Number(idx)));

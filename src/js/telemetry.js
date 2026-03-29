@@ -38,11 +38,56 @@ const Telemetry = (() => {
         _run('widget-deuda',        updateDeudaEstudio);
         _run('widget-eficiencia',   updateEficienciaWidget);
         _run('widget-horas',        updateMapaHoras);
+        updateProbabilidadAprobado(); 
+        
+        if (typeof window.renderUpcomingEvents === 'function') window.renderUpcomingEvents();
         
         if (typeof window.renderUpcomingEvents === 'function') {
             try { window.renderUpcomingEvents(); } catch (e) { /* ignore */ }
         }
+}
+        
+ //////////////////////////////
+ // SIMULACIÓN DE MONTECARLO
+ //////////////////////////////
+    
+    function updateProbabilidadAprobado() {
+        const asigActual = State.get('nombreAsignaturaActual');
+        const resultadosTotales = State.get('resultadosMonteCarlo') || {};
+        const res = resultadosTotales[asigActual];
+
+        if (typeof UI !== 'undefined' && UI.renderWidgetMonteCarlo) {
+            UI.renderWidgetMonteCarlo(res);
+        }
     }
+
+    function lanzarSimulacionMonteCarlo(config = {}) {
+        const asigActual = State.get('nombreAsignaturaActual');
+        const bib = State.get('biblioteca');
+        if (!asigActual || !bib[asigActual]) return;
+
+        if (typeof UI !== 'undefined' && UI.mostrarCargaMonteCarlo) {
+            UI.mostrarCargaMonteCarlo();
+        }
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                const res = Domain.calcularProbabilidadExito(bib[asigActual], config);
+                
+                State.batch(() => {
+                    const todos = State.get('resultadosMonteCarlo') || {};
+                    todos[asigActual] = res;
+                    State.set('resultadosMonteCarlo', todos);
+                });
+
+                if (typeof UI !== 'undefined' && UI.renderModalMonteCarlo) {
+                    UI.renderModalMonteCarlo(res);
+                }
+                updateProbabilidadAprobado();
+            });
+        });
+    }
+
+
 
     function setWeeklyView(mode) {
         window.weeklyViewMode = mode; 
@@ -61,7 +106,7 @@ const Telemetry = (() => {
 
     function updateDifficultyStats() {
         const asig = State.get('nombreAsignaturaActual');
-        const bib = State.getRef('biblioteca');
+        const bib = State.get('biblioteca');
         if (!asig || !bib[asig]) return;
 
         const cards = bib[asig];
@@ -283,7 +328,7 @@ const Telemetry = (() => {
     }
     function updateDeudaEstudio() {
     const asigActual = State.get('nombreAsignaturaActual');
-    const bib = State.getRef('biblioteca');
+    const bib = State.get('biblioteca');
 
     if (!asigActual || !bib[asigActual]) {
         UI.updateDeudaEstudio(0, { nuevas:0, learning:0, repasoNormal:0, criticas:0 }, { nuevas:0, learning:0, repasoNormal:0, criticas:0 });
@@ -455,7 +500,8 @@ function construirResumenPublico() {
         updatePomoStats, registrarPomoCompletado, editarProgresoManual,
         updateGlobalStats, setWeeklyView, updateWeeklyWidget,
         updatePronostico, updateDeudaEstudio, updateEficienciaWidget, construirResumenPublico,
-        updateMapaHoras, showResumenSesion, cerrarResumenSesion, updatePendingWindow, registrarExamen
+        updateMapaHoras, showResumenSesion, cerrarResumenSesion, updatePendingWindow, registrarExamen,
+        updateProbabilidadAprobado, lanzarSimulacionMonteCarlo,
     };
 })();
 
@@ -478,3 +524,8 @@ window.cerrarResumenSesion     = () => Telemetry.cerrarResumenSesion();
 window.updatePendingWindow     = (f) => Telemetry.updatePendingWindow(f);
 window.registrarExamen         = (p) => Telemetry.registrarExamen(p);
 window.construirResumenPublico = () => Telemetry.construirResumenPublico();
+window.updateProbabilidadAprobado = () => Telemetry.updateProbabilidadAprobado();
+window.lanzarSimulacionMonteCarlo = (config) => Telemetry.lanzarSimulacionMonteCarlo(config);
+
+
+

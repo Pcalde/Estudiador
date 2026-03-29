@@ -3,7 +3,7 @@
 // Cargado después de: colors.js
 // Dependencias globales: State, UI, Logger, EventBus, persistirDatosLocales
 // ════════════════════════════════════════════════════════════════
-
+let calendarViewDate = new Date();
 const TIPOS_EVENTO = {
     examen:   { label: 'Final',   iconClass: 'fa-sharp fa-solid fa-chess-king',   weight: 'dominant' },
     prueba:   { label: 'Prueba',  iconClass: 'fa-sharp fa-solid fa-chess-queen',  weight: 'strong'   },

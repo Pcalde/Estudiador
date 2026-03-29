@@ -45,14 +45,10 @@ function modoEdicionJSON() {
 }
 
 function cancelarEdicion() {
-    // Acceso correcto al estado centralizado v2.0
-    const asigActual = State.get('nombreAsignaturaActual');
-    
     if (typeof UI !== 'undefined' && UI.cancelarEdicion) {
-        UI.cancelarEdicion(!!asigActual);
-    } else {
-        if (typeof Logger !== 'undefined') Logger.error("Arquitectura: UI.cancelarEdicion no implementado.");
+        UI.cancelarEdicion(!!State.get('nombreAsignaturaActual'));
     }
+    State.set('currentContext', nombreAsignaturaActual ? 'study' : 'welcome');
 }
 
 function abrirEditorAmigable() {

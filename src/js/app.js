@@ -8,7 +8,7 @@
 //   → ui.js → app.js  ← este archivo
 // ════════════════════════════════════════════════════════════════
 
-const APP_VERSION = "1.19.2";
+const APP_VERSION = "1.19.6";
 
 // ────────────────────────────────────────────────────────────────
 // UTIL — helpers privados reutilizables
@@ -115,9 +115,6 @@ EventBus.on('UI_ASIGNATURA_CARGADA', (payload) => {
 // ────────────────────────────────────────────────────────────────
 // REACTOR DE ESTADO (Dominio → UI)
 // ────────────────────────────────────────────────────────────────
-// ────────────────────────────────────────────────────────────────
-// REACTOR DE ESTADO (Dominio → UI)
-// ────────────────────────────────────────────────────────────────
 const _stateReactions = {
     'colaEstudio': () => {
         const cola    = State.get('colaEstudio') || [];
@@ -129,8 +126,7 @@ const _stateReactions = {
             if (typeof UI !== 'undefined' && UI.renderTarjetaVacia) UI.renderTarjetaVacia();
         } else {
             if (typeof UI !== 'undefined' && UI.renderizarConceptoActual) {
-                // Inyección segura: pasamos OR {} para cortar la posibilidad de null en origen
-                UI.renderizarConceptoActual(tarjeta, !!State.get('modoLectura'), State.get('tiposTarjeta') || {});
+                UI.renderizarConceptoActual(tarjeta, State.get('modoLectura'), State.get('tiposTarjeta'));
             }
         }
     },
@@ -142,21 +138,21 @@ const _stateReactions = {
             return;
         }
         if (typeof UI !== 'undefined' && UI.renderizarConceptoActual) {
-            UI.renderizarConceptoActual(tarjeta, !!State.get('modoLectura'), State.get('tiposTarjeta') || {});
+            UI.renderizarConceptoActual(tarjeta, State.get('modoLectura'), State.get('tiposTarjeta'));
         }
     },
 
     'modoLectura': () => {
         const tarjeta = State.get('conceptoActual');
         if (tarjeta && typeof UI !== 'undefined' && UI.renderizarConceptoActual) {
-            UI.renderizarConceptoActual(tarjeta, !!State.get('modoLectura'), State.get('tiposTarjeta') || {});
+            UI.renderizarConceptoActual(tarjeta, State.get('modoLectura'), State.get('tiposTarjeta'));
         }
     },
 
     'modoSecuencial': () => {
         const isSeq = State.get('modoSecuencial');
         if (typeof UI !== 'undefined' && UI.renderControlesModoEstudio) {
-            UI.renderControlesModoEstudio(!!isSeq);
+            UI.renderControlesModoEstudio(isSeq);
         }
     },
 
@@ -172,12 +168,6 @@ function procesarMutacionesEstado(keys) {
     keys.forEach(key => {
         if (_stateReactions[key]) _stateReactions[key]();
         if (triggersDashboard.includes(key)) requireDashboardRefresh = true;
-        if (key === 'nombreAsignaturaActual') {
-            const asig = State.get('nombreAsignaturaActual');
-            if (asig && typeof window.getColorAsignatura === 'function' && typeof UI !== 'undefined' && typeof UI.aplicarColorAsignaturaActiva === 'function') {
-                UI.aplicarColorAsignaturaActiva(window.getColorAsignatura(asig));
-            }
-        }
     });
 
     if (requireDashboardRefresh && typeof Telemetry !== 'undefined') {

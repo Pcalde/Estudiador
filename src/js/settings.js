@@ -13,7 +13,7 @@ function initAppState() {
         const colores = Util.loadLS('estudiador_colores');
         if (colores) State.set('userColors', colores);
 
-        // FIX ARQUITECTÓNICO: Hidratar los tipos de tarjeta que el sistema ignoraba
+        // FIX ARQUITECTÓNICO: Hidratación de tipos de tarjeta restaurada
         const tipos = Util.loadLS('estudiador_tipos_tarjeta');
         if (tipos) State.set('tiposTarjeta', tipos);
 
@@ -41,6 +41,7 @@ function initAppState() {
     }
 }
 
+/** Sincroniza los inputs de pomodoro con los valores guardados. */
 function _sincronizarInputsPomo(settings) {
     const campos = {
         'set-work':   'work',
@@ -64,6 +65,7 @@ function cargarApariencia() {
     const visualTheme  = saved.visual || 'style-glass';
     const clickEffect  = saved.click  || 'click-skeuo';
 
+    // FIX: Usar el State centralizado en lugar de globales legacy
     State.set('currentVisualTheme', visualTheme);
     State.set('currentClickEffect', clickEffect);
 
@@ -74,6 +76,7 @@ function guardarApariencia() {
     const visualTheme = document.getElementById('set-visual-theme').value;
     const clickEffect = document.getElementById('set-click-effect').value;
 
+    // FIX: Mutar a través del State
     State.batch(() => {
         State.set('currentVisualTheme', visualTheme);
         State.set('currentClickEffect', clickEffect);
@@ -125,6 +128,7 @@ function guardarHorarioDia(e) {
     const asig  = document.getElementById('sch-subject-select')?.value;
     const valor = parseInt(document.getElementById('sch-pomo-input')?.value) || 0;
 
+    // FIX: Reemplazar alert() nativo por Toast
     if (!asig) { Toast.show('Crea asignaturas primero.', 'error'); return; }
 
     const horario = State.get('horarioGlobal') || {};
@@ -137,6 +141,7 @@ function guardarHorarioDia(e) {
     renderHorarioGrid();
     if (typeof window.updatePomoStats === 'function') window.updatePomoStats();
 
+    // Feedback visual usando Toast en lugar de cambiar el botón
     Toast.show('Día guardado correctamente', 'success');
 }
 
@@ -158,28 +163,32 @@ function resetSessionData() {
 
 function guardarAjustes() {
     if (typeof UI === 'undefined' || !UI.getAjustesData) {
-        Logger.error('Arquitectura: UI.getAjustesData no está implementado.');
+        if (typeof Logger !== 'undefined') Logger.error('Arquitectura: UI.getAjustesData no está implementado.');
         return;
     }
 
     const asigs    = ['General', ...Object.keys(State.get('biblioteca') || {})];
     const formData = UI.getAjustesData(asigs);
 
-    if (formData.firebase.configStr) {
+    if (formData.firebase && formData.firebase.configStr) {
         try { JSON.parse(formData.firebase.configStr); }
         catch (e) { alert('La configuración de Firebase no es un JSON válido.'); return; }
     }
 
     State.batch(() => {
-        const pomoSettings = { ...State.get('pomoSettings'), ...formData.pomo };
+        const pomoSettings = { ...State.get('pomoSettings'), ...(formData.pomo || {}) };
         State.set('pomoSettings', pomoSettings);
-        State.set('groqApiKey',   formData.ia.apiKey);
-        State.set('groqProxyUrl', formData.ia.proxyUrl);
-        const userColors = { ...State.get('userColors'), ...formData.colores };
+        
+        if (formData.ia) {
+            State.set('groqApiKey',   formData.ia.apiKey);
+            State.set('groqProxyUrl', formData.ia.proxyUrl);
+        }
+        
+        const userColors = { ...State.get('userColors'), ...(formData.colores || {}) };
         State.set('userColors', userColors);
 
-        // FIX ARQUITECTÓNICO: Asegurar que los tipos de tarjeta entran al estado
-        const nuevosTipos = formData.tiposTarjeta || formData.tipos;
+        // FIX ARQUITECTÓNICO: Capturar la configuración de tipos que devuelve la UI
+        const nuevosTipos = formData.tiposTarjeta || formData.tiposConfig || formData.tipos;
         if (nuevosTipos) State.set('tiposTarjeta', nuevosTipos);
     });
 
@@ -192,21 +201,24 @@ function guardarAjustes() {
     EventBus.emit('AJUSTES_GUARDADOS', { modoIA });
 }
 
+/** Persistencia pura en storage. Sin efectos secundarios de UI. */
 function _persistirAjustesStorage(formData) {
     localStorage.setItem('pomo_settings', JSON.stringify(State.get('pomoSettings')));
 
-    if (formData.ia.sessionOnly) {
-        sessionStorage.setItem('estudiador_groq_key_session', formData.ia.apiKey);
-        localStorage.removeItem('estudiador_groq_key');
-    } else {
-        localStorage.setItem('estudiador_groq_key', formData.ia.apiKey);
-        sessionStorage.removeItem('estudiador_groq_key_session');
+    if (formData.ia) {
+        if (formData.ia.sessionOnly) {
+            sessionStorage.setItem('estudiador_groq_key_session', formData.ia.apiKey);
+            localStorage.removeItem('estudiador_groq_key');
+        } else {
+            localStorage.setItem('estudiador_groq_key', formData.ia.apiKey);
+            sessionStorage.removeItem('estudiador_groq_key_session');
+        }
+
+        if (formData.ia.proxyUrl) localStorage.setItem('estudiador_groq_proxy_url', formData.ia.proxyUrl);
+        else                       localStorage.removeItem('estudiador_groq_proxy_url');
     }
 
-    if (formData.ia.proxyUrl) localStorage.setItem('estudiador_groq_proxy_url', formData.ia.proxyUrl);
-    else                       localStorage.removeItem('estudiador_groq_proxy_url');
-
-    if (formData.firebase.configStr) {
+    if (formData.firebase && formData.firebase.configStr) {
         localStorage.setItem('firebase_config', formData.firebase.configStr);
         if (typeof inicializarFirebase === 'function') {
             inicializarFirebase(formData.firebase.configStr);
@@ -216,11 +228,14 @@ function _persistirAjustesStorage(formData) {
     }
 
     localStorage.setItem('estudiador_colores', JSON.stringify(State.get('userColors')));
-    localStorage.setItem('estudiador_privacy_stats', formData.privacidad.shareStats ? 'true' : 'false');
+    
+    if (formData.privacidad) {
+        localStorage.setItem('estudiador_privacy_stats', formData.privacidad.shareStats ? 'true' : 'false');
+    }
 
-    // FIX ARQUITECTÓNICO: Guardado explícito para sobrevivir al F5
+    // FIX ARQUITECTÓNICO: Guardar en disco duro para que sobreviva al recargar la página
     const tiposActivos = State.get('tiposTarjeta');
-    if (tiposActivos) {
+    if (tiposActivos && Object.keys(tiposActivos).length > 0) {
         localStorage.setItem('estudiador_tipos_tarjeta', JSON.stringify(tiposActivos));
     }
 }

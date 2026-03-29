@@ -46,17 +46,29 @@ const UIStudy = (() => {
     function renderizarConceptoActual(tarjeta, modoLec, tiposConfig) {
         if (!tarjeta) return;
 
-        // PROTECCIÓN ARQUITECTÓNICA: Saneamiento estricto contra Null/Undefined
-        const safeTiposConfig = tiposConfig || {};
-        const tipo            = tarjeta.Apartado || 'Concepto';
-        
-        // Resolución de color: Si no hay color específico del tipo, hereda el de la asignatura (--accent)
-        const colorTipo = (safeTiposConfig[tipo] && safeTiposConfig[tipo].color) 
-                            ? safeTiposConfig[tipo].color 
-                            : 'var(--accent)';
+        const tipo = String(tarjeta.Apartado || 'Concepto').trim();
+        let colorTipo = 'var(--accent)'; // Fallback arquitectónico (hereda color de la asignatura)
+
+        // PROTECCIÓN ARQUITECTÓNICA: Resolución polimórfica y case-insensitive
+        if (tiposConfig) {
+            if (Array.isArray(tiposConfig)) {
+                // Si la configuración viene como Array [{nombre: 'Concepto', color: '#ff0000'}, ...]
+                const match = tiposConfig.find(t => 
+                    String(t.nombre || t.tipo || t.id || '').toLowerCase() === tipo.toLowerCase()
+                );
+                if (match && match.color) colorTipo = match.color;
+            } else if (typeof tiposConfig === 'object') {
+                // Si la configuración viene como Diccionario {'Concepto': {color: '#ff0000'}}
+                const key = Object.keys(tiposConfig).find(k => 
+                    String(k).toLowerCase() === tipo.toLowerCase()
+                );
+                if (key && tiposConfig[key] && tiposConfig[key].color) {
+                    colorTipo = tiposConfig[key].color;
+                }
+            }
+        }
 
         const tit = document.getElementById('concepto-titulo');
-
         if (tit) {
             tit.style.color = colorTipo;
             tit.innerHTML   = `<span style="font-size:0.6em;opacity:0.8;text-transform:uppercase;display:block;margin-bottom:5px;">${escapeHtml(tipo)}</span>${escapeHtml(tarjeta.Titulo || '')}`;
@@ -73,7 +85,6 @@ const UIStudy = (() => {
         if (metaTema) metaTema.innerText = `Tema ${tarjeta.Tema}`;
 
         const fElem   = document.getElementById('meta-fecha');
-        // Aseguramos que las funciones de fecha existan en el scope o perdonamos el error
         const hoyVal  = typeof fechaValor === 'function' ? fechaValor(getFechaHoy()) : 0;
         const proxVal = typeof fechaValor === 'function' && tarjeta.ProximoRepaso ? fechaValor(tarjeta.ProximoRepaso) : 0;
 
@@ -109,12 +120,11 @@ const UIStudy = (() => {
                 MathJax.typesetClear([target]);
                 MathJax.typesetPromise([target]).catch(err => {
                     if (err?.message?.includes('replaceChild') || err?.stack?.includes('replaceChild')) return;
-                    Logger.error('Error MathJax:', err);
+                    if (typeof Logger !== 'undefined') Logger.error('Error MathJax:', err);
                 });
             }
         }
     }
-
     function renderControlesModoEstudio(isSecuencial) {
         const btnPrev     = document.getElementById('btn-prev');
         const btnNextText = document.getElementById('btn-next-text');

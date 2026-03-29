@@ -46,10 +46,20 @@ const UIStudy = (() => {
     function renderizarConceptoActual(tarjeta, modoLec, tiposConfig = {}) {
         if (!tarjeta) return;
 
-        const tipo      = tarjeta.Apartado || 'Concepto';
-        const colorTipo = tiposConfig[tipo]?.color || 'var(--accent)';
-        const tit       = document.getElementById('concepto-titulo');
+        const tipo = tarjeta.Apartado || 'Concepto';
+        let colorTipo = tiposConfig[tipo]?.color;
 
+        // Fallback dinámico: Hash HSL si no hay configuración inyectada
+        if (!colorTipo) {
+            let hash = 0;
+            const str = tipo.toLowerCase();
+            for (let i = 0; i < str.length; i++) {
+                hash = str.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            colorTipo = `hsl(${Math.abs(hash % 360)}, 65%, 65%)`; // Luminosidad ajustada para Dark Mode
+        }
+
+        const tit = document.getElementById('concepto-titulo');
         if (tit) {
             tit.style.color = colorTipo;
             tit.innerHTML   = `<span style="font-size:0.6em;opacity:0.8;text-transform:uppercase;display:block;margin-bottom:5px;">${escapeHtml(tipo)}</span>${escapeHtml(tarjeta.Titulo || '')}`;
@@ -66,18 +76,18 @@ const UIStudy = (() => {
         if (metaTema) metaTema.innerText = `Tema ${tarjeta.Tema}`;
 
         const fElem  = document.getElementById('meta-fecha');
-        const hoyVal = window.fechaValor ? window.fechaValor(window.getFechaHoy ? window.getFechaHoy() : new Date()) : 0;
-        const proxVal = window.fechaValor ? window.fechaValor(tarjeta.ProximoRepaso) : 0;
+        if (fElem && typeof fechaValor === 'function' && typeof getFechaHoy === 'function') {
+            const hoyVal = fechaValor(getFechaHoy());
+            const proxVal = fechaValor(tarjeta.ProximoRepaso);
 
-        if (fElem) {
             if (proxVal < hoyVal) {
-                fElem.innerText   = 'Retraso: ' + (window.formatDateForUI ? window.formatDateForUI(tarjeta.ProximoRepaso) : tarjeta.ProximoRepaso);
+                fElem.innerText   = 'Retraso: ' + formatDateForUI(tarjeta.ProximoRepaso);
                 fElem.style.color = 'var(--status-red)';
             } else if (proxVal === hoyVal) {
                 fElem.innerText   = 'Hoy';
                 fElem.style.color = 'var(--status-yellow)';
             } else {
-                fElem.innerText   = 'Adelanto: ' + (window.formatDateForUI ? window.formatDateForUI(tarjeta.ProximoRepaso) : tarjeta.ProximoRepaso);
+                fElem.innerText   = 'Adelanto: ' + formatDateForUI(tarjeta.ProximoRepaso);
                 fElem.style.color = 'var(--text-muted)';
             }
         }
@@ -95,33 +105,15 @@ const UIStudy = (() => {
             btnOcultar?.classList.add('hidden');
         }
 
-        // ════════════════════════════════════════════════════════════════
-        // CORRECCIÓN ARQUITECTÓNICA: STARTUP RACE CONDITION & QUEUEING
-        // ════════════════════════════════════════════════════════════════
-        // Verificamos que el motor esté íntegramente instanciado antes de invocarlo.
-        if (typeof MathJax !== 'undefined' && typeof MathJax.typesetPromise === 'function') {
-            const nodosDinamicos = [];
-            if (tit) nodosDinamicos.push(tit);
-            if (cont) nodosDinamicos.push(cont);
-
-            if (nodosDinamicos.length > 0) {
-                try {
-                    if (typeof MathJax.typesetClear === 'function') {
-                        MathJax.typesetClear(nodosDinamicos);
-                    }
-                    
-                    window._mathJaxQueue = (window._mathJaxQueue || Promise.resolve())
-                        .then(() => MathJax.typesetPromise(nodosDinamicos))
-                        .catch(err => {
-                            if (err?.message?.includes('replaceChild') || err?.stack?.includes('replaceChild')) return;
-                            if (typeof Logger !== 'undefined') Logger.error('Error MathJax Queue:', err);
-                        });
-                } catch (e) {
-                    if (typeof Logger !== 'undefined') Logger.error('Excepción síncrona en MathJax:', e);
-                }
+        if (typeof MathJax !== 'undefined') {
+            const target = document.getElementById('study-card');
+            if (target) {
+                MathJax.typesetClear([target]);
+                MathJax.typesetPromise([target]).catch(err => {
+                    if (err?.message?.includes('replaceChild') || err?.stack?.includes('replaceChild')) return;
+                    if (typeof Logger !== 'undefined') Logger.error('Error MathJax:', err);
+                });
             }
-        } else if (typeof Logger !== 'undefined') {
-            Logger.warn('Renderizado MathJax omitido: El script aún está descargando o inicializándose.');
         }
     }
 

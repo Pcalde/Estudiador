@@ -45,10 +45,14 @@ function modoEdicionJSON() {
 }
 
 function cancelarEdicion() {
+    // Lectura segura a través del gestor de estado centralizado
+    const asigActual = State.get('nombreAsignaturaActual');
+    
     if (typeof UI !== 'undefined' && UI.cancelarEdicion) {
-        UI.cancelarEdicion(!!State.get('nombreAsignaturaActual'));
+        UI.cancelarEdicion(!!asigActual);
+    } else {
+        Logger.warn("Arquitectura: UI.cancelarEdicion no está disponible.");
     }
-    State.set('currentContext', nombreAsignaturaActual ? 'study' : 'welcome');
 }
 
 function abrirEditorAmigable() {

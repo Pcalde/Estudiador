@@ -282,23 +282,29 @@
                 <div id="graph-toolbar" style="
                     display:flex; align-items:center; gap:10px; flex-wrap:wrap;
                     padding:10px 16px; background:var(--menu-color);
-                    border-bottom:1px solid var(--border); flex-shrink:0;">
+                    border-bottom:1px solid var(--border); flex-shrink:0; width:100%; box-sizing:border-box;">
 
                     <span style="font-size:0.85em; color:var(--text-muted); margin-right:4px;">
                         <i class="fa-solid fa-diagram-project" style="color:var(--accent);"></i>
                         <em id="graph-asig-label" style="color:var(--text-main); font-style:normal; font-weight:bold;"></em>
                     </span>
 
-                    <select id="graph-search-filter" style="
-                        padding:6px; background:var(--surface-1); border:1px solid var(--border-light);
-                        color:var(--text-main); border-radius:6px; font-size:0.85em; outline:none;">
-                        <option value="">Todos los tipos</option>
-                        <option value="Definición">Definiciones</option>
-                        <option value="Teorema">Teoremas</option>
-                        <option value="Proposición">Proposiciones</option>
-                        <option value="Lema">Lemas</option>
-                        <option value="Corolario">Corolarios</option>
-                    </select>
+                    <div style="display:flex; gap:6px;">
+                        <select id="graph-search-filter" style="
+                            padding:6px; background:var(--surface-1); border:1px solid var(--border-light);
+                            color:var(--text-main); border-radius:6px; font-size:0.85em; outline:none;">
+                            <option value="">Todo tipo</option>
+                            <option value="Definición">Definiciones</option>
+                            <option value="Teorema">Teoremas</option>
+                            <option value="Proposición">Proposiciones</option>
+                            <option value="Lema">Lemas</option>
+                            <option value="Corolario">Corolarios</option>
+                            <option value="Demo">Demostraciones</option>
+                        </select>
+                        <input type="number" id="graph-search-tema" placeholder="Tema" min="1" style="
+                            width:60px; padding:6px; background:var(--surface-1); border:1px solid var(--border-light);
+                            color:var(--text-main); border-radius:6px; font-size:0.85em; outline:none; text-align:center;">
+                    </div>
 
                     <div style="position:relative; flex:1; min-width:180px; max-width:320px;">
                         <input id="graph-search-input" type="text" placeholder="Buscar para añadir..."
@@ -316,13 +322,11 @@
                     <span id="graph-hint" style="font-size:0.75em; color:var(--accent); font-style:italic;"></span>
 
                     <div style="display:flex; gap:6px; margin-left:auto;">
-                        <button id="graph-btn-add-defis" title="Añadir todas las Definiciones"
+                        <button id="graph-btn-add-mass" title="Añadir bloque de tarjetas"
                             style="background:none; border:1px solid var(--accent); color:var(--accent);
-                                padding:5px 12px; border-radius:6px; cursor:pointer; font-size:0.82em;
-                                transition:all 0.2s;">
-                            <i class="fa-solid fa-bolt"></i> Defis
+                                padding:5px 12px; border-radius:6px; cursor:pointer; font-size:0.82em; transition:all 0.2s;">
+                            <i class="fa-solid fa-layer-group"></i> Lote
                         </button>
-
                         <button id="graph-btn-edge" title="Modo conexión"
                             style="background:none; border:1px solid var(--border-light); color:var(--text-muted);
                                 padding:5px 12px; border-radius:6px; cursor:pointer; font-size:0.82em;">

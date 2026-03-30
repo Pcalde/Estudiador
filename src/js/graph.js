@@ -13,9 +13,25 @@ const Graph = (() => {
         return gd[asig];
     }
 
-    // CORRECCIÓN: Recibe asig explícitamente para evitar race conditions
+    // CORRECCIÓN CRÍTICA: Generador de IDs sin colisiones
     function _cardId(card, asigName) {
-        return card.id || `${asigName}_${card.Titulo?.substring(0, 24)}_${card.IndiceGlobal ?? card._idx ?? 0}`;
+        // 1. Si la tarjeta ya tiene un UUID nativo de la base de datos, lo usamos.
+        if (card.id) return card.id;
+        
+        const titulo = card.Titulo || 'Sin_Titulo';
+        const tipo = card.Apartado || 'Nodo';
+        const idx = card.IndiceGlobal ?? card._idx ?? 0;
+
+        // 2. Generamos un hash matemático del título COMPLETO para garantizar unicidad
+        let hash = 0;
+        for (let i = 0; i < titulo.length; i++) {
+            hash = Math.imul(31, hash) + titulo.charCodeAt(i) | 0;
+        }
+
+        // 3. ID = Asignatura + Tipo + 20 chars legibles + Hash Único + Índice
+        const prefijoLegible = titulo.substring(0, 20).replace(/[^a-zA-Z0-9]/g, '_');
+        
+        return `${asigName}_${tipo}_${prefijoLegible}_${Math.abs(hash)}_${idx}`;
     }
 
     function _persist() {

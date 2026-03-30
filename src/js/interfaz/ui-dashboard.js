@@ -741,25 +741,30 @@ const UIDashboard = (() => {
 
         if (!res) {
             contenedor.innerHTML = `
-                <div class="stat-value" style="font-size: 1rem; color: #888;">Pendiente de cálculo</div>
-                <button onclick="window.abrirModalMonteCarlo()" class="btn-glass" style="margin-top: 10px; width: 100%;">
-                    <i class="fa-solid fa-microchip"></i> Lanzar Simulación
+                <div class="stat-value" style="font-size: 0.75rem; color:var(--text-subtle)">Pendiente de cálculo</div>
+                <button onclick="window.abrirModalMonteCarlo()" class="btn-modern btn-muted" style="
+                    margin-top: 10px; 
+                    width: 100%; 
+                    justify-content: center; 
+                    font-weight: bold;">
+                    <i class="fa-solid fa-dice"></i> Empezar Simulación
                 </button>
             `;
             return;
         }
 
-        let color = res.probabilidad >= 80 ? '#4ade80' : (res.probabilidad >= 50 ? '#facc15' : '#f87171');
+        let color = res.probabilidad >= 90 ? '#2a701d' : (res.probabilidad>=70 ? '#95178b': (res.probabilidad >= 50 ? '#2b78a4' : '#e63434'));
         
         contenedor.innerHTML = `
-            <div style="font-size: 0.9rem; color: #ccc;">
-                Aprobarías el <strong style="color: ${color}; font-size: 1.2rem;">${res.probabilidad}%</strong> de los exámenes.
+            <div style="font-size: 0.9rem; color: var(--text-main);">
+                Aprobarías el <strong style="color: ${color}; font-size: 1.05rem;">${res.probabilidad}%</strong> de los exámenes.
             </div>
-            <div style="font-size: 0.8rem; color: #888; margin-top: 5px;">
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 5px;">
                 Nota media estimada: <strong>${res.notaMedia} / ${res.notaMaxima}</strong>
             </div>
-            <button onclick="window.abrirModalMonteCarlo()" class="btn-glass" style="margin-top: 10px; font-size: 0.8rem;">
-                <i class="fa-solid fa-rotate-right"></i> Recalcular
+            <button onclick="window.abrirModalMonteCarlo()" class="btn-modern btn-muted" style="
+            margin-top: 10px; font-size: 0.8rem;width: 100%;justify-content: center;">
+                <i class="fa-solid fa-dice"></i> Recalcular
             </button>
         `;
     }
@@ -793,7 +798,7 @@ const UIDashboard = (() => {
             <div style="text-align: center; padding: 40px 10px;">
                 <i class="fa-solid fa-circle-notch fa-spin" style="font-size: 2.5rem; color: var(--accent);"></i>
                 <p style="margin-top: 20px; font-weight:bold; color:var(--text-main);">Procesando ${formatNum} simulaciones...</p>
-                <p style="font-size: 0.8em; color: #888;">Aplicando restricciones FSRS y calculando varianza.</p>
+                <p style="font-size: 0.8em; color: var(--text-muted);">Aplicando restricciones FSRS y calculando varianza.</p>
             </div>
         `;
         modalOverlay.innerHTML = _renderEstructuraModal("Motor FSRS", "fa-solid fa-microchip", cuerpo, "");

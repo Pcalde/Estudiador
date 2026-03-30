@@ -63,7 +63,7 @@ const Graph = (() => {
 
         // CORRECCIÓN: Llamada directa a UIGraph con camelCase
         UIGraph.abrirMapa(asig, enriched.nodes, enriched.edges, tiposConfig, {
-            onSearch:         (q, filter)  => buscarTarjetas(q, filter),
+            onSearch:         (q, filter, tema)  => buscarTarjetas(q, filter, tema), 
             onAddNode:        (cardId)     => addNode(cardId),
             onRemoveNode:     (cardId)     => removeNode(cardId),
             onAddEdge:        (src, tgt, lbl) => addEdge(src, tgt, lbl),
@@ -71,31 +71,51 @@ const Graph = (() => {
             onPositionChange: (id, x, y)   => updatePosition(id, x, y),
             onNodeClick:      (id)         => abrirTarjetaReal(id),
             onRateCard:       (id, rating) => calificarTarjetaDesdeMapa(id, rating),
-            onAddDefis:       (tema, limite) => addTodasDefiniciones(tema, limite)
+            onAddMassive:     (tema, tipo) => addMassiveNodes(tema, tipo) 
         });
     }
 
-    function addTodasDefiniciones(tema, limite) {
+    function addMassiveNodes(tema, tipo) {
         const asig = _asig();
         const cards = (State.get('biblioteca') || {})[asig] || [];
         const gd = { ...(State.get('graphData') || {}) };
         if (!gd[asig]) gd[asig] = { nodes: [], edges: [] };
 
-        let defis = cards.filter(c => c.Apartado === 'Definición');
+        let filtradas = cards;
         
         if (tema !== null && !isNaN(tema)) {
-            defis = defis.filter(c => parseInt(c.Tema) === tema);
+            filtradas = filtradas.filter(c => parseInt(c.Tema) === tema);
         }
-        if (limite !== null && !isNaN(limite)) {
-            defis = defis.slice(0, limite);
+        if (tipo) {
+            filtradas = filtradas.filter(c => c.Apartado === tipo);
         }
 
+        if (filtradas.length === 0) {
+            if (typeof Toast !== 'undefined') Toast.show('No hay tarjetas para este filtro.', 'info');
+            return;
+        }
+
+        // ── LÓGICA DE CUADRANTES ESPACIALES (Método de Loci) ──
+        const tNum = tema !== null ? parseInt(tema) : 1;
+        const cuadranteX = ((tNum - 1) % 3) * 1500; 
+        const cuadranteY = Math.floor((tNum - 1) / 3) * 1500;
+
         let añadidas = 0;
-        defis.forEach(d => {
-            const dId = _cardId(d, asig); // Pasamos asig
-            if (!gd[asig].nodes.find(n => n.id === dId)) {
-                gd[asig].nodes.push({ id: dId, x: (Math.random() - 0.5) * 800, y: (Math.random() - 0.5) * 600 });
+        
+        filtradas.forEach(c => {
+            const cId = _cardId(c, asig);
+            if (!gd[asig].nodes.find(n => n.id === cId)) {
+                // Dispersión aleatoria alrededor del centro del cuadrante
+                const offsetX = (Math.random() - 0.5) * 800;
+                const offsetY = (Math.random() - 0.5) * 600;
+                
+                gd[asig].nodes.push({ id: cId, x: cuadranteX + offsetX, y: cuadranteY + offsetY });
                 añadidas++;
+
+                // Si se inserta TODO, también autovinculamos las demos a sus teoremas
+                if (!tipo && ['Teorema', 'Proposición', 'Lema'].includes(c.Apartado)) {
+                    _autoLinkDemos(c, cId, cuadranteX + offsetX, cuadranteY + offsetY, gd[asig], cards, asig);
+                }
             }
         });
 
@@ -103,10 +123,32 @@ const Graph = (() => {
             State.set('graphData', gd);
             _persist();
             _refresh(asig);
-            if (typeof Toast !== 'undefined') Toast.show(`${añadidas} definiciones añadidas.`, 'success');
-        } else {
-            if (typeof Toast !== 'undefined') Toast.show('No hay definiciones nuevas para este filtro.', 'info');
+            if (typeof Toast !== 'undefined') Toast.show(`Cuadrante Tema ${tNum}: ${añadidas} nodos añadidos.`, 'success');
         }
+    }
+
+    // Helper interno
+    function _autoLinkDemos(mainCard, mainId, baseX, baseY, graphAsig, allCards, asigName) {
+        const demoPrefix = `Demostración: ${mainCard.Titulo || ''}`;
+        const demos = allCards.filter(c => c.Apartado?.startsWith('Demo') && c.Titulo?.includes(demoPrefix))
+                              .sort((a, b) => (a.Titulo || '').localeCompare(b.Titulo || ''));
+
+        let lastSourceId = mainId;
+        let offsetY = 120;
+        
+        demos.forEach((demo, index) => {
+            const demoId = _cardId(demo, asigName);
+            if (!graphAsig.nodes.find(n => n.id === demoId)) {
+                graphAsig.nodes.push({ id: demoId, x: baseX, y: baseY + offsetY });
+                graphAsig.edges.push({
+                    id: `e_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+                    source: lastSourceId, target: demoId, 
+                    label: index === 0 ? 'demuestra' : 'continúa'
+                });
+                lastSourceId = demoId; 
+                offsetY += 100;
+            }
+        });
     }
 
     function addNode(cardId) {
@@ -156,19 +198,29 @@ const Graph = (() => {
         _refresh(asig);
     }
 
-    function buscarTarjetas(query, tipoFilter = '') {
+    function buscarTarjetas(query, tipoFilter = '', temaFilter = '') {
         const asig  = _asig();
         const cards = (State.get('biblioteca') || {})[asig] || [];
         const q     = query.toLowerCase().trim();
         
         return cards
             .filter(c => {
-                if (tipoFilter && c.Apartado !== tipoFilter) return false;
+                // 1. Filtro por Tipo (Soporte especial para Demostraciones anidadas)
+                if (tipoFilter === 'Demo') {
+                    if (!c.Apartado?.startsWith('Demo')) return false;
+                } else if (tipoFilter && c.Apartado !== tipoFilter) {
+                    return false;
+                }
+                
+                // 2. Filtro por Tema Estricto
+                if (temaFilter && parseInt(c.Tema) !== parseInt(temaFilter)) return false;
+
+                // 3. Filtro por Query textual
                 if (!q) return true; 
                 return c.Titulo?.toLowerCase().includes(q);
             })
             .slice(0, 60)
-            .map(c => ({ id: _cardId(c, asig), titulo: c.Titulo, tipo: c.Apartado })); // Pasamos asig
+            .map(c => ({ id: _cardId(c, asig), titulo: c.Titulo, tipo: c.Apartado }));
     }
 
     // ── Integración con la App ─────────────────────────────────────
@@ -292,7 +344,7 @@ const Graph = (() => {
         updatePosition,
         abrirTarjetaReal,
         calificarTarjetaDesdeMapa,
-        addTodasDefiniciones
+        addMassiveNodes,
     };
 })();
 

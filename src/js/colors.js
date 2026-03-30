@@ -24,13 +24,9 @@ const COLOR_PRESETS = {
         '--status-green': '#00ffaa', '--status-red': '#ff003c', '--status-yellow': '#ffaa00', '--status-blue': '#00aaff'
     },
     'yahrnam': {
-        /* Abismo y Piedra de Catedral */
         '--bg-color': '#030305', '--menu-color': '#08080c', '--card-bg': '#0a0a0f',
-        /* Polvo de Hueso y Sangre Coagulada */
         '--text-main': '#d1c7b7', '--border': '#1a1a24', '--accent': '#8a1111',
-        /* Pomodoro: Sangre (Work) / Insight (Short) / Mutación (Long) */
         '--pomo-work': '#8a1111', '--pomo-short': '#44a4f2', '--pomo-long': '#c4c728',
-        /* Estados Semánticos Atmosféricos */
         '--status-green': '#3d5c2e', '--status-red': '#8a1111', '--status-yellow': '#d9d0bf', '--status-blue': '#44a4f2'
     },
     'terminal': {

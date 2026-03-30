@@ -398,7 +398,36 @@ input[type="color"].color-picker-dinamico::-webkit-color-swatch { border-radius:
 
 /* ── VARIANTES SEMÁNTICAS ── */
 
-/* FIX: .btn-success estaba duplicado con reglas contradictorias — unificado */
+/* ════════════════════════════════════════════════════════════════
+   NUEVA TAXONOMÍA DE BOTONES
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── Clase Base: Botón de Sidebar ── */
+.btn-sidebar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: var(--r-md, 8px);
+    transition: all var(--t-fast, 0.2s);
+    font-family: inherit;
+    padding: 10px;
+    gap: 8px;
+    width: 100%;
+}
+.btn-sidebar:active { transform: scale(0.96); }
+/* ── Modificadores de btn-modern (Acciones secundarias) ── */
+.btn-modern.btn-muted {
+    color: var(--text-muted);
+    border-color: var(--border-light);
+}
+
+.btn-modern.btn-muted:hover {
+    color: var(--text-main);
+    border-color: var(--border);
+    background: var(--surface-1);
+}
+
 .btn-success {
     background: color-mix(in srgb, var(--status-green) 15%, transparent);
     border: 1px solid color-mix(in srgb, var(--status-green) 40%, transparent);
@@ -492,6 +521,12 @@ body.style-glass .btn-reveal {
     border: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow: var(--shadow-md);
 }
+body.style-glass .btn-muted {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.02);
+    color: rgba(255, 255, 255, 0.4);
+    box-shadow: none;
+}
 body.style-glass .btn-next {
     background: linear-gradient(135deg, rgba(113, 68, 134, 0.3), rgba(142, 86, 169, 0.3));
     backdrop-filter: blur(8px);
@@ -500,10 +535,24 @@ body.style-glass .btn-next {
     box-shadow: 0 8px 24px rgba(113, 68, 134, 0.15);
 }
 body.style-glass .btn-modern:hover { transform: translateY(-2px); }
+body.style-glass .btn-sidebar {
+    background: rgba(255, 255, 255, 0.02);
+    backdrop-filter: blur(4px);
+    color: rgba(144, 164, 174, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+body.style-glass .btn-sidebar:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-main);
+    border-color: rgba(255, 255, 255, 0.15);
+}
 
 /* ── 2. CYBERPUNK (neón) ── */
 body.style-cyber .btn-reveal {
     background: var(--bg-color); color: #607d8b; border: 1px solid #263238;
+}
+body.style-cyber .btn-muted {
+    background: transparent; color: #37474f; border: 1px solid #1a2327; box-shadow: none;
 }
 body.style-cyber .btn-next {
     background: var(--bg-color); color: #ba68c8; border: 1px solid #4a148c;
@@ -512,73 +561,139 @@ body.style-cyber .btn-next {
 body.style-cyber .btn-modern:hover {
     box-shadow: 0 0 15px rgba(255,255,255,0.1); border-color: var(--text-main); color: var(--text-main);
 }
-
+body.style-cyber .btn-sidebar {
+    background: #0d1117;
+    color: #455a64;
+    border: 1px solid #161b22;
+    text-transform: uppercase;
+    font-size: 0.8em;
+    letter-spacing: 1px;
+}
+body.style-cyber .btn-sidebar:hover {
+    border-color: #30363d;
+    color: #8b949e;
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+}
 /* ── 3. SKEUOMORPHIC (físico) ── */
 body.style-skeuo .btn-reveal {
     background: var(--card-bg); color: var(--text-muted);
     border: 1px solid var(--bg-color);
     box-shadow: 3px 3px 6px var(--bg-color), -1px -1px 2px var(--surface-1);
 }
+body.style-skeuo .btn-muted {
+    background: transparent; border: none;
+    box-shadow: inset 2px 2px 4px var(--bg-color), inset -1px -1px 2px var(--surface-1);
+    color: var(--text-muted); opacity: 0.8;
+}
 body.style-skeuo .btn-next {
     background: #714486; color: #fff; border: 1px solid #5a366b;
     box-shadow: 3px 3px 6px var(--bg-color), inset 1px 1px 2px rgba(255,255,255,0.2);
 }
 body.style-skeuo .btn-modern:hover { filter: brightness(1.1); }
+body.style-skeuo .btn-sidebar {
+    background: var(--bg-color);
+    color: var(--text-muted);
+    border: none;
+    box-shadow: inset 2px 2px 5px rgba(0,0,0,0.4), 
+                inset -1px -1px 3px rgba(255,255,255,0.05);
+}
+body.style-skeuo .btn-sidebar:hover {
+    color: var(--text-main);
+    box-shadow: inset 1px 1px 2px rgba(0,0,0,0.5), 
+                0 2px 4px rgba(0,0,0,0.3);
+}
 
 /* ── 4. NORDIC NIGHT (gélido) ── */
 body.style-nord .btn-reveal {
     background: #434c5e; color: #d8dee9; border: 1px solid #4c566a;
     box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
+body.style-nord .btn-muted {
+    background: #3b4252; color: #8fbcbb; border: 1px solid #434c5e;
+    box-shadow: none; opacity: 0.7;
+}
 body.style-nord .btn-next {
     background: #5e81ac; color: #eceff4; border: 1px solid #81a1c1;
     box-shadow: 0 4px 14px rgba(94, 129, 172, 0.3);
 }
 body.style-nord .btn-modern:hover { transform: translateY(-2px); filter: brightness(1.1); }
+body.style-nord .btn-sidebar {
+    background: #2e3440;
+    color: #81a1c1;
+    border: 1px solid #3b4252;
+}
+body.style-nord .btn-sidebar:hover {
+    background: #3b4252;
+    color: #88c0d0;
+    border-color: #4c566a;
+}
 
 /* ── 5. Bloodborne / Gothic Horror ── */
 body.style-yahrnam .btn-reveal {
-    background: #020b1a; 
-    color: rgba(200, 220, 255, 0.5); /* Luz de luna atenuada */
-    border: 1px solid rgba(20, 40, 60, 0.8);
+    background: #020b1a; color: rgba(200, 220, 255, 0.5); border: 1px solid rgba(20, 40, 60, 0.8);
     box-shadow: 0 4px 15px rgb(20, 30, 56); 
 }
-
-body.style-yahrnam .btn-next {
-    background: #0a2137; 
-    color: #9baab8; /* Plata deslucida, legible pero fúnebre */
-    border: 1px solid #000000;
-    box-shadow: 0 8px 30px rgba(10, 10, 15, 0.9); /* Vacío absoluto */
+body.style-yahrnam .btn-muted {
+    background: color-mix(in srgb, var(--bg-color), #0a2137 40%);; color: rgba(132, 155, 179, 0.686); border: 1px solid rgba(20, 30, 40, 0.5);
+    box-shadow: 0 4px 15px rgba(0, 7, 206, 0.222);
 }
-
+body.style-yahrnam .btn-next {
+    background: #0a2137; color: #9baab8; border: 1px solid #000000;
+    box-shadow: 0 8px 30px rgba(10, 10, 15, 0.9); 
+}
 body.style-yahrnam .btn-modern:hover {
-    background: #082039; 
-    box-shadow: 0 0 25px rgba(180, 20, 20, 0.4); /* Resplandor carmesí más amplio */
-    color: #ff5555; /* Rojo sangre vivo para garantizar la legibilidad del texto */
-    border-color: #8a1111; /* Borde ensangrentado */
-    transform: translateY(1px); /* Hundimiento por presión */
+    background: #082039; box-shadow: 0 0 25px rgba(180, 20, 20, 0.4); 
+    color: #ff5555; border-color: #8a1111; transform: translateY(1px); 
     transition: all 0.2s ease-in-out;
+}
+body.style-yahrnam .btn-sidebar {
+    background: #050505;
+    color: #4a4a4a;
+    border: 1px solid #1a1a1a;
+    font-family: 'Georgia', serif;
+}
+body.style-yahrnam .btn-sidebar:hover {
+    background: #0a0a0a;
+    color: #8a1111;
+    border-color: #330000;
 }
 
 /* ── 6. RETRO TERMINAL (fósforo) ── */
-/* CORREGIDO: Eliminadas las variables de fondo global */
 body.style-terminal .btn-reveal {
     background: rgba(0,0,0,0.5); color: #33ff33; border: 1px solid rgba(51,255,51,0.3);
     font-family: monospace;
+}
+body.style-terminal .btn-muted {
+    background: transparent; color: rgba(51, 255, 51, 0.5); border: 1px dashed rgba(51, 255, 51, 0.2);
+    font-family: monospace; box-shadow: none; text-shadow: none;
 }
 body.style-terminal .btn-next {
     background: #111; color: #33ff33; border: 1px solid #33ff33; font-weight: 900;
     font-family: monospace;
 }
 body.style-terminal .btn-modern:hover {
-    background: #000; color: #33ff33;
-    box-shadow: 0 0 20px rgba(51, 255, 51, 0.2);
+    background: #000; color: #33ff33; box-shadow: 0 0 20px rgba(51, 255, 51, 0.2);
+}
+body.style-terminal .btn-sidebar {
+    background: transparent;
+    color: rgba(51, 255, 51, 0.4);
+    border: 1px dashed rgba(51, 255, 51, 0.2);
+    font-family: 'Courier New', monospace;
+}
+body.style-terminal .btn-sidebar:hover {
+    background: rgba(51, 255, 51, 0.05);
+    color: #33ff33;
+    border-style: solid;
 }
 
 /* ── 7. MATERIAL (elevación) ── */
 body.style-material .btn-reveal {
     background: var(--surface-1); color: #90a4ae; border: none;
     box-shadow: 0 2px 2px rgba(0,0,0,0.3), 0 4px 8px rgba(0,0,0,0.2);
+}
+body.style-material .btn-muted {
+    background: transparent; color: var(--text-muted); border: 1px solid var(--border-light);
+    box-shadow: none;
 }
 body.style-material .btn-next {
     background: #7e57c2; color: #fff; border: none;
@@ -588,37 +703,53 @@ body.style-material .btn-modern:hover {
     box-shadow: 0 8px 16px rgba(0,0,0,0.4), 0 4px 4px rgba(0,0,0,0.2);
     transform: translateY(-3px);
 }
+body.style-material .btn-sidebar {
+    background: var(--surface-1);
+    color: var(--text-muted);
+    border: none;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+body.style-material .btn-sidebar:hover {
+    background: var(--menu-color);
+    box-shadow: 0 3px 6px rgba(0,0,0,0.3);
+}
 
 /* ── 8. NEON (resplandor de color) ── */
 body.style-neon .btn-reveal {
-    background: rgba(0, 0, 0, 0.5); /* Fondo casi transparente para la luz */
-    color: #afff00; /* Verde lima eléctrico */
-    border: 2px solid #afff00;
-    font-weight: bold;
-    /* Efecto "tubo" de neón: doble resplandor (interno y externo) */
-    box-shadow: 0 0 10px rgba(175, 255, 0, 0.4), inset 0 0 10px rgba(175, 255, 0, 0.3);
-    text-shadow: 0 0 5px #afff00;
+    background: rgba(0, 0, 0, 0.5); color: #afff00; border: 2px solid #afff00; font-weight: bold;
+    box-shadow: 0 0 5px rgba(175, 255, 0, 0.4), inset 0 0 5px rgba(175, 255, 0, 0.3); text-shadow: 0 0 5px #afff00;
+}
+body.style-neon .btn-muted {
+    background: transparent; color: rgba(175, 255, 0, 0.5); border: 1px solid rgba(175, 255, 0, 0.2);
+    font-weight: normal; box-shadow: none; text-shadow: none;
 }
 body.style-neon .btn-next {
-    background: rgba(0, 0, 0, 0.5);
-    color: #ff00de; /* Magenta "Hot Pink" */
-    border: 2px solid #ff00de;
-    font-weight: bold;
-    /* Mayor intensidad para el botón "Next" */
-    box-shadow: 0 0 20px rgba(255, 0, 222, 0.5), inset 0 0 15px rgba(255, 0, 222, 0.4);
-    text-shadow: 0 0 8px #ff00de;
+    background: rgba(0, 0, 0, 0.5); color: #ff00de; border: 2px solid #ff00de; font-weight: bold;
+    box-shadow: 0 0 5px rgba(255, 0, 222, 0.5), inset 0 0 15px rgba(255, 0, 222, 0.4); text-shadow: 0 0 8px #ff00de;
 }
 body.style-neon .btn-modern:hover {
-    filter: brightness(1.3);
-    /* El hover causa un "estallido" de luz */
-    box-shadow: 0 0 35px currentColor, inset 0 0 15px currentColor;
-    transform: scale(1.02);
+    filter: brightness(1.3); box-shadow: 0 0 35px currentColor, inset 0 0 15px currentColor; transform: scale(1.02);
+}
+
+body.style-neon .btn-sidebar {
+    background: transparent;
+    color: rgba(175, 255, 0, 0.3);
+    border: 1px solid rgba(175, 255, 0, 0.1);
+}
+body.style-neon .btn-sidebar:hover {
+    color: #afff00;
+    border-color: #afff00;
+    box-shadow: 0 0 10px rgba(175, 255, 0, 0.2);
 }
 
 /* ── 9. MINIMAL (flat, solo texto) ── */
 body.style-minimal .btn-reveal {
     background: transparent; color: var(--text-muted);
     border: none; border-bottom: 1px solid var(--border); border-radius: 0;
+}
+body.style-minimal .btn-muted {
+    background: transparent; color: var(--text-subtle);
+    border: none; border-bottom: 1px dotted var(--border-light); border-radius: 0; opacity: 0.6;
 }
 body.style-minimal .btn-next {
     background: transparent; color: var(--text-main);
@@ -627,12 +758,26 @@ body.style-minimal .btn-next {
 body.style-minimal .btn-modern:hover {
     color: var(--text-main); border-bottom-color: var(--accent); transform: none;
 }
-
+body.style-minimal .btn-sidebar {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid transparent;
+    border-radius: 0;
+}
+body.style-minimal .btn-sidebar:hover {
+    border-bottom: 1px solid var(--accent);
+    color: var(--text-main);
+}
 /* ── 10. BRUTALIST (bordes gruesos, audaz) ── */
 body.style-brutalist .btn-reveal {
     background: var(--bg-color); color: var(--text-muted);
     border: 2px solid var(--border); border-radius: 0;
     font-weight: 900; text-transform: uppercase; letter-spacing: 1px;
+}
+body.style-brutalist .btn-muted {
+    background: transparent; color: var(--text-muted);
+    border: 2px dashed var(--border-light); border-radius: 0;
+    font-weight: bold; box-shadow: none;
 }
 body.style-brutalist .btn-next {
     background: var(--text-main); color: var(--bg-color);
@@ -643,6 +788,19 @@ body.style-brutalist .btn-modern:hover {
     border-color: var(--accent); color: var(--accent);
     background: var(--bg-color); transform: translate(-2px, -2px);
     box-shadow: 3px 3px 0 var(--accent);
+}
+body.style-brutalist .btn-sidebar {
+    background: var(--bg-color);
+    color: var(--text-muted);
+    border: 2px solid var(--border-light);
+    border-radius: 0;
+    font-weight: bold;
+}
+body.style-brutalist .btn-sidebar:hover {
+    background: var(--surface-1);
+    border-style: dashed;
+    transform: translate(-2px, -2px);
+    box-shadow: 4px 4px 0 var(--border-light);
 }
 
 /* ════════════════════════════════════════════════════════════════

@@ -180,12 +180,15 @@ const UIGraph = (() => {
         const input   = document.getElementById('graph-search-input');
         const results = document.getElementById('graph-search-results');
         const filter  = document.getElementById('graph-search-filter');
+        const temaInput = document.getElementById('graph-search-tema'); // NUEVO
         if (!input || !results) return;
 
         const triggerSearch = () => {
             const q = input.value;
             const f = filter ? filter.value : '';
-            const found = _cb.onSearch?.(q, f) || [];
+            const t = temaInput ? temaInput.value : ''; // NUEVO
+            
+            const found = _cb.onSearch?.(q, f, t) || [];
             
             results.innerHTML  = '';
             if (found.length === 0) {
@@ -214,12 +217,11 @@ const UIGraph = (() => {
             });
         };
 
-        // Escuchadores: Buscar al escribir, al hacer focus y al cambiar el filtro
         input.oninput = triggerSearch;
         input.onfocus = triggerSearch;
         if (filter) filter.onchange = triggerSearch;
+        if (temaInput) temaInput.oninput = triggerSearch; // Escucha el cambio de tema
 
-        // Cerrar resultados al hacer clic fuera
         document.addEventListener('click', (e) => {
             if (!input.contains(e.target) && !results.contains(e.target) && (!filter || !filter.contains(e.target))) {
                 results.style.display = 'none';
@@ -451,28 +453,36 @@ const UIGraph = (() => {
     }
 
 
-    function _promptBatchDefis(callback) {
+    function _promptMassInsert(callback) {
         const overlay = document.createElement('div');
-        overlay.style.cssText = 'position:absolute; inset:0; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index:9999; backdrop-filter:blur(2px);';
+        overlay.style.cssText = 'position:absolute; inset:0; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; z-index:9999; backdrop-filter:blur(3px);';
         
         const box = document.createElement('div');
-        box.style.cssText = 'background:var(--bg-color, #121212); padding:20px; border-radius:8px; border:1px solid var(--border-light, #333); width:320px; box-shadow:0 8px 24px rgba(0,0,0,0.5); display:flex; flex-direction:column; gap:12px; font-family:inherit; color:var(--text-main);';
+        box.style.cssText = 'background:var(--bg-color); padding:24px; border-radius:8px; border:1px solid var(--border-light); width:340px; box-shadow:0 12px 32px rgba(0,0,0,0.8); display:flex; flex-direction:column; gap:14px; font-family:inherit; color:var(--text-main);';
         
         box.innerHTML = `
-            <h4 style="margin:0 0 10px 0; color:var(--accent);">Añadir Definiciones</h4>
-            <label style="font-size:0.85em; color:var(--text-muted);">Filtrar por Tema (Opcional)</label>
+            <h4 style="margin:0 0 5px 0; color:var(--accent); font-size:1.1em;"><i class="fa-solid fa-layer-group"></i> Inserción por Lote</h4>
+            <p style="font-size:0.75em; color:var(--text-muted); margin:0 0 10px 0; line-height:1.4;">Los nodos se agruparán espacialmente en el lienzo según su número de tema.</p>
+            
+            <label style="font-size:0.85em; color:var(--text-muted);">Tema a extraer (Obligatorio)</label>
             <input type="number" id="batch-tema" placeholder="Ej: 1" style="padding:10px; background:var(--surface-1); border:1px solid var(--border); color:#fff; border-radius:4px; outline:none;">
-            <label style="font-size:0.85em; color:var(--text-muted); margin-top:5px;">Límite de nodos (Opcional)</label>
-            <input type="number" id="batch-limit" placeholder="Ej: 5" style="padding:10px; background:var(--surface-1); border:1px solid var(--border); color:#fff; border-radius:4px; outline:none;">
+            
+            <label style="font-size:0.85em; color:var(--text-muted);">Tipo de Tarjeta</label>
+            <select id="batch-tipo" style="padding:10px; background:var(--surface-1); border:1px solid var(--border); color:#fff; border-radius:4px; outline:none;">
+                <option value="">Todo el Tema (Cuidado: muchos nodos)</option>
+                <option value="Definición" selected>Solo Definiciones</option>
+                <option value="Teorema">Solo Teoremas</option>
+                <option value="Proposición">Solo Proposiciones</option>
+            </select>
+
             <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:15px;">
-                <button id="batch-cancel" style="padding:8px 14px; background:transparent; border:1px solid var(--border); color:var(--text-muted); border-radius:6px; cursor:pointer; font-weight:bold;">Cancelar</button>
-                <button id="batch-ok" style="padding:8px 14px; background:var(--accent); border:none; color:#fff; border-radius:6px; cursor:pointer; font-weight:bold;">Añadir al mapa</button>
+                <button id="batch-cancel" style="padding:8px 14px; background:transparent; border:1px solid var(--border); color:var(--text-muted); border-radius:6px; cursor:pointer; transition:all 0.2s;">Cancelar</button>
+                <button id="batch-ok" style="padding:8px 14px; background:var(--accent); border:none; color:#000; border-radius:6px; cursor:pointer; font-weight:bold;">Generar Lote</button>
             </div>
         `;
         
         overlay.appendChild(box);
         document.getElementById('modal-graph').appendChild(overlay);
-        
         document.getElementById('batch-tema').focus();
 
         const close = () => overlay.remove();
@@ -480,15 +490,9 @@ const UIGraph = (() => {
         
         document.getElementById('batch-ok').onclick = () => {
             const t = document.getElementById('batch-tema').value;
-            const l = document.getElementById('batch-limit').value;
+            const tipo = document.getElementById('batch-tipo').value;
             close();
-            callback(t ? parseInt(t) : null, l ? parseInt(l) : null);
-        };
-
-        // Soporte de teclado (Escape/Enter)
-        overlay.onkeydown = (e) => {
-            if (e.key === 'Escape') close();
-            if (e.key === 'Enter') document.getElementById('batch-ok').click();
+            callback(t ? parseInt(t) : null, tipo);
         };
     }
 
@@ -501,14 +505,13 @@ const UIGraph = (() => {
         document.getElementById('graph-btn-delete')?.addEventListener('click', _deleteSelected);
         document.getElementById('graph-btn-fit')?.addEventListener('click', () => _network?.fit({ animation: { duration: 400 } }));
         
-        // CORRECCIÓN: camelCase aplicado
         document.getElementById('graph-btn-close')?.addEventListener('click', cerrarMapa);
         
         document.getElementById('btn-togglegrafo')?.addEventListener('click', () => window.abrirMapaConceptual?.());
         
-        document.getElementById('graph-btn-add-defis')?.addEventListener('click', () => {
-            _promptBatchDefis((tema, limite) => {
-                _cb.onAddDefis?.(tema, limite);
+        document.getElementById('graph-btn-add-mass')?.addEventListener('click', () => {
+            _promptMassInsert((tema, tipo) => {
+                _cb.onAddMassive?.(tema, tipo);
             });
         });
 

@@ -129,7 +129,8 @@ async function guardarDatosUsuario() {
         userColors:   State.get('userColors')   || {},
         pomoSettings: State.get('pomoSettings') || {},
         taskList:     State.get('taskList')     || [],
-        lastUpdated:  firebase.firestore.FieldValue.serverTimestamp()
+        lastUpdated:  firebase.firestore.FieldValue.serverTimestamp(),
+        graphData: State.get('graphData') || {}       
     };
 
     try {
@@ -169,6 +170,7 @@ async function cargarDatosUsuario() {
                 State.set('userColors',    data.userColors    || {});
                 State.set('pomoSettings',  data.pomoSettings  || State.get('pomoSettings'));
                 State.set('taskList',      data.taskList      || []);
+                State.set('graphData', data.graphData || {});
 
                 if (typeof window.normalizarFechasClave === 'function') {
                     const fechasSaneadas = window.normalizarFechasClave(data.fechasClave || []);

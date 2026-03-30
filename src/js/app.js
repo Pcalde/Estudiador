@@ -73,8 +73,10 @@ EventBus.on('pomodoro:finished', (payload) => {
 EventBus.on('DATA_REQUIRES_SAVE', async () => {
     const biblioteca = State.get('biblioteca');
     const asigActual = State.get('nombreAsignaturaActual');
+    const graphData  = State.get('graphData');         
     try {
         await DB.setVar('biblioteca', biblioteca);
+        await DB.setVar('graphData',  graphData); 
         if (asigActual) localStorage.setItem('estudiador_asig_actual', asigActual);
         localStorage.removeItem('estudiador_biblioteca');
     } catch (error) {
@@ -111,6 +113,7 @@ EventBus.on('AJUSTES_GUARDADOS', ({ modoIA }) => {
 EventBus.on('UI_ASIGNATURA_CARGADA', (payload) => {
     if (typeof cargarAsignatura === 'function') cargarAsignatura(payload.nombre);
 });
+
 
 // ────────────────────────────────────────────────────────────────
 // REACTOR DE ESTADO (Dominio → UI)
@@ -226,6 +229,7 @@ async function arrancarAplicacion() {
         State.set('biblioteca',    biblioDB);
         State.set('fechasClave',   await DB.getVar('fechasClave')   || []);
         State.set('horarioGlobal', await DB.getVar('horarioGlobal') || {});
+        State.set('graphData', await DB.getVar('graphData') || {});   
 
         const ultimaAsig = localStorage.getItem('estudiador_asig_actual');
         if (ultimaAsig && biblioDB[ultimaAsig]) {

@@ -31,8 +31,7 @@ const State = (() => {
             'Demot':        { color: '#1e4fb2', comandoLatex: '\\demot' },
             'Demop':        { color: '#16a116', comandoLatex: '\\demop' },
             'Demol':        { color: '#20603D', comandoLatex: '\\demol' },
-            'Democ':        { color: '#3883c2', comandoLatex: '\\democ' },
-            'Demostración': { color: '#aab0b6', comandoLatex: '\\demo' }
+            'Democ':        { color: '#3883c2', comandoLatex: '\\democ' }
         },
         currentContext:          null,
         filtrosActivos:          {},
@@ -87,6 +86,7 @@ const State = (() => {
 
         // Widget layout
         widgetConfig: null,
+        graphData: {},          // { [asig]: { nodes: [{id, x, y}], edges: [{id, source, target, label}] } }
     };
 
     // ── Getters con lazy-init para valores de localStorage ────────

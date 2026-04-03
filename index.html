@@ -852,37 +852,6 @@
         <div id="tab-apariencia" class="stab-panel hidden">
             <h5 style="color:var(--accent); border-bottom:1px solid #333; margin-bottom:12px;">Colores de asignaturas</h5>
             <div id="settings-colors-list" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;"></div>
-            <div class="audio-controls">
-                <label>
-                    <input type="checkbox" id="toggle-mute" onchange="State.set('audioMuted', this.checked)">
-                    Silenciar Audio
-                </label>
-                <label>Sonido de estudio:</label>
-                <select id="select-ambient" onchange="State.set('ambientTrack', this.value)">
-                    <option value="brownian">Ruido Marrón</option>
-                    <option value="Buceo">Submarino</option>
-                    <option value="nocheCampera">Noche de verano</option>
-                    <option value="vagon">Tren con pasajeros</option>
-                    <option value="rail">Traqueteo de tren</option>
-                    <option value="ascuas">Fogata marchitándose</option>
-                    <option value="lluviaCochera">Lluvia en un coche</option>
-                    <option value="pajaritos">Cantar de los pájaros</option>
-                    <option value="olas">Olas rompiendo</option>
-                    <option value="cafeteria">Ambiente de cafetería</option>
-                </select>
-                <label>Sonido de fácil:</label>
-                <select id="select-reward" onchange="State.set('rewardTrack', this.value)">
-                    <option value="warning">Warning Mario</option>
-                    <option value="coin">Moneda</option>
-                    <option value="estrellita">Estrellita</option>
-                </select>
-                <label>Sonido de Alarma:</label>
-                <select id="select-alarma" onchange="State.set('alarmTrack', this.value)">
-                    <option value="custom">Buho (Por Defecto)</option>
-                    <option value="mario">Mario conquistar mundo</option>
-                    <option value="campana">Campana</option>
-                </select>
-            </div>
 
             <h5 style="color:var(--accent); border-bottom:1px solid #333; margin-bottom:12px;">Estilo visual</h5>
             <div class="setting-row">
@@ -985,14 +954,16 @@
                 
                 <div style="margin-bottom:10px; margin-left:30px;">
                     <select id="alarm-select" onchange="State.set('alarmTrack', this.value)" style="width:100%; padding:6px; background:#1a1a1a; border:1px solid var(--border); color:#aaa; border-radius:4px;">
-                        <option value="custom">Búho (Por Defecto)</option>
+                        <option value="custom">Trofeo ps3 (defecto)</option>
                         <option value="mario">Mario conquistar mundo</option>
                         <option value="campana">Campana Notre Dame</option>
+                        <option value="victoryPoke">Victoria Pokemon</option>
+                        <option value="victoryPokebits">Victoria Pokemon 8 bits</option>
                     </select>
                 </div>
                 
                 <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px; margin-left:30px;">
-                    <button style="padding:6px 10px; background:rgba(100,150,255,0.2); border:1px solid #4481ff; color:#4481ff; border-radius:4px; cursor:pointer; font-weight:bold; transition:all 0.2s;" onclick="AudioManager.preview('sfx_' + (State.get('alarmTrack') || 'custom'))"><i class="fa-solid fa-play"></i> Escuchar</button>
+                    <button style="padding:6px 10px; background:rgba(100,150,255,0.2); border:1px solid #4481ff; color:#4481ff; border-radius:4px; cursor:pointer; font-weight:bold; transition:all 0.2s;" onclick="AudioManager.preview('sfx_' + (State.get('alarmTrack') || 'custom'), 'alarm')"><i class="fa-solid fa-play"></i> Escuchar</button>
                     
                 </div>
                 
@@ -1025,7 +996,7 @@
                 </div>
                 
                 <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px; margin-left:30px;">
-                    <button style="padding:6px 10px; background:rgba(100,150,255,0.2); border:1px solid #4481ff; color:#4481ff; border-radius:4px; cursor:pointer; font-weight:bold; transition:all 0.2s;" onclick="AudioManager.preview('sfx_' + (State.get('rewardTrack') || 'warning'))"><i class="fa-solid fa-play"></i> Escuchar</button>
+                    <button style="padding:6px 10px; background:rgba(100,150,255,0.2); border:1px solid #4481ff; color:#4481ff; border-radius:4px; cursor:pointer; font-weight:bold; transition:all 0.2s;" onclick="AudioManager.preview('sfx_' + (State.get('rewardTrack') || 'warning'), 'reward')"><i class="fa-solid fa-play"></i> Escuchar</button>
                     
                 </div>
                 
@@ -1037,6 +1008,36 @@
                 <div style="margin-left:30px;">
                     <label style="font-size:0.85em; color:#ccc; display:block; margin-bottom:4px;">Pitch: <span id="reward-pitch-label">0</span> semitones</label>
                     <input type="range" id="reward-pitch" min="-12" max="12" value="0" style="width:100%; cursor:pointer;" oninput="onRewardPitchChange(this.value)">
+                </div>
+            </div>
+            <!--Sonido de fallo-->
+            <div style="background:rgba(255,152,0,0.1); padding:12px; border-radius:6px; margin-bottom:15px; border: 1px solid rgba(255,152,0,0.3);">
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                    <button id="hard-toggle-btn" style="background:none; border:none; cursor:pointer; font-size:1.4em; padding:0; transition:all 0.2s; color:#FF9800;" onclick="State.set('soundSettings', {...State.get('soundSettings'), hard: {...(State.get('soundSettings').hard || {volume:100, pitch:0}), enabled: !(State.get('soundSettings').hard || {}).enabled}})">
+                        <i class="fa-solid fa-dumbbell"></i>
+                    </button>
+                    <label style="font-weight:bold; color:#FF9800; flex:1; cursor:pointer; margin:0;">Sonido de Esfuerzo (Difícil)</label>
+                </div>
+                
+                <div style="margin-bottom:10px; margin-left:30px;">
+                    <select id="hard-select" onchange="State.set('hardTrack', this.value)" style="width:100%; padding:6px; background:#1a1a1a; border:1px solid var(--border); color:#aaa; border-radius:4px;">
+                        <option value="bump">Golpe Sordo (Bump)</option>
+                        <option value="warning">Warning Mario</option>
+                    </select>
+                </div>
+                
+                <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px; margin-left:30px;">
+                    <button style="padding:6px 10px; background:rgba(100,150,255,0.2); border:1px solid #4481ff; color:#4481ff; border-radius:4px; cursor:pointer; font-weight:bold; transition:all 0.2s;" onclick="AudioManager.preview('sfx_' + (State.get('hardTrack') || 'bump'), 'hard')"><i class="fa-solid fa-play"></i> Escuchar</button>
+                </div>
+                
+                <div style="margin-bottom:8px; margin-left:30px;">
+                    <label style="font-size:0.85em; color:#ccc; display:block; margin-bottom:4px;">Volumen: <span id="hard-vol-label">100%</span></label>
+                    <input type="range" id="hard-volume" min="0" max="100" value="100" style="width:100%; cursor:pointer;" oninput="onHardVolChange(this.value)">
+                </div>
+                
+                <div style="margin-left:30px;">
+                    <label style="font-size:0.85em; color:#ccc; display:block; margin-bottom:4px;">Pitch: <span id="hard-pitch-label">0</span> semitones</label>
+                    <input type="range" id="hard-pitch" min="-12" max="12" value="0" style="width:100%; cursor:pointer;" oninput="onHardPitchChange(this.value)">
                 </div>
             </div>
 

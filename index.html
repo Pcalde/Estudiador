@@ -95,7 +95,20 @@
 
     <link rel="stylesheet" href="src/css/styles.css">
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
-    
+    <style>
+        input[type="range"] {
+            appearance: none; -webkit-appearance: none; width: 100%; height: 6px; border-radius: 3px; background: #333; outline: none; padding: 0; margin: 0;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #4481ff; cursor: pointer; border: none;
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 14px; height: 14px; border-radius: 50%; background: #4481ff; cursor: pointer; border: none; padding: 0;
+        }
+        input[type="range"]::-moz-range-track {
+            background: transparent; border: none;
+        }
+    </style>
 </head>
 
 <body>
@@ -808,6 +821,7 @@
         <div id="settings-tabs" style="display:flex; border-bottom:1px solid #2a2a2a; margin-bottom:18px; gap:2px; flex-wrap:wrap;">
             <button class="stab stab-active" data-stab="tab-horario" onclick="cambiarPestanaAjustes('tab-horario')"><i class="fa-regular fa-calendar stab-icon"></i> Horario</button>
             <button class="stab" data-stab="tab-apariencia" onclick="cambiarPestanaAjustes('tab-apariencia')"><i class="fa-solid fa-palette stab-icon"></i> Apariencia</button>
+            <button class="stab" data-stab="tab-sonido" onclick="cambiarPestanaAjustes('tab-sonido')"><i class="fa-solid fa-volume-high stab-icon"></i> Sonido</button>
             <button class="stab" data-stab="tab-pomodoro" onclick="cambiarPestanaAjustes('tab-pomodoro')">🍅 Pomodoro</button>
             <button class="stab" data-stab="tab-ia" onclick="cambiarPestanaAjustes('tab-ia')"><i class="fa-solid fa-eye-low-vision stab-icon"></i> IA</button>
             <button class="stab" data-stab="tab-cuenta" onclick="cambiarPestanaAjustes('tab-cuenta')"><i class="fa-solid fa-house-user stab-icon"></i> Cuenta</button>
@@ -838,6 +852,37 @@
         <div id="tab-apariencia" class="stab-panel hidden">
             <h5 style="color:var(--accent); border-bottom:1px solid #333; margin-bottom:12px;">Colores de asignaturas</h5>
             <div id="settings-colors-list" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;"></div>
+            <div class="audio-controls">
+                <label>
+                    <input type="checkbox" id="toggle-mute" onchange="State.set('audioMuted', this.checked)">
+                    Silenciar Audio
+                </label>
+                <label>Sonido de estudio:</label>
+                <select id="select-ambient" onchange="State.set('ambientTrack', this.value)">
+                    <option value="brownian">Ruido Marrón</option>
+                    <option value="Buceo">Submarino</option>
+                    <option value="nocheCampera">Noche de verano</option>
+                    <option value="vagon">Tren con pasajeros</option>
+                    <option value="rail">Traqueteo de tren</option>
+                    <option value="ascuas">Fogata marchitándose</option>
+                    <option value="lluviaCochera">Lluvia en un coche</option>
+                    <option value="pajaritos">Cantar de los pájaros</option>
+                    <option value="olas">Olas rompiendo</option>
+                    <option value="cafeteria">Ambiente de cafetería</option>
+                </select>
+                <label>Sonido de fácil:</label>
+                <select id="select-reward" onchange="State.set('rewardTrack', this.value)">
+                    <option value="warning">Warning Mario</option>
+                    <option value="coin">Moneda</option>
+                    <option value="estrellita">Estrellita</option>
+                </select>
+                <label>Sonido de Alarma:</label>
+                <select id="select-alarma" onchange="State.set('alarmTrack', this.value)">
+                    <option value="custom">Buho (Por Defecto)</option>
+                    <option value="mario">Mario conquistar mundo</option>
+                    <option value="campana">Campana</option>
+                </select>
+            </div>
 
             <h5 style="color:var(--accent); border-bottom:1px solid #333; margin-bottom:12px;">Estilo visual</h5>
             <div class="setting-row">
@@ -910,6 +955,141 @@
                 <button id="btn-restaurar-widgets" class="btn-modern btn-neutral" style="width: 100%; padding: 10px;">
                     <i class="fa-solid fa-rotate-left"></i> Restaurar diseño de Widgets por defecto
                 </button>
+            </div>
+        </div>
+
+        <!-- ══════════════════════════════════════════════
+             TAB: SONIDO
+        ══════════════════════════════════════════════ -->
+        <div id="tab-sonido" class="stab-panel hidden">
+            <h5 style="color:var(--accent); border-bottom:1px solid #333; margin-bottom:12px; text-transform:uppercase;"><i class="fa-solid fa-volume-high"></i> Control de Audio</h5>
+            
+            <!-- Mute Global -->
+            <div style="background:rgba(0,0,0,0.2); padding:12px; border-radius:6px; margin-bottom:15px; border: 1px solid var(--border);">
+                <button id="toggle-mute-indicator" style="background:none; border:none; cursor:pointer; display:flex; align-items:center; gap:10px; width:100%; padding:0;" onclick="State.set('audioMuted', !State.get('audioMuted'))">
+                    <div id="mute-icon" style="font-size:1.4em; transition:all 0.2s; color:#f48080;">
+                        <i class="fa-solid fa-volume-mute"></i>
+                    </div>
+                    <span style="font-weight:bold; flex:1; text-align:left;">Silenciar TODO el audio</span>
+                </button>
+            </div>
+
+            <!-- ALARMA DE POMODORO -->
+            <div style="background:rgba(200,50,50,0.1); padding:12px; border-radius:6px; margin-bottom:15px; border: 1px solid rgba(200,50,50,0.3);">
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                    <button id="alarm-toggle-btn" style="background:none; border:none; cursor:pointer; font-size:1.4em; padding:0; transition:all 0.2s; color:#f48080;" onclick="State.set('soundSettings', {...State.get('soundSettings'), alarm: {...State.get('soundSettings').alarm, enabled: !State.get('soundSettings').alarm.enabled}})">
+                        <i class="fa-solid fa-bell"></i>
+                    </button>
+                    <label style="font-weight:bold; color:#f48080; flex:1; cursor:pointer; margin:0;">Alarma de Pomodoro</label>
+                </div>
+                
+                <div style="margin-bottom:10px; margin-left:30px;">
+                    <select id="alarm-select" onchange="State.set('alarmTrack', this.value)" style="width:100%; padding:6px; background:#1a1a1a; border:1px solid var(--border); color:#aaa; border-radius:4px;">
+                        <option value="custom">Búho (Por Defecto)</option>
+                        <option value="mario">Mario conquistar mundo</option>
+                        <option value="campana">Campana Notre Dame</option>
+                    </select>
+                </div>
+                
+                <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px; margin-left:30px;">
+                    <button style="padding:6px 10px; background:rgba(100,150,255,0.2); border:1px solid #4481ff; color:#4481ff; border-radius:4px; cursor:pointer; font-weight:bold; transition:all 0.2s;" onclick="AudioManager.preview('sfx_' + (State.get('alarmTrack') || 'custom'))"><i class="fa-solid fa-play"></i> Escuchar</button>
+                    
+                </div>
+                
+                <div style="margin-bottom:8px; margin-left:30px;">
+                    <label style="font-size:0.85em; color:#ccc; display:block; margin-bottom:4px;">Volumen: <span id="alarm-vol-label">100%</span></label>
+                    <input type="range" id="alarm-volume" min="0" max="100" value="100" style="width:100%; cursor:pointer;" oninput="onAlarmVolChange(this.value)">
+                </div>
+                
+                <div style="margin-left:30px;">
+                    <label style="font-size:0.85em; color:#ccc; display:block; margin-bottom:4px;">Pitch: <span id="alarm-pitch-label">0</span> semitones</label>
+                    <input type="range" id="alarm-pitch" min="-12" max="12" value="0" style="width:100%; cursor:pointer;" oninput="onAlarmPitchChange(this.value)">
+                </div>
+            </div>
+
+            <!-- SONIDO DE RECOMPENSA -->
+            <div style="background:rgba(75,200,75,0.1); padding:12px; border-radius:6px; margin-bottom:15px; border: 1px solid rgba(75,200,75,0.3);">
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                    <button id="reward-toggle-btn" style="background:none; border:none; cursor:pointer; font-size:1.4em; padding:0; transition:all 0.2s; color:#4bff4b;" onclick="State.set('soundSettings', {...State.get('soundSettings'), reward: {...State.get('soundSettings').reward, enabled: !State.get('soundSettings').reward.enabled}})">
+                        <i class="fa-solid fa-star"></i>
+                    </button>
+                    <label style="font-weight:bold; color:#4bff4b; flex:1; cursor:pointer; margin:0;">Sonido de Recompensa (Fácil)</label>
+                </div>
+                
+                <div style="margin-bottom:10px; margin-left:30px;">
+                    <select id="reward-select" onchange="State.set('rewardTrack', this.value)" style="width:100%; padding:6px; background:#1a1a1a; border:1px solid var(--border); color:#aaa; border-radius:4px;">
+                        <option value="warning">Warning Mario</option>
+                        <option value="coin">Moneda</option>
+                        <option value="estrellita">Estrellita</option>
+                    </select>
+                </div>
+                
+                <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px; margin-left:30px;">
+                    <button style="padding:6px 10px; background:rgba(100,150,255,0.2); border:1px solid #4481ff; color:#4481ff; border-radius:4px; cursor:pointer; font-weight:bold; transition:all 0.2s;" onclick="AudioManager.preview('sfx_' + (State.get('rewardTrack') || 'warning'))"><i class="fa-solid fa-play"></i> Escuchar</button>
+                    
+                </div>
+                
+                <div style="margin-bottom:8px; margin-left:30px;">
+                    <label style="font-size:0.85em; color:#ccc; display:block; margin-bottom:4px;">Volumen: <span id="reward-vol-label">100%</span></label>
+                    <input type="range" id="reward-volume" min="0" max="100" value="100" style="width:100%; cursor:pointer;" oninput="onRewardVolChange(this.value)">
+                </div>
+                
+                <div style="margin-left:30px;">
+                    <label style="font-size:0.85em; color:#ccc; display:block; margin-bottom:4px;">Pitch: <span id="reward-pitch-label">0</span> semitones</label>
+                    <input type="range" id="reward-pitch" min="-12" max="12" value="0" style="width:100%; cursor:pointer;" oninput="onRewardPitchChange(this.value)">
+                </div>
+            </div>
+
+            <!-- SONIDO DE AMBIENTE -->
+            <div style="background:rgba(100,150,255,0.1); padding:12px; border-radius:6px; margin-bottom:15px; border: 1px solid rgba(100,150,255,0.3);">
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                    <button id="ambient-toggle-btn" style="background:none; border:none; cursor:pointer; font-size:1.4em; padding:0; transition:all 0.2s; color:#5ab3ff;" onclick="State.set('soundSettings', {...State.get('soundSettings'), ambient: {...State.get('soundSettings').ambient, enabled: !State.get('soundSettings').ambient.enabled}})">
+                        <i class="fa-solid fa-water"></i>
+                    </button>
+                    <label style="font-weight:bold; color:#5ab3ff; flex:1; cursor:pointer; margin:0;">Sonido Ambiente (Estudio)</label>
+                </div>
+                
+                <div style="margin-bottom:10px; margin-left:30px;">
+                    <select id="ambient-select" onchange="State.set('ambientTrack', this.value)" style="width:100%; padding:6px; background:#1a1a1a; border:1px solid var(--border); color:#aaa; border-radius:4px;">
+                        <option value="brownian">Ruido Marrón</option>
+                        <option value="Buceo">Submarino</option>
+                        <option value="nocheCampera">Noche de verano</option>
+                        <option value="vagon">Tren con pasajeros</option>
+                        <option value="rail">Traqueteo de tren</option>
+                        <option value="ascuas">Fogata marchitándose</option>
+                        <option value="lluviaCochera">Lluvia en coche</option>
+                        <option value="pajaritos">Cantar de pájaros</option>
+                        <option value="olas">Olas rompiendo</option>
+                        <option value="cafeteria">Ambiente de cafetería</option>
+                    </select>
+                </div>
+                
+                <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px; margin-left:30px;">
+                    <button style="padding:6px 10px; background:rgba(100,150,255,0.2); border:1px solid #4481ff; color:#4481ff; border-radius:4px; cursor:pointer; font-weight:bold; transition:all 0.2s;" onclick="AudioManager.previewLimited(State.get('ambientTrack') || 'brownian', 10)"><i class="fa-solid fa-play"></i> Preview 10s</button>
+                    <button id="ambient-continuous-btn" style="padding:6px 10px; background:rgba(90,179,255,0.2); border:1px solid #5ab3ff; color:#5ab3ff; border-radius:4px; cursor:pointer; font-weight:bold; transition:all 0.2s;" onclick="AudioManager.toggleAmbientSound()"><i class="fa-solid fa-circle-play"></i> Sonido Continuo</button>
+                </div>
+                
+                <div style="margin-bottom:8px; margin-left:30px;">
+                    <label style="font-size:0.85em; color:#ccc; display:block; margin-bottom:4px;">Volumen: <span id="ambient-vol-label">80%</span></label>
+                    <input type="range" id="ambient-volume" min="0" max="100" value="80" style="width:100%; cursor:pointer;" oninput="onAmbientVolChange(this.value)">
+                </div>
+                
+                <div style="margin-left:30px;">
+                    <label style="font-size:0.85em; color:#ccc; display:block; margin-bottom:4px;">Pitch: <span id="ambient-pitch-label">0</span> semitones</label>
+                    <input type="range" id="ambient-pitch" min="-12" max="12" value="0" style="width:100%; cursor:pointer;" oninput="onAmbientPitchChange(this.value)">
+                </div>
+            </div>
+
+            <!-- Notas de uso -->
+            <div style="background:rgba(255,200,100,0.1); padding:12px; border-radius:6px; border: 1px solid rgba(255,200,100,0.3); font-size:0.8em; color:#ccc;">
+                <strong><i class="fa-solid fa-lightbulb"></i> Consejos:</strong>
+                <ul style="margin:5px 0; padding-left:20px;">
+                    <li>Usa <strong>Preview</strong> para escuchar antes de aceptar</li>
+                    <li>Ajusta el <strong>Volumen</strong> según tu preferencia (0-100%)</li>
+                    <li><strong>Pitch</strong> cambia el tono (-12 grave a +12 agudo)</li>
+                    <li>Desactiva tipos de sonido específicos con los iconos de arriba</li>
+                    <li>El ambient <strong>continuo</strong> suena mientras estudias</li>
+                </ul>
             </div>
         </div>
 
@@ -1673,6 +1853,7 @@
 <script src="src/js/interfaz/ui-pomo.js"></script>
 <script src="src/js/interfaz/ui-amigos.js"></script>
 <script src="src/js/interfaz/ui-graph.js"></script>
+<script src="src/js/interfaz/ui-examplanner.js"></script>
 <script src="src/js/ui.js" defer></script>
 <script src="src/js/ai.js" defer></script> 
 <script src="src/js/parser.js" defer></script>
@@ -1689,8 +1870,9 @@
 <script src="src/js/filters.js"></script>
 <script src="src/js/mobile.js"></script>
 <script src="src/js/graph.js"></script>
+<script src="src/js/audio-manager.js"></script>
 <script src="src/js/app.js" defer></script>
 
 
-<audio id="alarm-audio" src="data:audio/mp3;base64,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"></audio>
+
 </body>

@@ -34,6 +34,20 @@ const COLOR_PRESETS = {
         '--text-main': '#33ff33', '--border': '#114411', '--accent': '#33ff33',
         '--pomo-work': '#ff3333', '--pomo-short': '#33ff33', '--pomo-long': '#33aaff',
         '--status-green': '#33ff33', '--status-red': '#ff3333', '--status-yellow': '#ffff33', '--status-blue': '#33aaff'
+    },
+    'vaporwave': {
+        '--bg-color': '#1a0b2e', '--menu-color': '#11071f', '--card-bg': '#25133d',
+        '--text-main': '#f2b6ff', '--border': '#b877d9', '--accent': '#ff71ce',
+        '--pomo-work': '#ff71ce', '--pomo-short': '#6fffe9', '--pomo-long': '#b967ff',
+        '--status-green': '#6fffe9', '--status-red': '#ff71ce', '--status-yellow': '#ffcf4a', '--status-blue': '#5dade2'
+    },
+    'academia': {
+    '--bg-color': '#1c1917', '--menu-color': '#171412', '--card-bg': '#26221f',
+    '--text-main': '#d6c9b0', '--border': '#3f3730', '--accent': '#965a3e', // Cobre / Cuero
+    '--pomo-work': '#722f37', // Vino / Borgoña
+    '--pomo-short': '#3e4a3d', // Verde biblioteca
+    '--pomo-long': '#2a3d4a',  // Azul tinta
+    '--status-green': '#3e4a3d', '--status-red': '#722f37', '--status-yellow': '#a89060', '--status-blue': '#2a3d4a'
     }
 };
 

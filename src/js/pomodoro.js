@@ -88,13 +88,14 @@ const POMODORO = (() => {
         if(interval) clearInterval(interval);
         
         State.set('isRunning', true);
-        
+        if (typeof EventBus !== 'undefined') {
+            EventBus.emit('POMO_STARTED', { mode: State.get('currentMode') });
+        }
+
         const bigBtn = document.getElementById('btn-pomo-action');
         if(bigBtn) bigBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
         const miniBtn = document.getElementById('mini-btn-toggle');
         if(miniBtn) miniBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
-
-        // Sincronización inmediata del pronóstico al alterar el flujo temporal (Reanudar)
         updateFinishTime();
 
         interval = setInterval(() => {
@@ -116,6 +117,9 @@ const POMODORO = (() => {
         State.set('isRunning', false);
         const interval = State.get('timerInterval');
         if (interval) clearInterval(interval);
+        if (typeof EventBus !== 'undefined') {
+            EventBus.emit('POMO_STOPPED');
+        }
         
         const bigBtn = document.getElementById('btn-pomo-action');
         if(bigBtn) bigBtn.innerHTML = "&#9658;&#9658;";
@@ -161,15 +165,11 @@ const POMODORO = (() => {
      */
     function finishPomodoro() {
         pauseTimer();
-        if (typeof _generarBeep === 'function') _generarBeep();
 
         const modoActual = State.get('currentMode');
         const settings = State.get('pomoSettings') || {};
         const ciclosMax = settings.cyclesBeforeLong || 4; 
-        
         let nextMode = 'work';
-        
-        // FIX ARQUITECTÓNICO: El contexto por defecto debe ser la asignatura activa actual
         let asignaturaParaRegistro = State.get('nombreAsignaturaActual') || "General"; 
 
         if (modoActual === 'work') {

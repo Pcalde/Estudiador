@@ -69,7 +69,6 @@ const Timer = (() => {
 
     function _finalizarCiclo() {
         _pausar();
-        _generarBeep();
 
         const modoActual = State.get('currentMode');
         const settings   = State.get('pomoSettings') || {};
@@ -110,24 +109,6 @@ const Timer = (() => {
 
         if (settings.autoStart === true) {
             setTimeout(() => _iniciar(), 1500);
-        }
-    }
-
-    // ── Audio ─────────────────────────────────────────────────────
-
-    function _generarBeep() {
-        try {
-            const ctx = new (window.AudioContext || window.webkitAudioContext)();
-            const osc = ctx.createOscillator();
-            const g   = ctx.createGain();
-            osc.connect(g);
-            g.connect(ctx.destination);
-            osc.frequency.value = 523.25;
-            osc.start();
-            g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 1);
-            osc.stop(ctx.currentTime + 1);
-        } catch (e) {
-            Logger.warn('No se pudo reproducir el beep:', e);
         }
     }
 

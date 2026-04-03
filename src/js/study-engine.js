@@ -168,8 +168,14 @@ const StudyEngine = (() => {
                 const stats = State.get('sessionData') || {};
                 stats.tarjetas = (stats.tarjetas || 0) + 1;
                 if (calidad === 1) stats.faciles = (stats.faciles || 0) + 1;
+                if (calidad === 1) {
+                    if (typeof EventBus !== 'undefined') {
+                        EventBus.emit('CARD_RATED_EASY');
+                    }
+                }
                 if (calidad === 4) stats.criticas = (stats.criticas || 0) + 1;
                 State.set('sessionData', stats);
+                
 
                 // EXTRACCIÓN de la tarjeta de la cola viva
                 let cola = State.get('colaEstudio') || [];
@@ -223,14 +229,25 @@ window.anteriorTarjeta = () => StudyEngine.anteriorTarjeta();
 window.siguienteTarjeta = () => StudyEngine.siguienteTarjeta();
 window.procesarRepaso = (c) => StudyEngine.procesarRepaso(c);
 
-window.toggleModoSecuencial = (event) => {
-    // Lee el estado directamente del evento, o usa el DOM como fallback estricto
-    const isSeq = (event && event.target) ? event.target.checked : !!document.getElementById('check-secuencial')?.checked;
+window.toggleModoSecuencial = (isSeq) => {
+    // Requiere parámetro booleano explícito (Arquitectura Limpia)
+    if (typeof isSeq !== 'boolean') {
+        if (typeof Logger !== 'undefined') {
+            Logger.warn("toggleModoSecuencial requiere un booleano explícito. Se ignora la mutación.");
+        }
+        return;
+    }
     StudyEngine.toggleModoSecuencial(isSeq);
 };
 
-window.toggleModoLectura = (event) => {
-    const isLec = (event && event.target) ? event.target.checked : !!document.getElementById('check-lectura')?.checked;
+window.toggleModoLectura = (isLec) => {
+    // Requiere parámetro booleano explícito (Arquitectura Limpia)
+    if (typeof isLec !== 'boolean') {
+        if (typeof Logger !== 'undefined') {
+            Logger.warn("toggleModoLectura requiere un booleano explícito. Se ignora la mutación.");
+        }
+        return;
+    }
     StudyEngine.toggleModoLectura(isLec);
     
     // El controlador orquesta la interfaz si se activa la lectura

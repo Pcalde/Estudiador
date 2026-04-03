@@ -20,7 +20,8 @@ const UI = Object.assign(
     UISidebar,
     UIPomo,
     UIAmigos,
-    UIGraph
+    UIGraph,
+    UIExamPlanner
 );
 
 // Compatibilidad: cambiarPestanaAjustes se llama directamente desde el HTML

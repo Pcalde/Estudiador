@@ -73,10 +73,12 @@ EventBus.on('pomodoro:finished', (payload) => {
 EventBus.on('DATA_REQUIRES_SAVE', async () => {
     const biblioteca = State.get('biblioteca');
     const asigActual = State.get('nombreAsignaturaActual');
-    const graphData  = State.get('graphData');         
+    const graphData  = State.get('graphData');
+    const planificador = State.get('planificador');
     try {
         await DB.setVar('biblioteca', biblioteca);
-        await DB.setVar('graphData',  graphData); 
+        await DB.setVar('graphData',  graphData);
+        if (planificador) await DB.setVar('planificador_pro', planificador);
         if (asigActual) localStorage.setItem('estudiador_asig_actual', asigActual);
         localStorage.removeItem('estudiador_biblioteca');
     } catch (error) {
@@ -229,7 +231,8 @@ async function arrancarAplicacion() {
         State.set('biblioteca',    biblioDB);
         State.set('fechasClave',   await DB.getVar('fechasClave')   || []);
         State.set('horarioGlobal', await DB.getVar('horarioGlobal') || {});
-        State.set('graphData', await DB.getVar('graphData') || {});   
+        State.set('graphData', await DB.getVar('graphData') || {});
+        State.set('planificador', await DB.getVar('planificador_pro') || {});   
 
         const ultimaAsig = localStorage.getItem('estudiador_asig_actual');
         if (ultimaAsig && biblioDB[ultimaAsig]) {
@@ -291,6 +294,174 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (typeof updateWeeklyWidget  === 'function') updateWeeklyWidget();
     if (typeof updateGlobalStats   === 'function') updateGlobalStats();
     if (typeof updatePendingWindow === 'function') updatePendingWindow();
+    if (typeof AudioManager !== 'undefined') {AudioManager.init();}
+    
+    // ─── DEBOUNCING PARA SLIDERS DE SONIDO ──────────────────────────────────────
+    const _sliderDebounceTimers = {};
+    
+    function _createDebouncedSliderHandler(category, property) {
+        return function(value) {
+            const key = `${category}-${property}`;
+            clearTimeout(_sliderDebounceTimers[key]);
+            
+            _sliderDebounceTimers[key] = setTimeout(() => {
+                const settings = State.get('soundSettings');
+                State.set('soundSettings', {
+                    ...settings,
+                    [category]: { ...settings[category], [property]: parseInt(value) }
+                });
+            }, 200);
+        };
+    }
+    
+    // Exponer funciones al global scope para inline handlers
+    window.onAlarmVolChange = _createDebouncedSliderHandler('alarm', 'volume');
+    window.onAlarmPitchChange = _createDebouncedSliderHandler('alarm', 'pitch');
+    window.onRewardVolChange = _createDebouncedSliderHandler('reward', 'volume');
+    window.onRewardPitchChange = _createDebouncedSliderHandler('reward', 'pitch');
+    window.onAmbientVolChange = _createDebouncedSliderHandler('ambient', 'volume');
+    window.onAmbientPitchChange = _createDebouncedSliderHandler('ambient', 'pitch');
+    
+    // ─── SINCRONIZACIÓN DE CONTROLES DE SONIDO CON STATE ───────────────────────
+    function syncSoundControls() {
+        const settings = State.get('soundSettings') || {};
+        const muted = State.get('audioMuted');
+        
+        // === MUTE GLOBAL ===
+        const muteIcon = document.getElementById('mute-icon');
+        if (muteIcon) {
+            muteIcon.style.color = muted ? '#999' : '#f48080';
+            muteIcon.innerHTML = muted ? '<i class="fa-solid fa-volume-xmark"></i>' : '<i class="fa-solid fa-volume-mute"></i>';
+        }
+        
+        // === ALARM CONTROLS ===
+        const alarmSettings = settings.alarm || {};
+        
+        // Botón toggle alarma
+        const alarmToggleBtn = document.getElementById('alarm-toggle-btn');
+        if (alarmToggleBtn) {
+            const isEnabled = alarmSettings.enabled !== false;
+            alarmToggleBtn.style.opacity = isEnabled ? '1' : '0.4';
+            alarmToggleBtn.style.filter = isEnabled ? 'brightness(1)' : 'brightness(0.6)';
+        }
+        
+        // Select de track
+        const alarmSelect = document.getElementById('alarm-select');
+        if (alarmSelect) { alarmSelect.value = State.get('alarmTrack') || 'custom'; }
+        
+        // Sliders y labels
+        const alarmVol = document.getElementById('alarm-volume');
+        if (alarmVol) { alarmVol.value = alarmSettings.volume ?? 100; }
+        const alarmVolLabel = document.getElementById('alarm-vol-label');
+        if (alarmVolLabel) alarmVolLabel.textContent = (alarmSettings.volume ?? 100) + '%';
+        
+        const alarmPitch = document.getElementById('alarm-pitch');
+        if (alarmPitch) { alarmPitch.value = alarmSettings.pitch ?? 0; }
+        const alarmPitchLabel = document.getElementById('alarm-pitch-label');
+        if (alarmPitchLabel) alarmPitchLabel.textContent = (alarmSettings.pitch ?? 0);
+        
+        // === REWARD CONTROLS ===
+        const rewardSettings = settings.reward || {};
+        
+        // Botón toggle recompensa
+        const rewardToggleBtn = document.getElementById('reward-toggle-btn');
+        if (rewardToggleBtn) {
+            const isEnabled = rewardSettings.enabled !== false;
+            rewardToggleBtn.style.opacity = isEnabled ? '1' : '0.4';
+            rewardToggleBtn.style.filter = isEnabled ? 'brightness(1)' : 'brightness(0.6)';
+        }
+        
+        // Select de track
+        const rewardSelect = document.getElementById('reward-select');
+        if (rewardSelect) { rewardSelect.value = State.get('rewardTrack') || 'warning'; }
+        
+        // Sliders y labels
+        const rewardVol = document.getElementById('reward-volume');
+        if (rewardVol) { rewardVol.value = rewardSettings.volume ?? 100; }
+        const rewardVolLabel = document.getElementById('reward-vol-label');
+        if (rewardVolLabel) rewardVolLabel.textContent = (rewardSettings.volume ?? 100) + '%';
+        
+        const rewardPitch = document.getElementById('reward-pitch');
+        if (rewardPitch) { rewardPitch.value = rewardSettings.pitch ?? 0; }
+        const rewardPitchLabel = document.getElementById('reward-pitch-label');
+        if (rewardPitchLabel) rewardPitchLabel.textContent = (rewardSettings.pitch ?? 0);
+        
+        // === AMBIENT CONTROLS ===
+        const ambientSettings = settings.ambient || {};
+        
+        // Botón toggle ambiente
+        const ambientToggleBtn = document.getElementById('ambient-toggle-btn');
+        if (ambientToggleBtn) {
+            const isEnabled = ambientSettings.enabled !== false;
+            ambientToggleBtn.style.opacity = isEnabled ? '1' : '0.4';
+            ambientToggleBtn.style.filter = isEnabled ? 'brightness(1)' : 'brightness(0.6)';
+        }
+        
+        // Select de track
+        const ambientSelect = document.getElementById('ambient-select');
+        if (ambientSelect) { ambientSelect.value = State.get('ambientTrack') || 'brownian'; }
+        
+        // Sliders y labels
+        const ambientVol = document.getElementById('ambient-volume');
+        if (ambientVol) { ambientVol.value = ambientSettings.volume ?? 80; }
+        const ambientVolLabel = document.getElementById('ambient-vol-label');
+        if (ambientVolLabel) ambientVolLabel.textContent = (ambientSettings.volume ?? 80) + '%';
+        
+        const ambientPitch = document.getElementById('ambient-pitch');
+        if (ambientPitch) { ambientPitch.value = ambientSettings.pitch ?? 0; }
+        const ambientPitchLabel = document.getElementById('ambient-pitch-label');
+        if (ambientPitchLabel) ambientPitchLabel.textContent = (ambientSettings.pitch ?? 0);
+        
+        // Botón de sonido continuo - visual feedback
+        const ambientContinuousBtn = document.getElementById('ambient-continuous-btn');
+        if (ambientContinuousBtn) {
+            const isContinuous = ambientSettings.continuous === true;
+            ambientContinuousBtn.style.opacity = isContinuous ? '1' : '0.5';
+            ambientContinuousBtn.style.filter = isContinuous ? 'brightness(1.1)' : 'brightness(0.8)';
+            ambientContinuousBtn.style.boxShadow = isContinuous ? '0 0 8px rgba(90,179,255,0.5)' : 'none';
+        }
+    }
+    
+    // Guardar soundSettings y audio tracks en localStorage cuando cambien
+    function saveAudioSettingsToStorage() {
+        const soundSettings = State.get('soundSettings');
+        const ambientTrack = State.get('ambientTrack');
+        const rewardTrack = State.get('rewardTrack');
+        const alarmTrack = State.get('alarmTrack');
+        
+        localStorage.setItem('estudiador_sound_settings', JSON.stringify(soundSettings));
+        localStorage.setItem('estudiador_ambient_track', ambientTrack || 'brownian');
+        localStorage.setItem('estudiador_reward_track', rewardTrack || 'warning');
+        localStorage.setItem('estudiador_alarm_track', alarmTrack || 'custom');
+    }
+    
+    // Escuchar cambios en STATE para sincronizar UI y guardar settings
+    if (typeof EventBus !== 'undefined') {
+        EventBus.on('STATE_CHANGED', (data) => {
+            if (data.keys.includes('soundSettings') || data.keys.includes('audioMuted') || 
+                data.keys.includes('ambientTrack') || data.keys.includes('rewardTrack') || data.keys.includes('alarmTrack')) {
+                syncSoundControls();
+                saveAudioSettingsToStorage();
+            }
+        });
+        
+        // Sonido de inicio de pomodoro
+        EventBus.on('POMO_STARTED', () => {
+            if (State.get('audioMuted')) return;
+            const rewardSettings = State.get('soundSettings').reward;
+            if (rewardSettings.enabled) {
+                // Reproducir sonido suave de inicio (usar reward track como feedback)
+                if (typeof AudioManager !== 'undefined' && AudioManager.preview) {
+                    AudioManager.previewLimited('sfx_warning', 0.5);
+                }
+            }
+        });
+    }
+    
+    // Inicializar controles de sonido en carga
+    syncSoundControls();
+        
+    
 
     // 6. Cierre automático sidebar móvil al seleccionar asignatura
     document.getElementById('lista-asignaturas')?.addEventListener('click', () => {
@@ -444,9 +615,71 @@ document.addEventListener('keydown', (e) => {
 // EVENT DELEGATION — elementos generados dinámicamente
 // ────────────────────────────────────────────────────────────────
 document.addEventListener('click', function(e) {
+    // 1. Delegación basada en Data-Attributes (existente)
     const el = e.target.closest('[data-action]');
-    if (!el) return;
-    CommandRegistry.dispatch(el.dataset.action, el.dataset);
+    if (el && typeof CommandRegistry !== 'undefined') {
+        CommandRegistry.dispatch(el.dataset.action, el.dataset);
+        return;
+    }
+
+    // 2. Intercepción estricta: Planificador de Exámenes
+    const btnPlanificador = e.target.closest('#btn-add-fecha');
+    if (btnPlanificador) {
+        e.preventDefault();
+        // Intentar a través del compositor UI primero
+        if (typeof UI !== 'undefined' && typeof UI.abrirPlanificador === 'function') {
+            UI.abrirPlanificador();
+        } 
+        // Fallback directo si falló la inyección en ui.js
+        else if (typeof UIExamPlanner !== 'undefined' && typeof UIExamPlanner.abrirPlanificador === 'function') {
+            Logger.warn("Arquitectura: UIExamPlanner no compuesto en UI. Usando fallback directo.");
+            UIExamPlanner.abrirPlanificador();
+        } 
+        // Falla crítica de carga
+        else {
+            Logger.error("Arquitectura: UIExamPlanner no está en memoria. Revisa index.html.");
+        }
+        return;
+    }
+
+    // 3. Fallback de delegación para Calendario (por si pierden el onclick inline)
+    const btnPrevMes = e.target.closest('#btn-cambiarmes, .btn-prev-month, .fa-chevron-left');
+    const btnNextMes = e.target.closest('#btn-cambiarmes-2, .btn-next-month, .fa-chevron-right');
+    
+    // Solo interceptamos si el clic pertenece a la cabecera del widget del calendario
+    if (e.target.closest('.widget-calendario-header')) {
+        if (btnPrevMes) { e.preventDefault(); if (typeof window.cambiarMes === 'function') window.cambiarMes(-1); return; }
+        if (btnNextMes) { e.preventDefault(); if (typeof window.cambiarMes === 'function') window.cambiarMes(1); return; }
+    }
+});
+
+
+// ────────────────────────────────────────────────────────────────
+// PARCHE DE PERSISTENCIA: PLANIFICADOR AVANZADO
+// ────────────────────────────────────────────────────────────────
+if (typeof EventBus !== 'undefined') {
+    EventBus.on('DATA_REQUIRES_SAVE', () => {
+        const plan = State.get('planificador');
+        if (plan) {
+            localStorage.setItem('estudiador_planificador_pro', JSON.stringify(plan));
+            // Si usas Firebase, aquí es donde Firebase debe leer la clave y subirla
+            Logger.info("Persistencia del Planificador completada en LocalStorage.");
+        }
+    });
+}
+
+// Interceptor de carga inicial (hidratación)
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        try {
+            const planGuardado = localStorage.getItem('estudiador_planificador_pro');
+            if (planGuardado) {
+                State.set('planificador', JSON.parse(planGuardado));
+                Logger.info("Planificador Pro hidratado desde disco.");
+                if (typeof window.updateCalendarHeatmap === 'function') window.updateCalendarHeatmap();
+            }
+        } catch (e) { Logger.error("Fallo al leer planificador:", e); }
+    }, 1000); // Retraso estratégico para dejar que la BD principal cargue primero
 });
 
 // ────────────────────────────────────────────────────────────────
@@ -543,7 +776,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Calendario y fechas
     on('#btn-cambiarmes',        'click', () => cambiarMes(-1));
     on('#btn-cambiarmes-2',      'click', () => cambiarMes(1));
-    on('#btn-add-fecha',         'click', abrirFechasModal);
     on('#btn-cerrarfechasmodal', 'click', cerrarFechasModal);
     on('#btn-guardarfechaclave', 'click', guardarFechaClave);
 

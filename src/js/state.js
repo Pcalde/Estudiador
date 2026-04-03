@@ -87,6 +87,38 @@ const State = (() => {
         // Widget layout
         widgetConfig: null,
         graphData: {},          // { [asig]: { nodes: [{id, x, y}], edges: [{id, source, target, label}] } }
+        
+        // Audio
+        audioMuted: false,
+        ambientTrack: null,  // Se carga lazily desde localStorage
+        rewardTrack: null,   // Se carga lazily desde localStorage
+        alarmTrack: null,    // Se carga lazily desde localStorage
+        soundSettings: null,  // Se carga lazily desde localStorage via _lazyInits
+
+        examenesProgramados: [],
+        planificador: {
+            studyTypes: [
+                { id: 'st_read',  name: 'Lectura',   icon: 'fa-book-open',     color: 'var(--status-blue)' },
+                { id: 'st_study', name: 'Estudio',   icon: 'fa-brain',         color: 'var(--status-yellow)' },
+                { id: 'st_prac',  name: 'Práctica',  icon: 'fa-pen-to-square', color: 'var(--accent)' },
+                { id: 'st_rev',   name: 'Repaso',    icon: 'fa-rotate-right',  color: 'var(--status-green)' }
+            ],
+            dailyCapacities: { 
+                regularCourse: 4, 
+                examSeason: 8, 
+                weekend: 6, 
+                crunchTime: 12 
+            },
+            examWeights: [
+                { id: 'minor',  label: 'Prueba Menor',   multiplier: 0.5 },
+                { id: 'mid',    label: 'Parcial',        multiplier: 1.0 },
+                { id: 'final',  label: 'Examen Final',   multiplier: 2.0 },
+                { id: 'proj',   label: 'Entrega Final',  multiplier: 1.5 }
+            ],
+            asignaturasPlanificadas: [],
+            examenes: [],
+            schedule: {}
+            },
     };
 
     // ── Getters con lazy-init para valores de localStorage ────────
@@ -96,6 +128,10 @@ const State = (() => {
                             || localStorage.getItem('estudiador_groq_key') || '',
         groqProxyUrl: () => localStorage.getItem('estudiador_groq_proxy_url') || '',
         widgetConfig: () => JSON.parse(localStorage.getItem('estudiador_widget_config') || 'null'),
+        ambientTrack: () => localStorage.getItem('estudiador_ambient_track') || 'brownian',
+        rewardTrack:  () => localStorage.getItem('estudiador_reward_track') || 'warning',
+        alarmTrack:   () => localStorage.getItem('estudiador_alarm_track') || 'custom',
+        soundSettings: () => JSON.parse(localStorage.getItem('estudiador_sound_settings') || '{"alarm":{"enabled":true,"volume":100,"pitch":0},"reward":{"enabled":true,"volume":100,"pitch":0},"ambient":{"enabled":true,"volume":80,"pitch":0,"continuous":false},"study":{"enabled":false,"volume":100,"pitch":0}}'),
     };
 
     // ── API pública de State ──────────────────────────────────────
@@ -170,4 +206,6 @@ const State = (() => {
             return JSON.parse(JSON.stringify(snap)); // Evita mutaciones por referencia
         }
     };
+
+    
 })();

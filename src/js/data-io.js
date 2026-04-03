@@ -19,12 +19,21 @@ const DataIO = (() => {
     // ════════════════════════════════════════════════════════════
     // 1. IMPORTACIÓN LaTeX (Restaurada a Arquitectura Original)
     // ════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════════
+    // 1. IMPORTACIÓN LaTeX (Arquitectura Limpia)
+    // ════════════════════════════════════════════════════════════
     function procesarImportacionLatex(rawInput, temaDefault) {
         const asigActual = State.get('nombreAsignaturaActual');
-        if (!asigActual) { alert("Selecciona una asignatura primero."); return; }
+        
+        // Rechazar con excepción, delegando el manejo visual a la capa UI
+        if (!asigActual) { 
+            throw new Error("ERR_NO_SUBJECT: Selecciona una asignatura primero."); 
+        }
 
         const newCards = (typeof Parser !== 'undefined') ? Parser.parseLatexToCards(rawInput, temaDefault) : [];
-        if (newCards.length === 0) { alert("No se detectaron comandos válidos."); return; }
+        if (newCards.length === 0) { 
+            throw new Error("ERR_NO_CARDS: No se detectaron comandos válidos en el bloque LaTeX."); 
+        }
 
         let biblioteca = State.get('biblioteca') || {};
         if (!biblioteca[asigActual]) biblioteca[asigActual] = [];
@@ -158,18 +167,33 @@ const DataIO = (() => {
 })();
 
 // Proxies Globales para compatibilidad con app.js
+// NOTA: Estos wrappers son responsables de atrapar errores de data-io y delegarlos a la UI
 window.procesarImportacionLatex = () => {
-    const rawInput = document.getElementById('import-area-latex')?.value || '';
-    const temaDefault = parseInt(document.getElementById('latex-tema-input')?.value) || 1;
-    const result = DataIO.procesarImportacionLatex(rawInput, temaDefault);
-    
-    const importArea = document.getElementById('import-area-latex');
-    if (importArea) importArea.value = "";
-    
-    if (result.conIA > 0) {
-        alert(`${result.count} tarjetas importadas. La IA procesará ${result.conIA} títulos vacíos.`);
-    } else {
-        alert(`${result.count} tarjetas importadas con sus títulos originales respetados.`);
+    try {
+        const rawInput = document.getElementById('import-area-latex')?.value || '';
+        const temaDefault = parseInt(document.getElementById('latex-tema-input')?.value) || 1;
+        const result = DataIO.procesarImportacionLatex(rawInput, temaDefault);
+        
+        const importArea = document.getElementById('import-area-latex');
+        if (importArea) importArea.value = "";
+        
+        // La UI es responsable de mostrar feedback
+        if (result.conIA > 0) {
+            alert(`${result.count} tarjetas importadas. La IA procesará ${result.conIA} títulos vacíos.`);
+        } else {
+            alert(`${result.count} tarjetas importadas con sus títulos originales respetados.`);
+        }
+    } catch(e) {
+        // Atrapar excepciones de la capa de datos y mostrarlas en UI
+        const errorMsg = e.message || 'Error desconocido en importación LaTeX';
+        if (errorMsg.includes('ERR_NO_SUBJECT')) {
+            alert('⚠️ Selecciona una asignatura primero.');
+        } else if (errorMsg.includes('ERR_NO_CARDS')) {
+            alert('⚠️ No se detectaron comandos válidos. Verifica el formato LaTeX.');
+        } else {
+            alert('❌ Error: ' + errorMsg);
+        }
+        if (typeof Logger !== 'undefined') Logger.error('[procesarImportacionLatex]', e);
     }
 };
 window.procesarImportacion = () => {

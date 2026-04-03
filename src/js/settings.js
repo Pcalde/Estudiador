@@ -204,6 +204,10 @@ function guardarAjustes() {
 /** Persistencia pura en storage. Sin efectos secundarios de UI. */
 function _persistirAjustesStorage(formData) {
     localStorage.setItem('pomo_settings', JSON.stringify(State.get('pomoSettings')));
+    localStorage.setItem('estudiador_sound_settings', JSON.stringify(State.get('soundSettings')));
+    localStorage.setItem('estudiador_ambient_track', State.get('ambientTrack') || 'brownian');
+    localStorage.setItem('estudiador_reward_track', State.get('rewardTrack') || 'warning');
+    localStorage.setItem('estudiador_alarm_track', State.get('alarmTrack') || 'custom');
 
     if (formData.ia) {
         if (formData.ia.sessionOnly) {

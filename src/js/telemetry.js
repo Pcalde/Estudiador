@@ -40,10 +40,9 @@ const Telemetry = (() => {
         _run('widget-horas',        updateMapaHoras);
         updateProbabilidadAprobado(); 
         
-        if (typeof window.renderUpcomingEvents === 'function') window.renderUpcomingEvents();
-        
-        if (typeof window.renderUpcomingEvents === 'function') {
-            try { window.renderUpcomingEvents(); } catch (e) { /* ignore */ }
+        // Emitir evento para que UI redibuje sin acoplamiento directo
+        if (typeof EventBus !== 'undefined') {
+            EventBus.emit('TELEMETRY_UPDATED', { widgets: ['upcoming-events', 'horas', 'probability'] });
         }
 }
         
@@ -135,12 +134,23 @@ const Telemetry = (() => {
     }
 
     function updateCalendarHeatmap() {
-        UI.updateCalendarHeatmap(
-            State.get('biblioteca'), 
-            State.get('nombreAsignaturaActual'), 
-            State.get('fechasClave'), 
-            window.calendarViewDate || new Date()
-        );
+        try {
+            // ARCH: Lectura estricta del estado. Cero mutaciones.
+            const planificador = State.get('planificador');
+
+            if (typeof UI !== 'undefined' && UI.updateCalendarHeatmap) {
+                // Delegación de renderizado a la capa de UI
+                UI.updateCalendarHeatmap(
+                    State.get('biblioteca'), 
+                    State.get('nombreAsignaturaActual'), 
+                    State.get('fechasClave'), 
+                    window.calendarViewDate || new Date(),
+                    planificador
+                );
+            }
+        } catch (error) {
+            Logger.error('[Telemetry] Fallo en updateCalendarHeatmap:', error);
+        }
     }
     
     function updatePomoStats() {

@@ -321,6 +321,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.onRewardPitchChange = _createDebouncedSliderHandler('reward', 'pitch');
     window.onAmbientVolChange = _createDebouncedSliderHandler('ambient', 'volume');
     window.onAmbientPitchChange = _createDebouncedSliderHandler('ambient', 'pitch');
+    // Manejadores Defensivos para nueva categoría (Evita el TypeError)
+    window.onHardVolChange = function(val) {
+        const lbl = document.getElementById('hard-vol-label');
+        if (lbl) lbl.innerText = val + '%';
+        
+        const st = State.get('soundSettings') || {};
+        if (!st.hard) st.hard = { enabled: false, volume: 100, pitch: 0 };
+        st.hard.volume = parseInt(val, 10);
+        State.set('soundSettings', st);
+    };
+
+    window.onHardPitchChange = function(val) {
+        const lbl = document.getElementById('hard-pitch-label');
+        if (lbl) lbl.innerText = val;
+        
+        const st = State.get('soundSettings') || {};
+        if (!st.hard) st.hard = { enabled: false, volume: 100, pitch: 0 };
+        st.hard.pitch = parseInt(val, 10);
+        State.set('soundSettings', st);
+    };
     
     // ─── SINCRONIZACIÓN DE CONTROLES DE SONIDO CON STATE ───────────────────────
     function syncSoundControls() {
@@ -385,6 +405,33 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (rewardPitch) { rewardPitch.value = rewardSettings.pitch ?? 0; }
         const rewardPitchLabel = document.getElementById('reward-pitch-label');
         if (rewardPitchLabel) rewardPitchLabel.textContent = (rewardSettings.pitch ?? 0);
+
+        // === HARD (DIFICULTAD) CONTROLS ===
+        const hardSettings = settings.hard || {};
+        
+        // Botón toggle dificultad
+        const hardToggleBtn = document.getElementById('hard-toggle-btn');
+        if (hardToggleBtn) {
+            // Asumimos que por defecto está desactivado (false) para no molestar, a diferencia de reward
+            const isEnabled = hardSettings.enabled === true; 
+            hardToggleBtn.style.opacity = isEnabled ? '1' : '0.4';
+            hardToggleBtn.style.filter = isEnabled ? 'brightness(1)' : 'brightness(0.6)';
+        }
+        
+        // Select de track
+        const hardSelect = document.getElementById('hard-select');
+        if (hardSelect) { hardSelect.value = State.get('hardTrack') || 'bump'; }
+        
+        // Sliders y labels
+        const hardVol = document.getElementById('hard-volume');
+        if (hardVol) { hardVol.value = hardSettings.volume ?? 100; }
+        const hardVolLabel = document.getElementById('hard-vol-label');
+        if (hardVolLabel) hardVolLabel.textContent = (hardSettings.volume ?? 100) + '%';
+        
+        const hardPitch = document.getElementById('hard-pitch');
+        if (hardPitch) { hardPitch.value = hardSettings.pitch ?? 0; }
+        const hardPitchLabel = document.getElementById('hard-pitch-label');
+        if (hardPitchLabel) hardPitchLabel.textContent = (hardSettings.pitch ?? 0);
         
         // === AMBIENT CONTROLS ===
         const ambientSettings = settings.ambient || {};

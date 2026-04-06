@@ -32,7 +32,7 @@ const UIExamPlanner = (() => {
     // Para contextos síncronos, usar getPlanSync() que lee de State cache
     async function getPlan() {
         let plan = null;
-        
+                
         // INTENTAR 1: Leer de IndexedDB (fuente de verdad)
         try {
             if (typeof DB !== 'undefined' && DB.getVar) {
@@ -313,21 +313,36 @@ const UIExamPlanner = (() => {
     }
 
     // ── VISTAS ──
-    function renderNavegacion() {
-        const nav = document.getElementById('ep-nav-container');
-        if (!nav) return;
-        nav.innerHTML = `
-            <button class="ep-navb ${UIState.view === 'calendar' ? 'on' : ''}" data-view="calendar"><i class="fa-solid fa-calendar-days"></i> Calendario</button>
-            <button class="ep-navb ${UIState.view === 'setup' ? 'on' : ''}" data-view="setup"><i class="fa-solid fa-gear"></i> Configuración</button>
-            <button class="ep-navb ${UIState.view === 'metrics' ? 'on' : ''}" data-view="metrics"><i class="fa-solid fa-chart-pie"></i> Métricas</button>
-        `;
-        nav.querySelectorAll('.ep-navb').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                UIState.view = e.currentTarget.dataset.view;
-                renderWorkspace();
-            });
+    // ── SUSTITUIR EN ui-examplanner.js ──
+
+function renderNavegacion() {
+    const nav = document.getElementById('ep-nav-container');
+    if (!nav) return;
+
+    const plan = getPlanSync();
+    const tieneExamenes = plan.examenes.length > 0 && plan.asignaturasPlanificadas.length > 0;
+
+    nav.innerHTML = `
+        <button class="ep-navb ${UIState.view === 'calendar' ? 'on' : ''}" data-view="calendar"><i class="fa-solid fa-calendar-days"></i> Calendario</button>
+        <button class="ep-navb ${UIState.view === 'setup' ? 'on' : ''}" data-view="setup"><i class="fa-solid fa-gear"></i> Configuración</button>
+        <button class="ep-navb ${UIState.view === 'metrics' ? 'on' : ''}" data-view="metrics"><i class="fa-solid fa-chart-pie"></i> Métricas</button>
+        <div style="width:1px; background:var(--border); margin:0 6px;"></div>
+        <button class="ep-navb" id="ep-btn-wizard" style="${tieneExamenes ? 'opacity:1;' : 'opacity:0.4; cursor:not-allowed;'}" title="${tieneExamenes ? 'Generar planificación automática' : 'Añade asignaturas y exámenes primero'}">
+            <i class="fa-solid fa-wand-magic-sparkles" style="color:var(--accent);"></i> Autoplanificar
+        </button>
+    `;
+
+    nav.querySelectorAll('.ep-navb[data-view]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            UIState.view = e.currentTarget.dataset.view;
+            renderWorkspace();
         });
+    });
+
+    if (tieneExamenes) {
+        document.getElementById('ep-btn-wizard').addEventListener('click', lanzarWizardAutoplan);
     }
+}
 
     function renderSidebar() {
         const sb = document.getElementById('ep-sb-content');
@@ -356,105 +371,191 @@ const UIExamPlanner = (() => {
         const main = document.getElementById('ep-main');
         if (!main) return;
         const plan = getPlanSync();
-        
+
         const y = UIState.calYear;
         const m = UIState.calMonth;
-        const totalDias = new Date(y, m + 1, 0).getDate();
-        const primerDia = (new Date(y, m, 1).getDay() + 6) % 7; 
-        const monthName = new Date(y, m, 1).toLocaleString('es', { month: 'long', year: 'numeric' });
+        const totalDias  = new Date(y, m + 1, 0).getDate();
+        const primerDia  = (new Date(y, m, 1).getDay() + 6) % 7;
+        const monthName  = new Date(y, m, 1).toLocaleString('es', { month: 'long', year: 'numeric' });
+
+        // ── helper local: capacidad bruta del día ──────────────────────
+        function _capDia(fechaStr) {
+            const ov = (plan.dayOverrides || {})[fechaStr];
+            if (ov !== undefined) return ov;
+            const d = new Date(fechaStr + 'T00:00:00');
+            const esFinde   = [0, 6].includes(d.getDay());
+            const esTemp    = (plan.examenes || []).some(e => {
+                const diff = (new Date(e.fecha + 'T00:00:00') - d) / 86400000;
+                return diff >= 0 && diff <= 7;
+            });
+            const caps = plan.dailyCapacities || { regularCourse: 4, examSeason: 8, weekend: 6 };
+            return esFinde ? caps.weekend : (esTemp ? caps.examSeason : caps.regularCourse);
+        }
 
         let celdas = '';
-        for (let i = 0; i < primerDia; i++) celdas += `<div style="opacity:0;"></div>`;
-        
+        for (let i = 0; i < primerDia; i++) celdas += `<div style="opacity:0; min-height:110px;"></div>`;
+
         for (let d = 1; d <= totalDias; d++) {
-            const fechaStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-            const esHoy = fechaStr === new Date().toISOString().split('T')[0];
-            const tareas = plan.schedule[fechaStr] || [];
-            const examenes = plan.examenes.filter(e => e.fecha === fechaStr);
-            
-            let contenido = '';
-            if (examenes.length > 0) {
-                const ex = examenes[0];
-                const exColor = ex.color || 'var(--status-red)';
-                const exAsig = ex.asigNombre || 'EXAM';
-                contenido = `
-                    <div style="color:${exColor}; font-weight:bold; font-size:10px; margin-top:8px; border-top:1px solid ${exColor}; padding-top:4px;">
-                        <i class="fa-solid fa-chess-king"></i> ${escapeHtml(exAsig)}
-                    </div>
-                    <div style="font-size:8px; color:var(--text-muted); margin-top:2px;">
-                        ${ex.hora ? ex.hora : ''} ${ex.lugar ? ' @ ' + escapeHtml(ex.lugar) : ''}
-                    </div>
-                `;
-            } else if (tareas.length > 0) {
-                const completadas = tareas.filter(t => t.status === 'completed').length;
-                const fallidas = tareas.filter(t => t.status === 'failed').length;
-                const totalPomos = tareas.reduce((acc, t) => acc + t.pomosAsignados, 0);
-                
-                // Mostrar hasta 3 acrónimos + iconos
-                const acroList = tareas.slice(0, 3).map(t => {
-                    const tipo = plan.studyTypes.find(st => st.id === t.studyTypeId);
-                    const asig = plan.asignaturasPlanificadas.find(a => a.id === t.asigId);
-                    const acro = asig?.acronimo || asig?.nombre?.substring(0, 3).toUpperCase() || '?';
-                    const icon = tipo?.icon || 'fa-book';
-                    const color = t.color || asig?.color || 'var(--accent)';
-                    const st = t.status === 'completed' ? 'completed' : '';
-                    
+            const fechaStr  = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const esHoy     = fechaStr === new Date().toISOString().split('T')[0];
+            const tareas    = plan.schedule[fechaStr] || [];
+            const examDia   = plan.examenes.filter(e => e.fecha === fechaStr);
+            const esExamen  = examDia.length > 0;
+            const bloqueado = (plan.blockedDays || []).includes(fechaStr);
+
+            // ── Estilos dinámicos de la celda ──────────────────────────
+            let borderColor = esHoy ? 'var(--accent)' : 'var(--border)';
+            let bgStyle     = 'background:var(--card-bg);';
+            let boxShadow   = esHoy ? 'box-shadow:0 0 10px rgba(0,255,204,.15);' : '';
+
+            if (esExamen) {
+                const exColor = _cssVarToFallback(examDia[0].color || 'var(--status-red)');
+                borderColor   = exColor;
+                bgStyle       = `background: color-mix(in srgb, ${exColor} 12%, var(--card-bg));`;
+                boxShadow     = `box-shadow: 0 0 8px ${exColor}44;`;
+            } else if (bloqueado) {
+                bgStyle = 'background: repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.03) 4px, rgba(255,255,255,0.03) 8px);';
+                borderColor = 'var(--border)';
+            }
+
+            // ── Contador pomos (esquina superior izquierda) ───────────
+            const totalPomos = tareas.reduce((a, t) => a + (t.pomosAsignados || 0), 0);
+            const capHoy     = _capDia(fechaStr);
+            const pomoColor  = totalPomos > capHoy ? 'var(--status-red)' : totalPomos > 0 ? 'var(--accent)' : 'var(--text-muted)';
+
+            const pomosCounter = (tareas.length > 0 || esExamen) ? `
+                <div style="font-size:8px; color:${pomoColor}; display:flex; align-items:center; gap:2px; margin-bottom:3px;">
+                    <i class="fa-solid fa-stopwatch" style="font-size:7px;"></i>
+                    <span>${totalPomos}/${capHoy}</span>
+                </div>
+            ` : '';
+
+            // ── Chips de sesiones (máx 6, rejilla 3×2) ────────────────
+            let chipsHTML = '';
+            if (esExamen) {
+                chipsHTML = examDia.map(ex => {
+                    const exColor = _cssVarToFallback(ex.color || 'var(--status-red)');
                     return `
-                        <div style="display:inline-flex; align-items:center; gap:2px; padding:2px 4px; border-radius:3px; background:${color}20; border:1px solid ${color}; margin:1px; font-size:8px; ${st === 'completed' ? 'opacity:0.5;' : ''}">
-                            <i class="fa-solid ${icon}" style="font-size:7px; color:${color};"></i>
-                            <strong style="color:${color};">${acro}</strong>
+                        <div style="grid-column:1/-1; display:flex; align-items:center; gap:4px; padding:3px 5px;
+                            border-radius:4px; background:${exColor}22; border:1px solid ${exColor};
+                            font-size:9px; font-weight:bold; color:${exColor}; margin-top:2px;">
+                            <i class="fa-solid fa-chess-king" style="font-size:8px;"></i>
+                            <span>${escapeHtml(ex.asigNombre || 'EXAMEN')}</span>
+                            ${ex.hora ? `<span style="opacity:0.7; font-weight:normal; margin-left:auto;">${ex.hora}</span>` : ''}
                         </div>
                     `;
                 }).join('');
-                
-                let dotEstado = '';
-                if (fallidas > 0) dotEstado = '<i class="fa-solid fa-circle-exclamation" style="color:var(--status-red);"></i>';
-                else if (completadas === tareas.length) dotEstado = '<i class="fa-solid fa-circle-check" style="color:var(--status-green);"></i>';
+            } else if (tareas.length > 0) {
+                const visibles    = tareas.slice(0, 6);
+                const restantes   = tareas.length - 6;
+                const completadas = tareas.filter(t => t.status === 'completed').length;
+                const fallidas    = tareas.filter(t => t.status === 'failed').length;
 
-                contenido = `
-                    <div style="margin-top:4px; font-size:8px; display:flex; flex-wrap:wrap; gap:2px;">
-                        ${acroList}
-                        ${tareas.length > 3 ? `<div style="font-size:7px; color:var(--text-muted);">+${tareas.length - 3}</div>` : ''}
+                const chips = visibles.map(t => {
+                    const tipo  = (plan.studyTypes || []).find(st => st.id === t.studyTypeId);
+                    const asig  = (plan.asignaturasPlanificadas || []).find(a => a.id === t.asigId);
+                    const acro  = asig?.acronimo || asig?.nombre?.substring(0, 3).toUpperCase() || '?';
+                    const icon  = tipo?.icon || 'fa-book';
+                    const color = _cssVarToFallback(t.color || asig?.color || 'var(--accent)');
+                    const isDone = t.status === 'completed';
+                    const isFail = t.status === 'failed';
+                    const opacity = (isDone || isFail) ? 'opacity:0.45;' : '';
+                    const strikethrough = isDone ? 'text-decoration:line-through;' : '';
+                    return `
+                        <div style="display:flex; align-items:center; gap:2px; padding:2px 4px;
+                            border-radius:4px; background:${color}1a; border:1px solid ${color}88;
+                            font-size:8px; overflow:hidden; ${opacity}">
+                            <i class="fa-solid ${icon}" style="font-size:7px; color:${color}; flex-shrink:0;"></i>
+                            <strong style="color:${color}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; ${strikethrough}">${acro}</strong>
+                            ${isFail ? `<i class="fa-solid fa-xmark" style="font-size:6px; color:var(--status-red); margin-left:auto;"></i>` : ''}
+                        </div>
+                    `;
+                }).join('');
+
+                let estadoDot = '';
+                if (fallidas > 0)
+                    estadoDot = `<i class="fa-solid fa-circle-exclamation" style="color:var(--status-red); font-size:8px;"></i>`;
+                else if (completadas === tareas.length && tareas.length > 0)
+                    estadoDot = `<i class="fa-solid fa-circle-check" style="color:var(--status-green); font-size:8px;"></i>`;
+
+                const overflowBadge = restantes > 0
+                    ? `<div style="display:flex; align-items:center; justify-content:center; font-size:7px; color:var(--text-muted); border:1px dashed var(--border); border-radius:4px;">+${restantes}</div>`
+                    : '';
+
+                chipsHTML = `
+                    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:2px; margin-top:2px;">
+                        ${chips}
+                        ${overflowBadge}
                     </div>
-                    <div style="font-size:9px; color:var(--text-muted); margin-top:2px; display:flex; justify-content:space-between; align-items:center;">
-                        <span><i class="fa-solid fa-stopwatch"></i> ${totalPomos}p</span>
-                        ${dotEstado}
-                    </div>
+                    ${estadoDot ? `<div style="margin-top:3px; text-align:right;">${estadoDot}</div>` : ''}
                 `;
+            } else if (bloqueado) {
+                chipsHTML = `<div style="font-size:8px; color:var(--text-muted); opacity:0.5; margin-top:4px; text-align:center;">
+                    <i class="fa-solid fa-ban"></i>
+                </div>`;
             }
 
-            // Aquí usamos el atributo data-action que será interceptado por CommandRegistry
             celdas += `
-                <div class="ep-dc ${esHoy ? 'today' : ''} ${examenes.length > 0 ? 'exday' : ''}" data-action="open-day" data-fecha="${fechaStr}">
-                    <div style="font-weight:bold; ${esHoy ? 'color:var(--accent);' : ''}">${d}</div>
-                    ${contenido}
+                <div class="ep-dc ${esHoy && !esExamen ? 'today' : ''}"
+                    data-action="open-day" data-fecha="${fechaStr}"
+                    style="border-color:${borderColor}; ${bgStyle} ${boxShadow}
+                        min-height:110px; padding:6px; display:flex; flex-direction:column;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                        <span style="font-weight:bold; font-size:12px; ${esHoy ? 'color:var(--accent);' : ''}">${d}</span>
+                        ${pomosCounter}
+                    </div>
+                    ${chipsHTML}
                 </div>
             `;
         }
 
         main.innerHTML = `
-            <div class="ep-header" style="background:transparent;">
+            <div class="ep-header" style="background:transparent; flex-shrink:0;">
                 <div style="display:flex; gap:10px; align-items:center;">
                     <button class="ep-btn" id="ep-btn-prev-m"><i class="fa-solid fa-chevron-left"></i></button>
                     <span style="font-weight:bold; text-transform:capitalize; width:150px; text-align:center;">${monthName}</span>
                     <button class="ep-btn" id="ep-btn-next-m"><i class="fa-solid fa-chevron-right"></i></button>
                 </div>
-                <div>
-                    <button class="ep-btn acc" id="ep-btn-autoplan"><i class="fa-solid fa-bolt"></i> Autoplanificar Todo</button>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <span style="font-size:10px; color:var(--text-muted);">
+                        <i class="fa-solid fa-stopwatch" style="color:var(--accent);"></i> asignados/capacidad
+                        &nbsp;·&nbsp;
+                        <span style="display:inline-block; width:10px; height:10px; border-radius:2px;
+                            background:rgba(76,175,80,0.25); border:1px solid #4CAF50; vertical-align:middle;"></span> examen
+                    </span>
+                    <button class="ep-btn" id="ep-btn-export-pdf" title="Exportar lista detallada PDF">
+                        <i class="fa-solid fa-file-lines" style="color:var(--status-red);"></i> Lista
+                    </button>
+                    <button class="ep-btn" id="ep-btn-export-cal" title="Imprimir calendario visual">
+                        <i class="fa-solid fa-calendar-days" style="color:var(--status-blue);"></i> Calendario
+                    </button>
                 </div>
             </div>
-            <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:5px; padding:10px 15px 0; text-align:center; font-size:11px; opacity:0.5; font-weight:bold;">
-                <div>L</div><div>M</div><div>X</div><div>J</div><div>V</div><div>S</div><div>D</div>
+            <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:5px;
+                        padding:8px 15px 0; text-align:center; font-size:11px; opacity:0.5; font-weight:bold; flex-shrink:0;">
+                <div>L</div><div>M</div><div>X</div><div>J</div><div>V</div>
+                <div style="color:var(--text-muted);">S</div>
+                <div style="color:var(--text-muted);">D</div>
             </div>
-            <div style="flex:1; overflow-y:auto; padding:10px 15px 15px;">
-                <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:5px; auto-rows:minmax(80px, auto);">${celdas}</div>
+            <div style="flex:1; overflow-y:auto; padding:8px 15px 15px;">
+                <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:5px;">${celdas}</div>
             </div>
         `;
 
-        // Solo bindings funcionales puros, delegamos open-day al Registry
-        document.getElementById('ep-btn-prev-m').addEventListener('click', () => cambiarMes(-1));
-        document.getElementById('ep-btn-next-m').addEventListener('click', () => cambiarMes(1));
-        document.getElementById('ep-btn-autoplan').addEventListener('click', lanzarAutoplan);
+        document.getElementById('ep-btn-prev-m').onclick = () => cambiarMes(-1);
+        document.getElementById('ep-btn-next-m').onclick = () => cambiarMes(1);
+        document.getElementById('ep-btn-export-pdf').onclick = () => exportarPlanPDF();
+        document.getElementById('ep-btn-export-cal').onclick = () => exportarCalendarioPDF();
+
+        // Delegación de clics en celdas
+        main.querySelector('.ep-dc')?.closest('div')?.addEventListener('click', (e) => {
+            const cell = e.target.closest('[data-action="open-day"]');
+            if (cell) abrirEditorDia(cell.dataset.fecha);
+        });
+        // Fallback: delegación directa sobre el grid
+        main.querySelectorAll('.ep-dc').forEach(cel => {
+            cel.addEventListener('click', () => abrirEditorDia(cel.dataset.fecha));
+        });
     }
 
     function renderSetup() {
@@ -1194,8 +1295,8 @@ const UIExamPlanner = (() => {
 
     async function lanzarAutoplan() {
         if (typeof Domain === 'undefined' || !Domain.generarHorarioPlanificador) return;
-        const plan = await getPlan();  // ← await
-        planCache = JSON.parse(JSON.stringify(plan)); // sincronizar cache tras lectura async
+        const plan = await getPlan();
+        planCache = JSON.parse(JSON.stringify(plan));
         const resultado = Domain.generarHorarioPlanificador(planCache);
         
         if (resultado.excedido) {
@@ -1205,73 +1306,87 @@ const UIExamPlanner = (() => {
         }
 
         State.batch(() => {
-            plan.schedule = resultado.scheduleGenerado;
+            // FIX ARQUITECTURA: planCache.schedule es quien debe recibir el resultado ya que
+            // savePlan procesa explícitamente planCache como fuente de verdad.
+            planCache.schedule = resultado.scheduleGenerado;
             savePlan(planCache);
         });
+        
+        UIState.view = 'calendar'; // Forzamos el salto a la vista calendario por UX
         renderWorkspace();
     }
 
     function guardarAsigExamen() {
-        const nombre = document.getElementById('ep-new-asig').value.trim();
-        const acronimo = document.getElementById('ep-new-acro').value.trim().substring(0, 4).toUpperCase();
-        const fecha = document.getElementById('ep-new-date').value;
-        const numTemas = parseInt(document.getElementById('ep-new-temas').value, 10);
-        const hora = document.getElementById('ep-new-hora').value;
-        const lugar = document.getElementById('ep-new-lugar').value.trim();
-        const notaPercentaje = parseInt(document.getElementById('ep-new-peso').value, 10) || 100;
+    // 1. Extracción y saneamiento (Capa UI)
+    const nombre = document.getElementById('ep-new-asig').value.trim();
+    const acronimo = document.getElementById('ep-new-acro').value.trim().substring(0, 4).toUpperCase();
+    const fecha = document.getElementById('ep-new-date').value;
+    const numTemas = parseInt(document.getElementById('ep-new-temas').value, 10);
+    const hora = document.getElementById('ep-new-hora').value;
+    const lugar = document.getElementById('ep-new-lugar').value.trim();
+    const notaPercentaje = parseInt(document.getElementById('ep-new-peso').value, 10) || 100;
 
-        if (!nombre || !fecha || isNaN(numTemas)) { 
-            alert("Completa el nombre, la fecha y el número de temas."); 
-            return; 
-        }
+    if (!nombre || !fecha || isNaN(numTemas)) { 
+        alert("Completa el nombre, la fecha y el número de temas."); 
+        return; 
+    }
 
-        let colorFinal = 'var(--accent)';
-        const userColors = State.get('userColors') || {};
-        if (userColors[nombre]) {
-            colorFinal = userColors[nombre];
-        } else if (typeof window.getColorAsignatura === 'function') {
-            const tempC = window.getColorAsignatura(nombre);
-            if (tempC && tempC !== '#607d8b') colorFinal = tempC;
-        }
+    // 2. Resolución de dependencias transversales (Colorimetría)
+    let colorFinal = 'var(--accent)';
+    const userColors = State.get('userColors') || {};
+    if (userColors[nombre]) {
+        colorFinal = userColors[nombre];
+    } else if (typeof window.getColorAsignatura === 'function') {
+        const tempC = window.getColorAsignatura(nombre);
+        if (tempC && tempC !== '#607d8b') colorFinal = tempC;
+    }
 
-        const plan = getPlanSync();
-        const idAsig = 'asig_' + Date.now();
-        const temas = [];
-        for (let i = 1; i <= numTemas; i++) {
-            temas.push({ id: 'tm_' + Date.now() + '_' + i, nombre: `Tema ${i}`, pomosEstimados: 2, tipoEstudioId: 'st_read' });
-        }
+    // 3. Preparación del modelo de datos
+    const plan = getPlanSync();
+    const idAsig = 'asig_' + Date.now();
+    const temas = [];
+    for (let i = 1; i <= numTemas; i++) {
+        temas.push({ 
+            id: 'tm_' + Date.now() + '_' + i, 
+            nombre: `Tema ${i}`, 
+            pomosEstimados: 2, 
+            tipoEstudioId: 'st_read' 
+        });
+    }
 
-        State.batch(() => {
-            plan.asignaturasPlanificadas.push({ id: idAsig, nombre, acronimo, color: colorFinal, temas });
-            
-            // Inyectar modelo de datos ampliado de Claude
-            plan.examenes.push({ 
-                id: 'ex_' + Date.now(), 
-                asigId: idAsig, 
-                asigNombre: nombre, 
-                fecha, 
-                hora, 
-                lugar, 
-                notaPercentaje,
-                color: colorFinal 
-            });
-
-            // Auto-generar distribución inicial invocando al motor puro del Dominio
-            if (typeof Domain !== 'undefined' && typeof Domain.calcularDistribucionPlanificador === 'function') {
-                plan.schedule = Domain.calcularDistribucionPlanificador(plan);
-                normalizarSchedulePlan(plan);
-            }
-
-            savePlan(plan);
+    // 4. Mutación transaccional del Estado
+    State.batch(() => {
+        plan.asignaturasPlanificadas.push({ 
+            id: idAsig, 
+            nombre, 
+            acronimo, 
+            color: colorFinal, 
+            temas 
+        });
+        
+        plan.examenes.push({ 
+            id: 'ex_' + Date.now(), 
+            asigId: idAsig, 
+            asigNombre: nombre, 
+            fecha, 
+            hora, 
+            lugar, 
+            notaPercentaje,
+            color: colorFinal 
         });
 
-        document.getElementById('ep-new-asig').value = '';
-        document.getElementById('ep-new-acro').value = '';
-        document.getElementById('ep-new-lugar').value = '';
-        document.getElementById('ep-new-peso').value = '100';
-        document.getElementById('ep-new-temas').value = '5';
-        renderWorkspace();
-    }
+        savePlan(plan);
+    });
+
+    // 5. Limpieza de UI y repintado
+    document.getElementById('ep-new-asig').value = '';
+    document.getElementById('ep-new-acro').value = '';
+    document.getElementById('ep-new-lugar').value = '';
+    document.getElementById('ep-new-peso').value = '100';
+    document.getElementById('ep-new-temas').value = '5';
+    
+    renderWorkspace();
+}
 
     function borrarAsig(id) {
         if (!confirm("¿Eliminar bloque completo? Se borrará de la planificación diaria también.")) return;
@@ -1303,6 +1418,760 @@ const UIExamPlanner = (() => {
     function eliminarTareaPlanner(fechaId, tareaId) {
         borrarTareaDia(fechaId, tareaId);
     }
+
+    function lanzarWizardAutoplan() {
+    const wizardState = {
+        step: 1,
+        // Se rellena en los pasos:
+        blockedDays: new Set(getPlanSync().blockedDays || []),
+        dayOverrides: { ...(getPlanSync().dayOverrides || {}) },
+        // Mes que muestra el calendario del wizard
+        calYear: new Date().getFullYear(),
+        calMonth: new Date().getMonth()
+    };
+    renderWizard(wizardState);
+}
+function renderWizard(ws) {
+    let overlay = document.getElementById('ep-wizard-overlay');
+    if (overlay) overlay.remove();
+
+    // Inyectar helpers antes de generar el HTML para que estén disponibles
+    bindWizardHelpers(ws);
+
+    overlay = document.createElement('div');
+    overlay.id = 'ep-wizard-overlay';
+    overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:9999999; display:flex; justify-content:center; align-items:center; backdrop-filter:blur(4px);';
+
+    const STEPS = ['Días bloqueados', 'Ajustes puntuales', 'Priorización', 'Confirmar'];
+    const stepNav = STEPS.map((s, i) => `
+        <div style="display:flex; align-items:center; gap:6px; opacity:${ws.step === i+1 ? 1 : 0.4};">
+            <div style="width:22px; height:22px; border-radius:50%; background:${ws.step === i+1 ? 'var(--accent)' : 'var(--surface-2)'}; color:${ws.step === i+1 ? '#000' : 'var(--text-muted)'}; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:bold;">${i+1}</div>
+            <span style="font-size:11px; color:var(--text-muted);">${s}</span>
+            ${i < STEPS.length-1 ? '<span style="color:var(--border); margin:0 4px;">→</span>' : ''}
+        </div>
+    `).join('');
+
+    let stepContent = '';
+    if (ws.step === 1) stepContent = renderWizardStep1(ws);
+    else if (ws.step === 2) stepContent = renderWizardStep2(ws);
+    else if (ws.step === 3) stepContent = renderWizardStep3(ws);
+    else if (ws.step === 4) stepContent = renderWizardStep4(ws);
+
+    overlay.innerHTML = `
+        <div style="background:var(--card-bg); width:90%; max-width:680px; border-radius:14px; border:1px solid var(--border); display:flex; flex-direction:column; max-height:90vh; box-shadow:0 20px 60px rgba(0,0,0,0.6);">
+            <div style="padding:16px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">${stepNav}</div>
+                <button id="ep-wiz-close" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1.1em;">✕</button>
+            </div>
+            <div id="ep-wiz-body" style="padding:20px; overflow-y:auto; flex:1;">
+                ${stepContent}
+            </div>
+            <div style="padding:14px 20px; border-top:1px solid var(--border); display:flex; justify-content:space-between;">
+                <button id="ep-wiz-back" class="ep-btn" style="${ws.step === 1 ? 'visibility:hidden' : ''}">&larr; Atrás</button>
+                <button id="ep-wiz-next" class="ep-btn acc">${ws.step === 4 ? '<i class="fa-solid fa-wand-magic-sparkles"></i> Generar plan' : 'Siguiente &rarr;'}</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    document.getElementById('ep-wiz-close').onclick = () => {
+        overlay.remove();
+        limpiarHelpersWizard();
+    };
+    document.getElementById('ep-wiz-back').onclick  = () => { ws.step--; renderWizard(ws); };
+    document.getElementById('ep-wiz-next').onclick  = () => avanzarWizard(ws);
+}
+
+function bindWizardHelpers(ws) {
+    limpiarHelpersWizard();
+    if (ws.step === 1) {
+        window._wizCalNav = (delta) => {
+            ws.calMonth += delta;
+            if (ws.calMonth > 11) { ws.calMonth = 0; ws.calYear++; }
+            if (ws.calMonth < 0)  { ws.calMonth = 11; ws.calYear--; }
+            renderWizard(ws);
+        };
+        window._wizBlockWeekday = (dow) => {
+            const plan = getPlanSync();
+            const examenes = plan.examenes || [];
+            if (examenes.length === 0) return;
+            const limite = new Date(Math.max(...examenes.map(e => new Date(e.fecha))));
+            let d = new Date(); 
+            d.setHours(0,0,0,0);
+            while (d <= limite) {
+                if (d.getDay() === dow) {
+                    // FIX ARQUITECTURA: Se extrae la fecha en Timezone Local en lugar de UTC
+                    const year = d.getFullYear();
+                    const month = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    ws.blockedDays.add(`${year}-${month}-${day}`);
+                }
+                d.setDate(d.getDate() + 1);
+            }
+            renderWizard(ws);
+        };
+        window._wizClearBlocked = () => { ws.blockedDays.clear(); renderWizard(ws); };
+        window._wizToggleBlocked = (fecha) => {
+            if (ws.blockedDays.has(fecha)) ws.blockedDays.delete(fecha);
+            else ws.blockedDays.add(fecha);
+            renderWizard(ws);
+        };
+    } else if (ws.step === 2) {
+        window._wizAddOverride = () => {
+            const dateInput = document.getElementById('wiz-override-date').value;
+            const capInput = parseInt(document.getElementById('wiz-override-cap').value, 10);
+            if (!dateInput || isNaN(capInput)) return;
+            ws.dayOverrides[dateInput] = capInput;
+            renderWizard(ws);
+        };
+        window._wizDelOverride = (fecha) => {
+            delete ws.dayOverrides[fecha];
+            renderWizard(ws);
+        };
+    } else if (ws.step === 3) {
+        window._wizMoveAsig = (idx, dir) => {
+            if (idx + dir < 0 || idx + dir >= ws.asignaturas.length) return;
+            const temp = ws.asignaturas[idx];
+            ws.asignaturas[idx] = ws.asignaturas[idx + dir];
+            ws.asignaturas[idx + dir] = temp;
+            renderWizard(ws);
+        };
+    }
+}
+
+function limpiarHelpersWizard() {
+    delete window._wizBlockWeekday; delete window._wizClearBlocked;
+    delete window._wizCalNav; delete window._wizToggleBlocked;
+    delete window._wizAddOverride; delete window._wizDelOverride; delete window._wizMoveAsig;
+}
+
+function avanzarWizard(ws) {
+    if (ws.step < 4) {
+        ws.step++;
+        renderWizard(ws);
+    } else {
+        const plan = getPlanSync();
+        plan.blockedDays = Array.from(ws.blockedDays);
+        plan.dayOverrides = ws.dayOverrides;
+        if (ws.asignaturas) plan.asignaturasPlanificadas = ws.asignaturas;
+        savePlan(plan);
+
+        document.getElementById('ep-wizard-overlay')?.remove();
+        limpiarHelpersWizard();
+        lanzarAutoplan();
+    }
+}
+
+function renderWizardStep1(ws) {
+    const plan = getPlanSync();
+    // Mostrar el mes actual, navegable
+    const y = ws.calYear, m = ws.calMonth;
+    const totalDias = new Date(y, m+1, 0).getDate();
+    const primerDia = (new Date(y, m, 1).getDay() + 6) % 7;
+    const monthName = new Date(y, m, 1).toLocaleString('es', { month: 'long', year: 'numeric' });
+
+    let celdas = '';
+    for (let i = 0; i < primerDia; i++) celdas += `<div></div>`;
+    for (let d = 1; d <= totalDias; d++) {
+        const fechaStr = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        const isBlocked = ws.blockedDays.has(fechaStr);
+        const isExamen  = plan.examenes.some(e => e.fecha === fechaStr);
+        const isHoy     = fechaStr === new Date().toISOString().split('T')[0];
+        const esFinde   = [0,6].includes(new Date(y,m,d).getDay());
+
+        celdas += `
+            <div data-fecha="${fechaStr}" class="ep-wiz-day" style="
+                aspect-ratio:1; display:flex; align-items:center; justify-content:center;
+                border-radius:6px; font-size:12px; cursor:pointer;
+                background:${isExamen ? 'rgba(244,67,54,0.2)' : isBlocked ? 'rgba(255,152,0,0.25)' : 'var(--surface-1)'};
+                border:1px solid ${isExamen ? 'var(--status-red)' : isBlocked ? 'var(--status-yellow)' : isHoy ? 'var(--accent)' : 'transparent'};
+                color:${isBlocked ? 'var(--status-yellow)' : esFinde ? 'var(--text-muted)' : 'var(--text-main)'};
+                text-decoration:${isBlocked ? 'line-through' : 'none'};
+                opacity:${isExamen ? 0.8 : 1};
+            " title="${isExamen ? 'Día de examen' : isBlocked ? 'Bloqueado — click para desbloquear' : 'Click para bloquear'}"
+            ${isExamen ? '' : `onclick="window._wizToggleBlocked && window._wizToggleBlocked('${fechaStr}')"`}>
+                ${d}
+            </div>
+        `;
+    }
+
+    // Exponer función de toggle al DOM (se limpia al cerrar el wizard)
+    window._wizToggleBlocked = (fecha) => {
+        if (ws.blockedDays.has(fecha)) ws.blockedDays.delete(fecha);
+        else ws.blockedDays.add(fecha);
+        renderWizard(ws);
+    };
+
+    return `
+        <h3 style="margin-top:0;"><i class="fa-solid fa-calendar-xmark" style="color:var(--status-yellow);"></i> Marca los días que NO puedes estudiar</h3>
+        <p style="color:var(--text-muted); font-size:12px; margin-bottom:15px;">Los días en rojo son tus exámenes (no se modifican). Haz clic en cualquier día para bloquearlo.</p>
+        <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+            <button class="ep-btn" onclick="window._wizBlockWeekday && window._wizBlockWeekday(6)"><i class="fa-solid fa-ban"></i> Todos los sábados</button>
+            <button class="ep-btn" onclick="window._wizBlockWeekday && window._wizBlockWeekday(0)"><i class="fa-solid fa-ban"></i> Todos los domingos</button>
+            <button class="ep-btn" onclick="window._wizClearBlocked && window._wizClearBlocked()"><i class="fa-solid fa-rotate-left"></i> Limpiar todo</button>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <button class="ep-btn" onclick="window._wizCalNav && window._wizCalNav(-1)">&#8592;</button>
+            <strong style="font-size:13px; text-transform:capitalize;">${monthName}</strong>
+            <button class="ep-btn" onclick="window._wizCalNav && window._wizCalNav(1)">&#8594;</button>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:3px; margin-bottom:8px;">
+            ${['L','M','X','J','V','S','D'].map(d => `<div style="text-align:center;font-size:10px;color:var(--text-muted);padding:4px;">${d}</div>`).join('')}
+            ${celdas}
+        </div>
+        <div style="font-size:11px; color:var(--text-muted); margin-top:8px;">
+            <span style="color:var(--status-yellow);">■</span> Bloqueado &nbsp;
+            <span style="color:var(--status-red);">■</span> Examen &nbsp;
+            <span style="color:var(--accent);">□</span> Hoy
+        </div>
+    `;
+    // También exponer _wizBlockWeekday y _wizCalNav
+}
+
+
+function renderWizardStep2(ws) {
+    const overridesList = Object.entries(ws.dayOverrides || {}).map(([fecha, cap]) => `
+        <div style="display:flex; justify-content:space-between; padding:8px 12px; background:var(--surface-1); margin-bottom:5px; border-radius:6px; align-items:center;">
+            <span style="font-family:monospace; color:var(--accent);">${fecha}</span>
+            <span style="font-size:12px;"><strong>${cap}</strong> pomodoros</span>
+            <button class="ep-btn dnr" onclick="window._wizDelOverride('${fecha}')" style="padding:4px 8px;"><i class="fa-solid fa-trash"></i></button>
+        </div>
+    `).join('');
+
+    return `
+        <h3 style="margin-top:0;"><i class="fa-solid fa-battery-half" style="color:var(--accent);"></i> Ajustes puntuales de capacidad</h3>
+        <p style="color:var(--text-muted); font-size:12px; margin-bottom:15px;">Define si un día específico tienes más o menos tiempo del habitual (ej: una cita médica o un día libre extra).</p>
+        
+        <div style="display:flex; gap:10px; margin-bottom:15px; align-items:center;">
+            <input type="date" id="wiz-override-date" class="ep-inp" style="flex:1;">
+            <input type="number" id="wiz-override-cap" class="ep-inp" placeholder="Pomos (ej: 2)" min="0" style="width:120px;">
+            <button class="ep-btn acc" onclick="window._wizAddOverride()"><i class="fa-solid fa-plus"></i> Añadir</button>
+        </div>
+        
+        <div style="max-height:220px; overflow-y:auto; border:1px solid var(--border); padding:10px; border-radius:8px; background:var(--bg-color);">
+            ${Object.keys(ws.dayOverrides || {}).length > 0 ? overridesList : '<div style="color:var(--text-muted); font-size:11px; text-align:center; padding:20px;">Sin ajustes puntuales.</div>'}
+        </div>
+    `;
+}
+
+function renderWizardStep3(ws) {
+    const plan = getPlanSync();
+    // Clonamos la lista si no existe en el wizard state para aislar mutaciones
+    if (!ws.asignaturas) ws.asignaturas = JSON.parse(JSON.stringify(plan.asignaturasPlanificadas));
+
+    const lista = ws.asignaturas.map((a, i) => `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:var(--surface-1); margin-bottom:6px; border-radius:8px; border-left:4px solid ${a.color || 'var(--accent)'};">
+            <div style="font-size:13px;">
+                <span style="font-weight:bold; color:var(--text-muted); margin-right:8px; display:inline-block; width:15px;">${i+1}.</span> 
+                ${escapeHtml(a.nombre)}
+            </div>
+            <div style="display:flex; gap:4px;">
+                <button class="ep-btn" onclick="window._wizMoveAsig(${i}, -1)" ${i === 0 ? 'disabled style="opacity:0.3;"' : ''} style="padding:4px 10px;">&#8593;</button>
+                <button class="ep-btn" onclick="window._wizMoveAsig(${i}, 1)" ${i === ws.asignaturas.length - 1 ? 'disabled style="opacity:0.3;"' : ''} style="padding:4px 10px;">&#8595;</button>
+            </div>
+        </div>
+    `).join('');
+
+    return `
+        <h3 style="margin-top:0;"><i class="fa-solid fa-sort" style="color:var(--accent);"></i> Prioridad de Asignaturas</h3>
+        <p style="color:var(--text-muted); font-size:12px; margin-bottom:15px;">Las asignaturas superiores tendrán prioridad en la cola del algoritmo y consumirán los primeros pomodoros disponibles. Ordena según cercanía de exámenes.</p>
+        <div style="margin-top:10px; max-height:280px; overflow-y:auto;">
+            ${lista}
+        </div>
+    `;
+}
+
+function renderWizardStep4(ws) {
+    const plan = getPlanSync();
+    const examenes = plan.examenes.length;
+    const bloqueados = ws.blockedDays.size;
+    const overrides = Object.keys(ws.dayOverrides || {}).length;
+
+    return `
+        <div style="text-align:center; padding:30px 10px;">
+            <i class="fa-solid fa-wand-magic-sparkles" style="font-size:3.5rem; color:var(--accent); margin-bottom:20px;"></i>
+            <h3 style="margin-top:0; font-size:18px;">Planificación lista para generarse</h3>
+            <p style="color:var(--text-muted); font-size:13px; max-width:400px; margin:0 auto 20px;">
+                El motor calculará la distribución óptima para tus <strong>${examenes} exámenes</strong>, 
+                respetando <strong>${bloqueados} días bloqueados</strong> y <strong>${overrides} ajustes puntuales</strong>.
+            </p>
+            <div style="font-size:12px; color:var(--status-yellow); background:rgba(255,152,0,0.1); padding:12px; border-radius:8px; display:inline-block; border:1px solid rgba(255,152,0,0.3);">
+                <i class="fa-solid fa-triangle-exclamation"></i> Tu planificación manual existente no será sobreescrita.
+            </div>
+        </div>
+    `;
+}
+
+// ── Helper: CSS vars → hex (necesario para HTML externo sin acceso a :root) ──
+function _cssVarToFallback(color) {
+    if (!color) return '#4CAF50';
+    // Si ya es un color real, devolverlo tal cual
+    if (!color.startsWith('var(')) return color;
+    const map = {
+        'var(--accent)':         '#4CAF50',
+        'var(--status-blue)':    '#2196F3',
+        'var(--status-green)':   '#4CAF50',
+        'var(--status-yellow)':  '#FF9800',
+        'var(--status-red)':     '#f44336',
+        'var(--text-muted)':     '#888888',
+    };
+    return map[color] || '#888888';
+}
+
+// ── Mapeo de studyTypeId a emoji (fallback cuando no hay FontAwesome) ──
+const STUDY_TYPE_EMOJI = {
+    st_read:  '📖', st_study: '🧠',
+    st_prac:  '✏️', st_rev:   '🔄',
+};
+function _tipoEmoji(studyTypeId, studyTypes) {
+    const tipo = (studyTypes || []).find(t => t.id === studyTypeId);
+    return STUDY_TYPE_EMOJI[studyTypeId] || (tipo ? '📌' : '📌');
+}
+
+function exportarPlanPDF() {
+    const plan = getPlanSync();
+    if (!plan.examenes?.length) { alert('No hay planificación para exportar.'); return; }
+
+    const fechasConTareas = Object.keys(plan.schedule)
+        .filter(f => (plan.schedule[f] || []).length > 0)
+        .sort();
+    const fechasExamen = plan.examenes.map(e => e.fecha);
+    const todasFechas  = [...new Set([...fechasConTareas, ...fechasExamen])].sort();
+
+    if (todasFechas.length === 0) { alert('El plan está vacío.'); return; }
+
+    // ── Agrupar por semana ──
+    const semanas = {};
+    todasFechas.forEach(fecha => {
+        const d    = new Date(fecha + 'T00:00:00');
+        const dow  = (d.getDay() + 6) % 7;
+        const lunes = new Date(d); lunes.setDate(d.getDate() - dow);
+        const key  = lunes.toISOString().split('T')[0];
+        if (!semanas[key]) semanas[key] = [];
+        if (!semanas[key].includes(fecha)) semanas[key].push(fecha);
+    });
+
+    // ── HTML de cada semana ──
+    const semanasHTML = Object.entries(semanas).map(([lunesStr, dias]) => {
+        const lunesDate   = new Date(lunesStr + 'T00:00:00');
+        const viernesDate = new Date(lunesStr + 'T00:00:00'); viernesDate.setDate(lunesDate.getDate() + 6);
+        const rango = `${lunesDate.toLocaleDateString('es-ES', {day:'numeric',month:'short'})} – ${viernesDate.toLocaleDateString('es-ES', {day:'numeric',month:'short',year:'numeric'})}`;
+
+        const diasHTML = dias.map(fecha => {
+            const d      = new Date(fecha + 'T00:00:00');
+            const label  = d.toLocaleDateString('es-ES', {weekday:'long', day:'numeric', month:'long'});
+            const tareas = plan.schedule[fecha] || [];
+            const exDia  = plan.examenes.filter(e => e.fecha === fecha);
+            const isExamen = exDia.length > 0;
+
+            let exColor = '#f44336', exBg = '#fff0f0', exBorder = '#f44336';
+            if (isExamen) {
+                exColor  = _cssVarToFallback(exDia[0].color || 'var(--status-red)');
+                exBg     = exColor + '18';
+                exBorder = exColor;
+            }
+
+            const examenesHTML = exDia.map(ex => `
+                <div style="padding:8px 12px; background:${exBg}; border:2px solid ${exColor};
+                    border-radius:6px; margin:6px 0; font-weight:bold; color:${exColor};">
+                    ⚠️ EXAMEN: ${ex.asigNombre}
+                    ${ex.hora ? `<span style="font-weight:normal; color:#555; margin-left:8px;">🕐 ${ex.hora}</span>` : ''}
+                    ${ex.lugar ? `<span style="font-weight:normal; color:#555; margin-left:8px;">📍 ${ex.lugar}</span>` : ''}
+                </div>
+            `).join('');
+
+            const tareasHTML = tareas.length > 0 ? `
+                <table style="width:100%; border-collapse:collapse; font-size:11px; margin-top:4px;">
+                    <thead>
+                        <tr style="background:#f5f5f5; border-bottom:1px solid #ddd;">
+                            <th style="padding:4px 8px; text-align:left; font-weight:600; color:#555;">Sesión</th>
+                            <th style="padding:4px 8px; text-align:left; font-weight:600; color:#555;">Asignatura</th>
+                            <th style="padding:4px 8px; text-align:center; font-weight:600; color:#555;">Tipo</th>
+                            <th style="padding:4px 8px; text-align:center; font-weight:600; color:#555;">🍅</th>
+                            <th style="padding:4px 8px; text-align:center; font-weight:600; color:#555;">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tareas.map(t => {
+                            const asig  = plan.asignaturasPlanificadas.find(a => a.id === t.asigId);
+                            const color = _cssVarToFallback(t.color || asig?.color || '#4CAF50');
+                            const emoji = _tipoEmoji(t.studyTypeId, plan.studyTypes);
+                            const tipo  = (plan.studyTypes || []).find(st => st.id === t.studyTypeId);
+                            const stIcon = t.status === 'completed' ? '✅' : t.status === 'failed' ? '❌' : '○';
+                            const rowBg  = t.status === 'completed' ? '#f0fff4' : t.status === 'failed' ? '#fff5f5' : '#fff';
+                            return `
+                                <tr style="border-bottom:1px solid #eee; background:${rowBg};">
+                                    <td style="padding:5px 8px; border-left:3px solid ${color};">
+                                        ${t.temaNombre || 'Estudio'}
+                                    </td>
+                                    <td style="padding:5px 8px;">
+                                        <span style="display:inline-block; width:8px; height:8px; border-radius:50%;
+                                            background:${color}; margin-right:5px; vertical-align:middle;"></span>
+                                        ${t.asigNombre || ''}
+                                    </td>
+                                    <td style="padding:5px 8px; text-align:center;">${emoji} ${tipo?.name || ''}</td>
+                                    <td style="padding:5px 8px; text-align:center; font-weight:bold;">${t.pomosAsignados || 0}</td>
+                                    <td style="padding:5px 8px; text-align:center;">${stIcon}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            ` : '<div style="color:#aaa; font-size:11px; font-style:italic; padding:4px 0;">Sin sesiones planificadas</div>';
+
+            const totalPomos = tareas.reduce((a, t) => a + (t.pomosAsignados || 0), 0);
+            const dayBg      = isExamen ? `background:${exBg}; border:2px solid ${exBorder};` : 'border:1px solid #e0e0e0;';
+
+            return `
+                <div style="margin-bottom:10px; border-radius:6px; overflow:hidden; page-break-inside:avoid; ${dayBg}">
+                    <div style="padding:6px 12px; border-bottom:1px solid #e8e8e8;
+                        background:${isExamen ? exBg : '#fafafa'};
+                        display:flex; justify-content:space-between; align-items:center;">
+                        <strong style="font-size:12px; text-transform:capitalize; color:${isExamen ? exColor : '#333'};">
+                            ${isExamen ? '⚑ ' : ''}${label}
+                        </strong>
+                        ${totalPomos > 0 ? `<span style="font-size:11px; color:#666;">🍅 ${totalPomos} pomodoros</span>` : ''}
+                    </div>
+                    <div style="padding:8px 12px;">
+                        ${examenesHTML}
+                        ${tareasHTML}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div style="margin-bottom:20px; page-break-inside:avoid;">
+                <div style="background:#2c2c2c; color:#fff; padding:7px 14px; font-size:12px;
+                    font-weight:bold; border-radius:6px 6px 0 0; letter-spacing:0.3px;">
+                    📅 Semana del ${rango}
+                </div>
+                <div style="border:1px solid #ddd; border-top:none; border-radius:0 0 6px 6px; padding:10px;">
+                    ${diasHTML}
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // ── Tabla resumen de asignaturas ──
+    const resumenHTML = plan.asignaturasPlanificadas.map(asig => {
+        const ex   = plan.examenes.find(e => e.asigId === asig.id);
+        const color = _cssVarToFallback(asig.color);
+        const allT  = Object.values(plan.schedule).flat().filter(t => t.asigId === asig.id);
+        const total = allT.reduce((a, t) => a + (t.pomosAsignados || 0), 0);
+        const done  = allT.filter(t => t.status === 'completed').reduce((a, t) => a + (t.pomosAsignados || 0), 0);
+        const pct   = total > 0 ? Math.round(done / total * 100) : 0;
+        const barWidth = Math.max(2, pct);
+
+        return `
+            <tr>
+                <td style="padding:7px 10px;">
+                    <span style="display:inline-block; width:10px; height:10px; border-radius:50%;
+                        background:${color}; margin-right:6px; vertical-align:middle;"></span>
+                    <strong>${asig.nombre}</strong>
+                    ${asig.acronimo ? `<span style="color:#888; font-size:10px; margin-left:4px;">[${asig.acronimo}]</span>` : ''}
+                </td>
+                <td style="padding:7px 10px; text-align:center;">${ex?.fecha || '—'}</td>
+                <td style="padding:7px 10px; text-align:center;">${ex?.hora || '—'}</td>
+                <td style="padding:7px 10px; text-align:center; font-weight:bold;">${asig.temas?.length || 0}</td>
+                <td style="padding:7px 10px; text-align:center; font-weight:bold;">${total} 🍅</td>
+                <td style="padding:7px 10px; min-width:120px;">
+                    <div style="height:6px; background:#eee; border-radius:3px; overflow:hidden; margin-bottom:2px;">
+                        <div style="height:100%; width:${barWidth}%; background:${color}; border-radius:3px;"></div>
+                    </div>
+                    <span style="font-size:10px; color:#666;">${pct}% (${done}/${total})</span>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    // ── Leyenda de tipos de sesión ──
+    const leyendaTipos = (plan.studyTypes || []).map(t =>
+        `<span style="margin-right:12px;">${_tipoEmoji(t.id, plan.studyTypes)} ${t.name}</span>`
+    ).join('');
+
+    // ── Documento HTML final ──
+    const html = `<!DOCTYPE html><html lang="es"><head>
+        <meta charset="UTF-8">
+        <title>Plan de Estudio — Estudiador Pro</title>
+        <style>
+            * { margin:0; padding:0; box-sizing:border-box; }
+            body { font-family:'Segoe UI', Arial, sans-serif; font-size:12px; color:#222; background:#fff; padding:24px; }
+            h1  { font-size:20px; font-weight:bold; margin-bottom:4px; }
+            h2  { font-size:14px; color:#444; border-bottom:2px solid #e0e0e0; padding-bottom:5px; margin:20px 0 10px; }
+            table { width:100%; border-collapse:collapse; }
+            th, td { vertical-align:middle; }
+            thead tr { background:#f5f5f5; }
+            @media print {
+                body { padding:8px; font-size:11px; }
+                @page { margin:12mm; size:A4; }
+                h2 { page-break-before: auto; }
+            }
+        </style>
+    </head><body>
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;
+            padding-bottom:12px; border-bottom:3px solid #222;">
+            <div>
+                <h1>📅 Plan de Estudio</h1>
+                <div style="color:#666; font-size:11px; margin-top:4px;">
+                    Generado el ${new Date().toLocaleDateString('es-ES', {weekday:'long', day:'numeric', month:'long', year:'numeric'})}
+                </div>
+            </div>
+            <div style="text-align:right; font-size:11px; color:#888;">
+                <div><strong>${plan.examenes.length}</strong> exámenes</div>
+                <div><strong>${fechasConTareas.length}</strong> días planificados</div>
+                <div><strong>${Object.values(plan.schedule).flat().reduce((a,t)=>a+(t.pomosAsignados||0),0)}</strong> pomodoros totales</div>
+            </div>
+        </div>
+
+        <h2>Resumen por Asignatura</h2>
+        <table style="margin-bottom:20px; font-size:11px; border:1px solid #e0e0e0; border-radius:6px; overflow:hidden;">
+            <thead>
+                <tr style="background:#f5f5f5;">
+                    <th style="padding:8px 10px; text-align:left;">Asignatura</th>
+                    <th style="padding:8px 10px;">Examen</th>
+                    <th style="padding:8px 10px;">Hora</th>
+                    <th style="padding:8px 10px;">Temas</th>
+                    <th style="padding:8px 10px;">Pomodoros</th>
+                    <th style="padding:8px 10px; min-width:140px;">Progreso</th>
+                </tr>
+            </thead>
+            <tbody>${resumenHTML}</tbody>
+        </table>
+
+        <div style="font-size:10px; color:#888; margin-bottom:16px; padding:6px 10px;
+            background:#f9f9f9; border-radius:4px; border:1px solid #e0e0e0;">
+            <strong>Leyenda de tipos:</strong> ${leyendaTipos}
+            &nbsp;·&nbsp; ✅ Completada &nbsp; ❌ Fallida &nbsp; ○ Pendiente
+        </div>
+
+        <h2>Planificación Detallada</h2>
+        ${semanasHTML}
+    </body></html>`;
+
+    const win = window.open('', '_blank', 'width=960,height=750');
+    if (!win) { alert('El navegador bloqueó la ventana emergente. Permite popups para esta página.'); return; }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 500);
+}
+
+function exportarCalendarioPDF() {
+    const plan = getPlanSync();
+
+    // Recopilar todos los meses que tienen al menos una tarea o examen
+    const mesesConContenido = new Set();
+    Object.keys(plan.schedule).forEach(f => {
+        if ((plan.schedule[f] || []).length > 0) mesesConContenido.add(f.substring(0, 7));
+    });
+    plan.examenes.forEach(e => { if (e.fecha) mesesConContenido.add(e.fecha.substring(0, 7)); });
+
+    if (mesesConContenido.size === 0) { alert('No hay nada planificado para imprimir.'); return; }
+
+    const meses = [...mesesConContenido].sort();
+
+    const mesesHTML = meses.map(mesKey => {
+        const [y, m] = mesKey.split('-').map(Number);
+        const primerDia  = (new Date(y, m - 1, 1).getDay() + 6) % 7;
+        const totalDias  = new Date(y, m, 0).getDate();
+        const monthLabel = new Date(y, m - 1, 1)
+            .toLocaleString('es-ES', { month: 'long', year: 'numeric' });
+        const hoyStr = new Date().toISOString().split('T')[0];
+
+        // Celdas vacías de relleno
+        let cells = '';
+        for (let i = 0; i < primerDia; i++) {
+            cells += `<td style="border:1px solid #e8e8e8; background:#fafafa; height:90px;"></td>`;
+        }
+
+        for (let d = 1; d <= totalDias; d++) {
+            const fechaStr = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const tareas   = plan.schedule[fechaStr] || [];
+            const exDia    = plan.examenes.filter(e => e.fecha === fechaStr);
+            const esHoy    = fechaStr === hoyStr;
+            const esFinde  = [0, 6].includes(new Date(y, m - 1, d).getDay());
+
+            // Colores de fondo/borde para días de examen
+            let cellBg     = '#fff';
+            let cellBorder = '#e8e8e8';
+            let cellBorderWidth = '1px';
+            if (exDia.length > 0) {
+                const exColor  = _cssVarToFallback(exDia[0].color || 'var(--status-red)');
+                cellBg         = exColor + '18';
+                cellBorder     = exColor;
+                cellBorderWidth = '2px';
+            } else if (esFinde) {
+                cellBg = '#fafafa';
+            }
+
+            // Número del día
+            const dayNumStyle = esHoy
+                ? 'display:inline-block; background:#222; color:#fff; border-radius:50%; width:18px; height:18px; text-align:center; line-height:18px; font-size:10px; font-weight:bold;'
+                : `font-size:11px; font-weight:bold; color:${esFinde ? '#aaa' : '#222'};`;
+
+            // Chips de sesiones (máx 6, como en la app)
+            const chipsHTML = (() => {
+                if (exDia.length > 0) {
+                    return exDia.map(ex => {
+                        const c = _cssVarToFallback(ex.color || 'var(--status-red)');
+                        return `<div style="font-size:8px; font-weight:bold; color:${c};
+                            padding:2px 4px; border-radius:3px; background:${c}22;
+                            border:1px solid ${c}88; margin-top:2px; white-space:nowrap;
+                            overflow:hidden; text-overflow:ellipsis;">
+                            ⚑ ${ex.asigNombre || 'EXAMEN'}
+                        </div>`;
+                    }).join('');
+                }
+                if (tareas.length === 0) return '';
+                const visibles  = tareas.slice(0, 6);
+                const restantes = tareas.length - 6;
+                const chips = visibles.map(t => {
+                    const asig  = (plan.asignaturasPlanificadas || []).find(a => a.id === t.asigId);
+                    const tipo  = (plan.studyTypes || []).find(st => st.id === t.studyTypeId);
+                    const acro  = asig?.acronimo || asig?.nombre?.substring(0, 3).toUpperCase() || '?';
+                    const emoji = _tipoEmoji(t.studyTypeId, plan.studyTypes);
+                    const color = _cssVarToFallback(t.color || asig?.color || '#4CAF50');
+                    const done  = t.status === 'completed';
+                    const fail  = t.status === 'failed';
+                    return `<div style="font-size:8px; padding:1px 3px; border-radius:3px;
+                        background:${color}18; border:1px solid ${color}88; color:${color};
+                        display:flex; align-items:center; gap:2px; overflow:hidden;
+                        ${done ? 'opacity:0.5; text-decoration:line-through;' : ''}
+                        ${fail ? 'border-color:#f44336; color:#f44336;' : ''}">
+                        <span>${emoji}</span>
+                        <strong style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${acro}</strong>
+                    </div>`;
+                }).join('');
+                const overflow = restantes > 0
+                    ? `<div style="font-size:7px; color:#aaa; text-align:center;">+${restantes}</div>`
+                    : '';
+                return `<div style="display:grid; grid-template-columns:repeat(3,1fr); gap:1px; margin-top:2px;">
+                    ${chips}${overflow}
+                </div>`;
+            })();
+
+            // Contador pomos
+            const totalPomos = tareas.reduce((a, t) => a + (t.pomosAsignados || 0), 0);
+            const pomosLabel = totalPomos > 0
+                ? `<span style="font-size:8px; color:#888; float:right; margin-top:1px;">🍅${totalPomos}</span>`
+                : '';
+
+            cells += `
+                <td style="border:${cellBorderWidth} solid ${cellBorder}; background:${cellBg};
+                    vertical-align:top; padding:4px; height:90px; width:14.28%;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                        <span style="${dayNumStyle}">${d}</span>
+                        ${pomosLabel}
+                    </div>
+                    ${chipsHTML}
+                </td>
+            `;
+
+            // Salto de fila al llegar al domingo
+            const diaSemana = (primerDia + d - 1) % 7;
+            if (diaSemana === 6 && d < totalDias) cells += '</tr><tr>';
+        }
+
+        // Rellenar última fila si no termina en domingo
+        const totalCeldas = primerDia + totalDias;
+        const resto       = totalCeldas % 7;
+        if (resto !== 0) {
+            for (let i = 0; i < 7 - resto; i++) {
+                cells += `<td style="border:1px solid #f0f0f0; background:#fafafa; height:90px;"></td>`;
+            }
+        }
+
+        return `
+            <div style="margin-bottom:28px; page-break-inside:avoid;">
+                <div style="background:#222; color:#fff; padding:8px 14px; font-size:14px;
+                    font-weight:bold; text-transform:capitalize; border-radius:6px 6px 0 0;">
+                    ${monthLabel}
+                </div>
+                <table style="width:100%; border-collapse:collapse; table-layout:fixed;">
+                    <thead>
+                        <tr style="background:#f5f5f5;">
+                            ${['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'].map((dia, i) =>
+                                `<th style="padding:5px; font-size:10px; font-weight:600;
+                                    color:${i >= 5 ? '#aaa' : '#555'}; border:1px solid #e8e8e8;
+                                    text-align:center; width:14.28%;">${dia}</th>`
+                            ).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>${cells}</tr>
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }).join('');
+
+    // Leyenda de asignaturas
+    const leyendaAsigs = plan.asignaturasPlanificadas.map(a => {
+        const color = _cssVarToFallback(a.color);
+        const ex    = plan.examenes.find(e => e.asigId === a.id);
+        return `<span style="display:inline-flex; align-items:center; gap:5px; margin-right:16px; margin-bottom:4px;">
+            <span style="display:inline-block; width:10px; height:10px; border-radius:50%;
+                background:${color}; flex-shrink:0;"></span>
+            <span><strong>${a.nombre}</strong>${ex ? ` — examen ${ex.fecha}` : ''}</span>
+        </span>`;
+    }).join('');
+
+    const leyendaTipos = (plan.studyTypes || []).map(t =>
+        `<span style="margin-right:12px;">${_tipoEmoji(t.id, plan.studyTypes)} ${t.name}</span>`
+    ).join('');
+
+    const html = `<!DOCTYPE html><html lang="es"><head>
+        <meta charset="UTF-8">
+        <title>Calendario de Estudio — Estudiador Pro</title>
+        <style>
+            * { margin:0; padding:0; box-sizing:border-box; }
+            body { font-family:'Segoe UI', Arial, sans-serif; background:#fff; color:#222; padding:20px; }
+            @media print {
+                body { padding:6px; }
+                @page { margin:10mm; size:A4 landscape; }
+                div[style*="margin-bottom:28px"] { page-break-after: always; }
+                div[style*="margin-bottom:28px"]:last-child { page-break-after: avoid; }
+            }
+        </style>
+    </head><body>
+        <div style="display:flex; justify-content:space-between; align-items:center;
+            margin-bottom:16px; padding-bottom:10px; border-bottom:3px solid #222;">
+            <div>
+                <h1 style="font-size:18px; font-weight:bold;">🗓 Calendario de Estudio</h1>
+                <div style="font-size:11px; color:#888; margin-top:3px;">
+                    Generado el ${new Date().toLocaleDateString('es-ES',
+                        {weekday:'long', day:'numeric', month:'long', year:'numeric'})}
+                    · ${meses.length} ${meses.length === 1 ? 'mes' : 'meses'}
+                </div>
+            </div>
+        </div>
+
+        ${leyendaAsigs ? `
+        <div style="margin-bottom:14px; padding:8px 12px; background:#f9f9f9;
+            border:1px solid #e0e0e0; border-radius:6px; font-size:11px;">
+            <strong style="display:block; margin-bottom:5px; color:#555;">Asignaturas:</strong>
+            <div style="display:flex; flex-wrap:wrap;">${leyendaAsigs}</div>
+        </div>` : ''}
+
+        <div style="margin-bottom:14px; padding:6px 12px; background:#f9f9f9;
+            border:1px solid #e0e0e0; border-radius:6px; font-size:10px; color:#777;">
+            <strong>Tipos de sesión:</strong> ${leyendaTipos}
+            &nbsp;·&nbsp;
+            ⚑ Día de examen &nbsp;·&nbsp;
+            🍅 Pomodoros asignados
+        </div>
+
+        ${mesesHTML}
+    </body></html>`;
+
+    const win = window.open('', '_blank', 'width=1100,height=800');
+    if (!win) { alert('El navegador bloqueó la ventana emergente.'); return; }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 500);
+}
 
     return { 
         abrirPlanificador: async function() { 

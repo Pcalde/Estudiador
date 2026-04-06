@@ -107,31 +107,30 @@ const UIDashboard = (() => {
         if (!container) return;
 
         container.innerHTML = '';
-
-        container.onmouseleave = () => {
-            // Delegación explícita al controlador global para evitar colisión con la función local UI
-            if (typeof window.updatePendingWindow === 'function') {
-                window.updatePendingWindow(undefined);  
-            }
-        };
-        
         container.onmouseover = (e) => {
             const dayDiv = e.target.closest('.heatmap-day[data-interactive="true"]');
-            if (!dayDiv) return;
+            
+            // Si no estamos sobre un día válido, volvemos a la vista de "Hoy"
+            if (!dayDiv) {
+                if (typeof window.updatePendingWindow === 'function') {
+                    window.updatePendingWindow(undefined); 
+                }
+                return;
+            }
+
             const dStr = dayDiv.getAttribute('data-date');
             if (!dStr) return;
-            
-            // Delegación explícita al controlador global
             if (typeof window.updatePendingWindow === 'function') {
                 window.updatePendingWindow(dStr);
             }
 
-            // Scroll al widget de pendientes si no es visible
-            const widget = document.getElementById('widget-pendientes');
-            if (widget) {
-                const rect = widget.getBoundingClientRect();
-                const isVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
-                if (!isVisible) widget.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            // El scroll automático se ha eliminado para no interrumpir la navegación del usuario
+        };
+
+        // Asegurar que el mouseleave también resetee
+        container.onmouseleave = () => {
+            if (typeof window.updatePendingWindow === 'function') {
+                window.updatePendingWindow(undefined);
             }
         };
 

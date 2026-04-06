@@ -154,14 +154,25 @@ const Telemetry = (() => {
     }
     
     function updatePomoStats() {
-        const pomoLogHoy = JSON.parse(localStorage.getItem('pomo_log_today') || '{"date":"","count":0,"details":{}}');
-        UI.updatePomoStats(
-            State.get('horarioGlobal'), 
-            State.get('nombreAsignaturaActual'), 
-            State.get('taskList'), 
-            pomoLogHoy
-        );
-    }
+    const pomoLogHoy = JSON.parse(localStorage.getItem('pomo_log_today') || '{"date":"","count":0,"details":{}}');
+    const plan = State.get('planificador') || { schedule: {} };
+    const todayStr = window.getFechaHoy();
+    const planHoy = plan.schedule[todayStr] || [];
+    const plannerTasks = planHoy.map(t => ({
+        text: `[${t.asigNombre}] ${t.temaNombre}`,
+        est: t.pomosAsignados || 0,
+        completed: t.status === 'completed' ? t.pomosAsignados : 0,
+        done: t.status === 'completed'
+    }));
+    const combinedTasks = [...(State.get('taskList') || []), ...plannerTasks];
+
+    UI.updatePomoStats(
+        State.get('horarioGlobal'), 
+        State.get('nombreAsignaturaActual'), 
+        combinedTasks, 
+        pomoLogHoy
+    );
+}
 
     function registrarPomoCompletado(asignatura) {
         let todayLog = JSON.parse(localStorage.getItem('pomo_log_today') || '{"date":"","count":0, "details":{}}');

@@ -810,167 +810,115 @@ function calcularProbabilidadExito(tarjetas, config = {}) {
         });
     }
 
-    /**
-     * Algoritmo principal de autocompletado de pomodoros.
-     * Itera cronológicamente desde hoy, consumiendo el temario y respetando los límites diarios.
-     * @param {Object} planificador - El objeto State.get('planificador')
-     * @returns {Object} - { scheduleGenerado, deficit, excedido, log }
-     */
-    function generarHorarioPlanificador(planificador) {
-        if (!planificador || !planificador.asignaturasPlanificadas) return { scheduleGenerado: {}, deficit: 0, excedido: false };
 
-        const { asignaturasPlanificadas, dailyCapacities, examenes } = planificador;
-        const schedule = {};
-        
-        // 1. Aplanar y encolar todos los temas pendientes respetando el orden
-        let colaTemas = [];
-        asignaturasPlanificadas.forEach(asig => {
-            (asig.temas || []).forEach(tema => {
-                if (tema.pomosEstimados > 0) {
-                    colaTemas.push({
-                        asigId: asig.id,
-                        asigNombre: asig.nombre,
-                        color: asig.color,
-                        temaId: tema.id,
-                        temaNombre: tema.nombre,
-                        tipoEstudioId: tema.tipoEstudioId || 'st_read',
-                        pomosRestantes: tema.pomosEstimados
-                    });
-                }
-            });
-        });
 
-        // Si no hay temas, devolvemos un schedule vacío
-        if (colaTemas.length === 0) return { scheduleGenerado: {}, deficit: 0, excedido: false, log: "No hay temario pendiente." };
-
-        // 2. Determinar fecha límite absoluta (el examen más lejano)
-        if (examenes.length === 0) return { scheduleGenerado: {}, deficit: 0, excedido: false, log: "No hay exámenes fijados como límite." };
-        const fechaLimite = new Date(Math.max(...examenes.map(e => new Date(e.fecha).getTime())));
-        fechaLimite.setHours(0,0,0,0);
-
-        // 3. Iteración cronológica (Forward-Planning)
-        let fechaActual = new Date();
-        fechaActual.setHours(0,0,0,0);
-
-        while (colaTemas.length > 0 && fechaActual <= fechaLimite) {
-            const fechaStr = formatearFecha(fechaActual); // Usa "yyyy-MM-dd"
-            schedule[fechaStr] = [];
-
-            // Determinar capacidad del día actual
-            const esFinde = fechaActual.getDay() === 0 || fechaActual.getDay() === 6;
-            const esTemporada = _esTemporadaExamenes(fechaActual, examenes);
-            
-            let capacidadHoy = esFinde ? dailyCapacities.weekend : 
-                              (esTemporada ? dailyCapacities.examSeason : dailyCapacities.regularCourse);
-
-            // Consumir temas hasta agotar la capacidad del día
-            while (capacidadHoy > 0 && colaTemas.length > 0) {
-                let temaActual = colaTemas[0];
-                let pomosAsignadosHoy = Math.min(capacidadHoy, temaActual.pomosRestantes);
-
-                schedule[fechaStr].push({
-                    idTarea: 'task_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-                    asigId: temaActual.asigId,
-                    asigNombre: temaActual.asigNombre,
-                    color: temaActual.color,
-                    temaId: temaActual.temaId,
-                    temaNombre: temaActual.temaNombre,
-                    studyTypeId: temaActual.tipoEstudioId,
-                    pomosAsignados: pomosAsignadosHoy,
-                    status: 'pending' // 'pending', 'completed', 'failed'
-                });
-
-                capacidadHoy -= pomosAsignadosHoy;
-                temaActual.pomosRestantes -= pomosAsignadosHoy;
-
-                // Si el tema se completó, lo sacamos de la cola
-                if (temaActual.pomosRestantes <= 0) {
-                    colaTemas.shift();
-                }
-            }
-
-            // Avanzar al día siguiente
-            fechaActual.setDate(fechaActual.getDate() + 1);
-        }
-
-        // 4. Evaluación de Excesos (Déficit de tiempo)
-        let deficitPomos = 0;
-        if (colaTemas.length > 0) {
-            deficitPomos = colaTemas.reduce((acc, t) => acc + t.pomosRestantes, 0);
-        }
-
-        return {
-            scheduleGenerado: schedule,
-            deficit: deficitPomos,
-            excedido: deficitPomos > 0,
-            log: deficitPomos > 0 
-                ? `Peligro: El temario excede la capacidad. Faltan ${deficitPomos} pomodoros para cubrir todo antes de los exámenes.`
-                : `Planificación completada con éxito.`
-        };
+/**
+ * Genera un horario determinista basado en la capacidad diaria y restricciones de usuario.
+ * @param {Object} plan - El objeto de planificación completo desde el Estado.
+ */
+function generarHorarioPlanificador(plan) {
+    if (!plan?.asignaturasPlanificadas || !plan.dailyCapacities) {
+        return { scheduleGenerado: {}, deficit: 0, excedido: false, log: "Faltan datos de configuración." };
     }
 
-    // ════════════════════════════════════════════════════════════════
-// MOTOR DE PLANIFICACIÓN (Extraído de Claude)
-// ════════════════════════════════════════════════════════════════
+    const { asignaturasPlanificadas, dailyCapacities, examenes } = plan;
+    const blockedSet = new Set(plan.blockedDays || []);
+    const overrides  = plan.dayOverrides || {};
 
-function calcularDistribucionPlanificador(planState) {
-    // Clonamos el schedule actual para no mutar el estado original en memoria
-    const nuevoSchedule = {};
-    const scheduleActual = planState.schedule || {};
-    const examWeights = Array.isArray(planState.examWeights) ? planState.examWeights : [];
-    const asignaturas = Array.isArray(planState.asignaturasPlanificadas) ? planState.asignaturasPlanificadas : [];
-    Object.keys(scheduleActual).forEach(fecha => {
-        // Mantenemos solo las tareas que ya están completadas (fijadas)
-        nuevoSchedule[fecha] = scheduleActual[fecha].filter(t => t?.completada || t?.status === 'completed');
+    // 1. Preservar tareas manuales para no pisar el trabajo del usuario
+    const schedule = {};
+    if (plan.schedule) {
+        Object.entries(plan.schedule).forEach(([fecha, tareas]) => {
+            const manuales = tareas.filter(t => !t.isAuto);
+            if (manuales.length > 0) schedule[fecha] = manuales;
+        });
+    }
+
+    // 2. Construir la cola de temas priorizada
+    let colaTemas = [];
+    // Las asignaturas ya vienen ordenadas por el Wizard (Paso 3)
+    asignaturasPlanificadas.forEach(asig => {
+        (asig.temas || []).forEach(tema => {
+            const pomosRestantes = parseInt(tema.pomosEstimados || 0);
+            if (pomosRestantes > 0) {
+                colaTemas.push({
+                    asigId: asig.id, asigNombre: asig.nombre, color: asig.color,
+                    temaId: tema.id, temaNombre: tema.nombre,
+                    studyTypeId: tema.tipoEstudioId || 'st_read',
+                    pomosRestantes: pomosRestantes
+                });
+            }
+        });
     });
 
-    const hoy = window.parseDateSafe ? window.parseDateSafe(new Date()) : new Date();
-    
-    // Algoritmo base de Claude adaptado a pure function
-    (planState.examenes || []).forEach(examen => {
-        const fechaExamen = window.parseDateSafe ? window.parseDateSafe(examen.fecha) : new Date(examen.fecha);
-        const diasRestantes = window.diffDiasCalendario ? window.diffDiasCalendario(hoy, fechaExamen) : 10;
-        const asig = asignaturas.find(item => item.id === examen.asigId || item.nombre === examen.asigNombre);
-        
-        if (diasRestantes <= 0) return;
+    if (colaTemas.length === 0) return { scheduleGenerado: schedule, deficit: 0, excedido: false, log: "No hay temas para planificar." };
+    if (!examenes || examenes.length === 0) return { scheduleGenerado: schedule, deficit: 0, excedido: false, log: "No hay exámenes definidos." };
 
-        // Extraer ponderación matemática
-        const weightObj = examWeights.find(w => w.id === examen.weightId);
-        const multiplicador = weightObj ? weightObj.multiplier : 1.0;
-        
-        // Determinar carga base
-        const pomodorosTotales = Math.ceil(10 * multiplicador); // Base algorítmica de Claude
-        const pomosPorDia = Math.max(1, Math.floor(pomodorosTotales / diasRestantes));
+    // 3. Definir ventana temporal
+    const fechaFin = new Date(Math.max(...examenes.map(e => new Date(e.fecha).getTime())));
+    let fechaActual = new Date();
+    fechaActual.setHours(0, 0, 0, 0);
 
-        // Distribuir en los días previos
-        for (let i = 1; i <= diasRestantes; i++) {
-            const fechaEstudio = new Date(fechaExamen);
-            fechaEstudio.setDate(fechaEstudio.getDate() - i);
-            const fechaStr = fechaEstudio.toISOString().split('T')[0];
+    // 4. Algoritmo de llenado por capacidad (Greedy con Constraints)
+    while (colaTemas.length > 0 && fechaActual <= fechaFin) {
+        const fechaStr = Domain.toISODateString(fechaActual);
 
-            if (!nuevoSchedule[fechaStr]) nuevoSchedule[fechaStr] = [];
-            const taskId = 'gen_' + Date.now() + Math.random().toString(16).slice(2);
-            
-            nuevoSchedule[fechaStr].push({
-                id: taskId,
-                idTarea: taskId,
-                asigId: examen.asigId,
-                asigNombre: examen.asigNombre,
-                temaId: `auto_${examen.asigId}_${i}`,
-                temaNombre: 'Estudio planificado',
-                studyTypeId: 'st_study',
-                typeName: 'Estudio Planificado',
-                pomosAsignados: pomosPorDia,
-                pomos: pomosPorDia,
-                status: 'pending',
-                completada: false,
-                isAuto: true,
-                color: examen.color || asig?.color || 'var(--accent)'
-            });
+        if (blockedSet.has(fechaStr)) {
+            fechaActual.setDate(fechaActual.getDate() + 1);
+            continue;
         }
-    });
 
-    return nuevoSchedule;
+        const esFinde = [0, 6].includes(fechaActual.getDay());
+        const esTemporada = _esTemporadaExamenes(fechaActual, examenes);
+        
+        let capMax = overrides[fechaStr] !== undefined 
+            ? overrides[fechaStr]
+            : (esFinde ? dailyCapacities.weekend : (esTemporada ? dailyCapacities.examSeason : dailyCapacities.regularCourse));
+
+        const ocupadoManual = (schedule[fechaStr] || []).reduce((acc, t) => acc + (t.pomosAsignados || 0), 0);
+        let capacidadLibre = Math.max(0, capMax - ocupadoManual);
+
+        if (!schedule[fechaStr]) schedule[fechaStr] = [];
+
+        while (capacidadLibre > 0 && colaTemas.length > 0) {
+            const tema = colaTemas[0];
+            const pomosHoy = Math.min(capacidadLibre, tema.pomosRestantes);
+
+            if (pomosHoy > 0) {
+                schedule[fechaStr].push({
+                    idTarea: `auto_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+                    asigId: tema.asigId, asigNombre: tema.asigNombre, color: tema.color,
+                    temaId: tema.temaId, temaNombre: tema.temaNombre,
+                    studyTypeId: tema.studyTypeId,
+                    pomosAsignados: pomosHoy,
+                    status: 'pending',
+                    isAuto: true
+                });
+                capacidadLibre -= pomosHoy;
+                tema.pomosRestantes -= pomosHoy;
+            }
+            if (tema.pomosRestantes <= 0) colaTemas.shift();
+        }
+        fechaActual.setDate(fechaActual.getDate() + 1);
+    }
+
+    const deficit = colaTemas.reduce((acc, t) => acc + t.pomosRestantes, 0);
+    return {
+        scheduleGenerado: schedule,
+        deficit,
+        excedido: deficit > 0,
+        log: deficit > 0 ? `Déficit crítico: faltan ${deficit} pomodoros.` : "Planificación optimizada."
+    };
+}
+
+function _esTemporadaExamenes(fecha, examenes) {
+    // Se considera temporada si hay un examen en los próximos 7 días
+    const limite = new Date(fecha);
+    limite.setDate(limite.getDate() + 7);
+    return examenes.some(e => {
+        const d = new Date(e.fecha);
+        return d >= fecha && d <= limite;
+    });
 }
 
 
@@ -1003,7 +951,6 @@ const Domain = {
     formatearFechaES,
     simularPlanificacion,
     generarHorarioPlanificador,
-    calcularDistribucionPlanificador,
 };
 
 // Exposición segura al objeto global para que otros scripts (pomodoro.js) lo detecten

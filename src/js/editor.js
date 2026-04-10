@@ -45,10 +45,16 @@ function modoEdicionJSON() {
 }
 
 function cancelarEdicion() {
+    // 1. Lectura segura y autorizada desde la fuente única de verdad
+    const asigActual = State.get('nombreAsignaturaActual');
+    
+    // 2. Delegación de repintado a la capa de UI
     if (typeof UI !== 'undefined' && UI.cancelarEdicion) {
-        UI.cancelarEdicion(!!State.get('nombreAsignaturaActual'));
+        UI.cancelarEdicion(!!asigActual);
     }
-    State.set('currentContext', nombreAsignaturaActual ? 'study' : 'welcome');
+    
+    // 3. Mutación del estado global de navegación mediante el setter oficial
+    State.set('currentContext', asigActual ? 'study' : 'welcome');
 }
 
 function abrirEditorAmigable() {

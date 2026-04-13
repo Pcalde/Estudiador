@@ -117,33 +117,99 @@ const AI = (() => {
         if (!biblioteca || !biblioteca[asignatura]) return;
 
         let tarjetas = biblioteca[asignatura];
-        let procesadas = 0;
+        
+        // Precálculo estricto: ¿Cuántas tarjetas REALMENTE necesitan título?
+        const idxAProcesar = tarjetas.reduce((acc, c, idx) => {
+            if (c._needsAutoTitle) acc.push(idx);
+            return acc;
+        }, []);
+        
+        const totalObjetivo = idxAProcesar.length;
+        if (totalObjetivo === 0) return;
 
-        for (let i = 0; i < tarjetas.length; i++) {
-            if (tarjetas[i]._needsAutoTitle) {
+        let procesadas = 0;
+        const toastId = 'ia_batch_' + asignatura.replace(/\s+/g, '');
+        
+        // Despliegue de Widget UI inicial
+        if (typeof Toast !== 'undefined') {
+            Toast.showProgress(toastId, `Iniciando IA (0/${totalObjetivo})...`, 0);
+        }
+
+        const delayBase = 500; 
+
+        for (let idx of idxAProcesar) {
+            let tarjeta = tarjetas[idx];
+            let intentos = 0;
+            let exito = false;
+            let waitTime = delayBase;
+
+            while (intentos < 5 && !exito) {
                 try {
-                    // Backoff de 3500ms estricto para mitigar el HTTP 429 (Rate Limit de Groq)
-                    await new Promise(resolve => setTimeout(resolve, 3500));
+                    if (intentos > 0 || procesadas > 0) {
+                        await new Promise(resolve => setTimeout(resolve, waitTime));
+                    }
                     
-                    const nuevoTitulo = await generarTituloAutomatico(tarjetas[i].Contenido);
-                    tarjetas[i].Titulo = nuevoTitulo;
-                    delete tarjetas[i]._needsAutoTitle;
+                    const nuevoTitulo = await generarTituloAutomatico(tarjeta.Contenido);
+                    tarjeta.Titulo = nuevoTitulo;
+                    delete tarjeta._needsAutoTitle;
+                    
                     procesadas++;
+                    exito = true;
+                    waitTime = delayBase; 
+                    
+                    // Actualización de Telemetría UI
+                    if (typeof Toast !== 'undefined') {
+                        Toast.showProgress(toastId, `Generando títulos... (${procesadas}/${totalObjetivo})`, (procesadas / totalObjetivo) * 100);
+                    }
                     
                 } catch (e) {
-                    Logger.error("Fallo IA en título:", e);
-                    tarjetas[i].Titulo = "Error de IA (Editar)";
-                    delete tarjetas[i]._needsAutoTitle;
+                    intentos++;
+                    const msg = e.message || "";
+                    const isRateLimit = msg.includes('429') || msg.toLowerCase().includes('rate limit');
+                    
+                    if (isRateLimit) {
+                        let cooldownSeconds = 10;
+                        const match = msg.match(/try again in ([\d\.]+)s/);
+                        if (match && match[1]) cooldownSeconds = parseFloat(match[1]) + 1.0; 
+                        
+                        waitTime = cooldownSeconds * 1000;
+                        
+                        // Notificar el enfriamiento para que el usuario no crea que se ha colgado
+                        if (typeof Toast !== 'undefined') {
+                            Toast.showProgress(toastId, `Pausa de red IA (${cooldownSeconds.toFixed(1)}s)...`, (procesadas / totalObjetivo) * 100);
+                        }
+                    } else if (intentos >= 5) {
+                        tarjeta.Titulo = "Error de IA (Editar)";
+                        delete tarjeta._needsAutoTitle;
+                        procesadas++; // Contabilizar para no desfasar la barra matemática
+                        
+                        if (typeof Toast !== 'undefined') {
+                            Toast.showProgress(toastId, `Omitiendo error IA... (${procesadas}/${totalObjetivo})`, (procesadas / totalObjetivo) * 100);
+                        }
+                    } else {
+                        waitTime = 3000; 
+                    }
                 }
+            }
+
+            if (procesadas > 0 && procesadas % 10 === 0) {
+                State.set('biblioteca', biblioteca);
+                if (typeof EventBus !== 'undefined') EventBus.emit('DATA_REQUIRES_SAVE');
+                if (typeof window.aplicarFiltros === 'function') window.aplicarFiltros(false);
             }
         }
 
+        // Persistencia y recarga final
         if (procesadas > 0) {
             State.set('biblioteca', biblioteca);
             if (typeof EventBus !== 'undefined') EventBus.emit('DATA_REQUIRES_SAVE');
-            
-            // CORRECCIÓN DE REACTIVIDAD: Forzamos la regeneración de la cola para que la UI se actualice
             if (typeof window.aplicarFiltros === 'function') window.aplicarFiltros(false);
+        }
+
+        // Desmontaje visual y notificación de éxito nativa
+        if (typeof Toast !== 'undefined') {
+            Toast.removeProgress(toastId);
+            Toast.show(`IA: ${procesadas} tarjetas procesadas con éxito.`, 'success', 5000);
         }
     }
 

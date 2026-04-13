@@ -6,6 +6,7 @@
 
 const Toast = (() => {
     let container = null;
+    const _activeProgress = {};
 
     function _initContainer() {
         if (container) return;
@@ -26,12 +27,69 @@ const Toast = (() => {
         document.body.appendChild(container);
     }
 
-    /**
-     * Muestra una notificación temporal.
-     * @param {string} msg - Mensaje a mostrar.
-     * @param {string} type - 'info', 'success', 'warning', 'error'
-     * @param {number} duration - Tiempo en ms antes de desaparecer.
-     */
+    function showProgress(id, msg, percentage) {
+        _initContainer();
+        let pToast = _activeProgress[id];
+
+        if (!pToast) {
+            // Creación del nodo si no existe (Mínimo impacto de DOM)
+            const el = document.createElement('div');
+            el.style.cssText = `
+                background: var(--card-bg, #1e1e1e);
+                color: var(--text-main, #f5f5f5);
+                padding: 12px 16px;
+                border-radius: 8px;
+                border: 1px solid var(--border, #333);
+                box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+                min-width: 250px;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                opacity: 0;
+                transform: translateY(10px);
+                transition: opacity 0.3s ease, transform 0.3s ease;
+                pointer-events: auto;
+            `;
+
+            el.innerHTML = `
+                <span class="t-msg" style="font-size:0.9em; font-weight:500;">${escapeHtml(msg)}</span>
+                <div style="width:100%; height:4px; background:rgba(255,255,255,0.1); border-radius:2px; overflow:hidden;">
+                    <div class="t-bar" style="width:${percentage}%; height:100%; background:var(--accent, #4CAF50); transition:width 0.3s ease;"></div>
+                </div>
+            `;
+            container.appendChild(el);
+
+            pToast = { 
+                el, 
+                msgNode: el.querySelector('.t-msg'), 
+                barNode: el.querySelector('.t-bar') 
+            };
+            _activeProgress[id] = pToast;
+
+            // Animación de entrada
+            requestAnimationFrame(() => {
+                el.style.opacity = '1';
+                el.style.transform = 'translateY(0)';
+            });
+        } else {
+            // Actualización In-Place (Evita reflows pesados)
+            pToast.msgNode.innerText = msg;
+            pToast.barNode.style.width = `${percentage}%`;
+        }
+    }
+
+    // 3. Añadir función de destrucción
+    function removeProgress(id) {
+        const pToast = _activeProgress[id];
+        if (pToast) {
+            pToast.el.style.opacity = '0';
+            pToast.el.style.transform = 'translateY(10px)';
+            setTimeout(() => {
+                if (pToast.el.parentNode) pToast.el.remove();
+                delete _activeProgress[id];
+            }, 300);
+        }
+    }
     function show(msg, type = 'info', duration = 3000) {
         _initContainer();
 
@@ -152,7 +210,8 @@ const Toast = (() => {
         toast.querySelector('#t-btn-cancel').onclick = () => { closeToast(); onCancel(); };
     }
 
-    return { show, ask };
+    return { show, ask, showProgress, 
+        removeProgress };
 })();
 
 // Proxy global por si lo necesitamos desde handlers directos

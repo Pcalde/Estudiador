@@ -95,24 +95,34 @@ const Graph = (() => {
             return;
         }
 
-        // ── LÓGICA DE CUADRANTES ESPACIALES (Método de Loci) ──
+        // ── LÓGICA DE CUADRANTES ESPACIALES (Grid Determinista) ──
         const tNum = tema !== null ? parseInt(tema) : 1;
         const cuadranteX = ((tNum - 1) % 3) * 1500; 
         const cuadranteY = Math.floor((tNum - 1) / 3) * 1500;
 
         let añadidas = 0;
         
-        filtradas.forEach(c => {
+        // Parámetros de la matriz de renderizado
+        const columnas = Math.ceil(Math.sqrt(filtradas.length));
+        const gap = 220; // Espaciado en píxeles entre nodos para evitar solapamiento
+
+        filtradas.forEach((c, index) => {
             const cId = _cardId(c, asig);
             if (!gd[asig].nodes.find(n => n.id === cId)) {
-                // Dispersión aleatoria alrededor del centro del cuadrante
-                const offsetX = (Math.random() - 0.5) * 800;
-                const offsetY = (Math.random() - 0.5) * 600;
                 
-                gd[asig].nodes.push({ id: cId, x: cuadranteX + offsetX, y: cuadranteY + offsetY });
+                // Cálculo de posición en matriz centrada
+                const offsetX = (index % columnas) * gap - ((columnas * gap) / 2);
+                const offsetY = Math.floor(index / columnas) * gap - ((columnas * gap) / 2);
+                
+                gd[asig].nodes.push({ 
+                    id: cId, 
+                    x: cuadranteX + offsetX, 
+                    y: cuadranteY + offsetY,
+                    physics: false // FIX: Ancla la posición inicial para evitar el cálculo caótico de la red
+                });
                 añadidas++;
 
-                // Si se inserta TODO, también autovinculamos las demos a sus teoremas
+                // Autovinculación de demostraciones a sus teoremas
                 if (!tipo && ['Teorema', 'Proposición', 'Lema'].includes(c.Apartado)) {
                     _autoLinkDemos(c, cId, cuadranteX + offsetX, cuadranteY + offsetY, gd[asig], cards, asig);
                 }
@@ -123,7 +133,7 @@ const Graph = (() => {
             State.set('graphData', gd);
             _persist();
             _refresh(asig);
-            if (typeof Toast !== 'undefined') Toast.show(`Cuadrante Tema ${tNum}: ${añadidas} nodos añadidos.`, 'success');
+            if (typeof Toast !== 'undefined') Toast.show(`Cuadrante Tema ${tNum}: ${añadidas} nodos organizados en cuadrícula.`, 'success');
         }
     }
 

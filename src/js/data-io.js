@@ -19,13 +19,9 @@ const DataIO = (() => {
     // ════════════════════════════════════════════════════════════
     // 1. IMPORTACIÓN LaTeX (Restaurada a Arquitectura Original)
     // ════════════════════════════════════════════════════════════
-    // ════════════════════════════════════════════════════════════
-    // 1. IMPORTACIÓN LaTeX (Arquitectura Limpia)
-    // ════════════════════════════════════════════════════════════
     function procesarImportacionLatex(rawInput, temaDefault) {
         const asigActual = State.get('nombreAsignaturaActual');
         
-        // Rechazar con excepción, delegando el manejo visual a la capa UI
         if (!asigActual) { 
             throw new Error("ERR_NO_SUBJECT: Selecciona una asignatura primero."); 
         }
@@ -38,26 +34,35 @@ const DataIO = (() => {
         let biblioteca = State.get('biblioteca') || {};
         if (!biblioteca[asigActual]) biblioteca[asigActual] = [];
 
+        const arrayAsignatura = biblioteca[asigActual];
         const hoy = (typeof window.getFechaHoy === 'function') ? window.getFechaHoy() : new Date().toISOString().slice(0, 10);
         let aProcesarPorIA = 0;
 
-        // CORRECCIÓN ARQUITECTÓNICA: Respetamos el flag _needsAutoTitle inyectado por el Parser.
-        // Erradicamos la validación frágil de cadenas de texto.
-        newCards.forEach(c => {
+        // Cálculo del índice máximo actual para garantizar secuencialidad inmutable
+        const maxIdx = arrayAsignatura.reduce((max, c) => Math.max(max, c.IndiceGlobal ?? 0), 0);
+
+        newCards.forEach((c, i) => {
             if (c._needsAutoTitle) {
                 c.Titulo = "Generando título... (IA)";
                 aProcesarPorIA++;
             }
             c.Dificultad = 2; 
             c.ProximoRepaso = hoy;
+            
+            // Asignación estricta de Identidad e Índice
+            c.IndiceGlobal = maxIdx + i + 1;
+            if (!c.id) {
+                c.id = typeof crypto !== 'undefined' && crypto.randomUUID 
+                    ? crypto.randomUUID() 
+                    : 'c_' + Date.now() + Math.random().toString(36).substr(2, 9);
+            }
         });
 
-        biblioteca[asigActual].push(...newCards);
+        arrayAsignatura.push(...newCards);
         State.set('biblioteca', biblioteca);
 
         EventBus.emit('DATA_REQUIRES_SAVE');
         EventBus.emit('STATE_CHANGED', { keys: ['colaEstudio', 'biblioteca'] });
-        
         
         if (typeof window.cancelarEdicion === 'function') window.cancelarEdicion();
         if (typeof window.aplicarFiltros === 'function') window.aplicarFiltros();
@@ -98,9 +103,24 @@ const DataIO = (() => {
             const asigActual = State.get('nombreAsignaturaActual');
             if (!asigActual) throw new Error("Selecciona una asignatura primero.");
 
-            let biblioteca = State.get('biblioteca');
-            biblioteca[asigActual] = [...(biblioteca[asigActual] || []), ...data];
+            let biblioteca = State.get('biblioteca') || {};
+            const arrayAsignatura = biblioteca[asigActual] || [];
+
+            // Identificación de la base para auto-incremento local
+            const maxIdx = arrayAsignatura.reduce((max, c) => Math.max(max, c.IndiceGlobal ?? 0), 0);
+
+            data.forEach((c, i) => {
+                if (c.IndiceGlobal === undefined) c.IndiceGlobal = maxIdx + i + 1;
+                if (!c.id) {
+                    c.id = typeof crypto !== 'undefined' && crypto.randomUUID 
+                        ? crypto.randomUUID() 
+                        : 'c_' + Date.now() + Math.random().toString(36).substr(2, 9);
+                }
+            });
+
+            biblioteca[asigActual] = [...arrayAsignatura, ...data];
             State.set('biblioteca', biblioteca);
+            
             EventBus.emit('DATA_REQUIRES_SAVE');
             EventBus.emit('STATE_CHANGED', { keys: ['colaEstudio', 'biblioteca'] });
 

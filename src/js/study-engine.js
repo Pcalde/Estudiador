@@ -229,24 +229,28 @@ window.anteriorTarjeta = () => StudyEngine.anteriorTarjeta();
 window.siguienteTarjeta = () => StudyEngine.siguienteTarjeta();
 window.procesarRepaso = (c) => StudyEngine.procesarRepaso(c);
 
-window.toggleModoSecuencial = (isSeq) => {
-    // Requiere parámetro booleano explícito (Arquitectura Limpia)
-    if (typeof isSeq !== 'boolean') {
-        if (typeof Logger !== 'undefined') {
-            Logger.warn("toggleModoSecuencial requiere un booleano explícito. Se ignora la mutación.");
-        }
-        return;
+window.toggleModoSecuencial = (eventOrBool) => {
+    let isSeq;
+    if (typeof eventOrBool === 'boolean') {
+        isSeq = eventOrBool;
+    } else if (eventOrBool && eventOrBool.target) {
+        isSeq = eventOrBool.target.checked;
+    } else {
+        const checkbox = document.getElementById('check-secuencial');
+        isSeq = checkbox ? checkbox.checked : false;
     }
     StudyEngine.toggleModoSecuencial(isSeq);
 };
 
-window.toggleModoLectura = (isLec) => {
-    // Requiere parámetro booleano explícito (Arquitectura Limpia)
-    if (typeof isLec !== 'boolean') {
-        if (typeof Logger !== 'undefined') {
-            Logger.warn("toggleModoLectura requiere un booleano explícito. Se ignora la mutación.");
-        }
-        return;
+window.toggleModoLectura = (eventOrBool) => {
+    let isLec;
+    if (typeof eventOrBool === 'boolean') {
+        isLec = eventOrBool;
+    } else if (eventOrBool && eventOrBool.target) {
+        isLec = eventOrBool.target.checked;
+    } else {
+        const checkbox = document.getElementById('check-lectura');
+        isLec = checkbox ? checkbox.checked : false;
     }
     StudyEngine.toggleModoLectura(isLec);
     

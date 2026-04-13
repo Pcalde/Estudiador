@@ -45,15 +45,13 @@ function modoEdicionJSON() {
 }
 
 function cancelarEdicion() {
-    // 1. Lectura segura y autorizada desde la fuente única de verdad
     const asigActual = State.get('nombreAsignaturaActual');
     
-    // 2. Delegación de repintado a la capa de UI
     if (typeof UI !== 'undefined' && UI.cancelarEdicion) {
         UI.cancelarEdicion(!!asigActual);
     }
     
-    // 3. Mutación del estado global de navegación mediante el setter oficial
+    // Delegación correcta de estado usando la variable recuperada
     State.set('currentContext', asigActual ? 'study' : 'welcome');
 }
 

@@ -18,7 +18,7 @@ const Parser = (() => {
 
     const CMD_MAP_JS = {
         'defi': 'Definición', 'teorema': 'Teorema', 'prop': 'Proposición',
-        'lema': 'Lema', 'corolario': 'Corolario', 'ejemplo': 'Ejemplo', 'obs': 'Observación'
+        'lema': 'Lema', 'coro': 'Corolario', 'ejemplo': 'Ejemplo', 'obs': 'Observación'
     };
 
     function sanearLatex(input) {

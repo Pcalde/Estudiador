@@ -46,42 +46,13 @@ const UIStudy = (() => {
     function renderizarConceptoActual(tarjeta, modoLec, tiposConfig = {}) {
         if (!tarjeta) return;
 
-        const tipo = String(tarjeta.Apartado || 'Concepto').trim();
-        let colorTipo = null;
+        const tipo      = tarjeta.Apartado || 'Concepto';
+        const colorTipo = tiposConfig[tipo]?.color || 'var(--accent)';
+        const tit       = document.getElementById('concepto-titulo');
 
-        // 1. Buscamos el color en el motor JS (útil solo si el usuario lo editó en ajustes)
-        if (tiposConfig && typeof tiposConfig === 'object') {
-            const normalizar = (str) => String(str).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-            const tipoNorm = normalizar(tipo);
-            const matchKey = Object.keys(tiposConfig).find(k => normalizar(k) === tipoNorm);
-            if (matchKey && tiposConfig[matchKey] && tiposConfig[matchKey].color) {
-                colorTipo = tiposConfig[matchKey].color;
-            }
-        }
-
-        const tit = document.getElementById('concepto-titulo');
         if (tit) {
-            // FIX ARQUITECTÓNICO: Delegamos la autoridad de diseño al archivo styles.css
-            // 1. Limpiamos cualquier clase de color previa
-            tit.className = Array.from(tit.classList).filter(c => !c.startsWith('color-')).join(' ');
-            
-            // 2. Inyectamos la clase exacta que tu CSS espera (ej: 'color-Teorema', 'color-Demot')
-            const claseCss = tipo.replace(/\s+/g, '');
-            if (claseCss) tit.classList.add(`color-${claseCss}`);
-
-            // 3. Forzamos estilo inline SÓLO si hay un color explícito del estado
-            if (colorTipo) {
-                tit.style.setProperty('color', colorTipo, 'important');
-                // Si es una demostración, sincronizamos también su borde
-                if (claseCss.startsWith('Dem')) {
-                    tit.style.setProperty('border-left-color', colorTipo, 'important');
-                }
-            } else {
-                tit.style.removeProperty('color');
-                tit.style.removeProperty('border-left-color');
-            }
-
-            tit.innerHTML = `<span style="font-size:0.6em;opacity:0.8;text-transform:uppercase;display:block;margin-bottom:5px;">${escapeHtml(tipo)}</span>${escapeHtml(tarjeta.Titulo || '')}`;
+            tit.style.color = colorTipo;
+            tit.innerHTML   = `<span style="font-size:0.6em;opacity:0.8;text-transform:uppercase;display:block;margin-bottom:5px;">${escapeHtml(tipo)}</span>${escapeHtml(tarjeta.Titulo || '')}`;
         }
 
         const cont = document.getElementById('concepto-contenido');
@@ -94,9 +65,9 @@ const UIStudy = (() => {
         const metaTema = document.getElementById('meta-tema');
         if (metaTema) metaTema.innerText = `Tema ${tarjeta.Tema}`;
 
-        const fElem   = document.getElementById('meta-fecha');
-        const hoyVal  = typeof fechaValor === 'function' ? fechaValor(getFechaHoy()) : 0;
-        const proxVal = typeof fechaValor === 'function' && tarjeta.ProximoRepaso ? fechaValor(tarjeta.ProximoRepaso) : 0;
+        const fElem  = document.getElementById('meta-fecha');
+        const hoyVal = fechaValor(getFechaHoy());
+        const proxVal = fechaValor(tarjeta.ProximoRepaso);
 
         if (fElem) {
             if (proxVal < hoyVal) {
@@ -124,14 +95,19 @@ const UIStudy = (() => {
             btnOcultar?.classList.add('hidden');
         }
 
-        if (typeof MathJax !== 'undefined') {
+        // FIX ARQUITECTÓNICO: Encolamiento atómico de MathJax (previene colisiones DOM y fallos replaceChild)
+        if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
             const target = document.getElementById('study-card');
             if (target) {
-                MathJax.typesetClear([target]);
-                MathJax.typesetPromise([target]).catch(err => {
-                    if (err?.message?.includes('replaceChild') || err?.stack?.includes('replaceChild')) return;
-                    if (typeof Logger !== 'undefined') Logger.error('Error MathJax:', err);
-                });
+                MathJax.startup = MathJax.startup || {};
+                MathJax.startup.promise = (MathJax.startup.promise || Promise.resolve())
+                    .then(() => {
+                        MathJax.typesetClear([target]);
+                        return MathJax.typesetPromise([target]);
+                    })
+                    .catch(err => {
+                        if (typeof Logger !== 'undefined') Logger.error('Fallo en cola de renderizado MathJax:', err);
+                    });
             }
         }
     }

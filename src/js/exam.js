@@ -78,19 +78,19 @@ const EXAM = (() => {
     function abrir() {
         Logger.info('Modo Examen: abriendo');
         State.set('currentContext', 'exam');
-
         State.set('examenActivo', true);
+
+        const biblioteca = State.get('biblioteca') || {};
+        const asigActual = State.get('nombreAsignaturaActual');
 
         document.getElementById('examen-modal').style.display = 'flex';
         _show('examen-config');
 
         const sel = document.getElementById('ex-asig');
-        // Inyección de la opción de Examen Intercalado Global
         sel.innerHTML = '<option value="ALL">🌟 TODAS LAS ASIGNATURAS (Intercalado)</option>' + 
             Object.keys(biblioteca).map(a => `<option value="${a}">${a}</option>`).join('');
             
-        if (nombreAsignaturaActual && biblioteca[nombreAsignaturaActual]) sel.value = nombreAsignaturaActual;
-
+        if (asigActual && biblioteca[asigActual]) sel.value = asigActual;
         const tipos = ['Definición', 'Teorema', 'Proposición', 'Lema', 'Corolario', 'Ejemplo', 'Observación', 'Axioma'];
         document.getElementById('ex-tipos-grid').innerHTML = tipos.map(t => {
             const c = TIPOS_COLORES[t] || '#888';
@@ -135,6 +135,7 @@ const EXAM = (() => {
         const temasFiltro = temasRaw ? temasRaw.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n)) : [];
         const tiposChecked = [...document.querySelectorAll('#ex-tipos-grid input:checked')].map(cb => cb.value);
 
+        const biblioteca = State.get('biblioteca') || {};
         let rawPool = [];
         
         // Soporte de Examen Intercalado

@@ -82,7 +82,7 @@ const State = (() => {
         slotEditando:          -1,
 
         // Examen
-        _examenActivo: false,
+        examenActivo: false,
 
         // Widget layout
         widgetConfig: null,

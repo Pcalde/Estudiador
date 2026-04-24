@@ -21,48 +21,50 @@ const DataIO = (() => {
     // ════════════════════════════════════════════════════════════
     function procesarImportacionLatex(rawInput, temaDefault) {
         const asigActual = State.get('nombreAsignaturaActual');
-        
-        if (!asigActual) { 
-            throw new Error("ERR_NO_SUBJECT: Selecciona una asignatura primero."); 
-        }
+        if (!asigActual) { alert("Selecciona una asignatura primero."); return; }
 
         const newCards = (typeof Parser !== 'undefined') ? Parser.parseLatexToCards(rawInput, temaDefault) : [];
-        if (newCards.length === 0) { 
-            throw new Error("ERR_NO_CARDS: No se detectaron comandos válidos en el bloque LaTeX."); 
-        }
+        if (newCards.length === 0) { alert("No se detectaron comandos válidos."); return; }
 
         let biblioteca = State.get('biblioteca') || {};
         if (!biblioteca[asigActual]) biblioteca[asigActual] = [];
 
-        const arrayAsignatura = biblioteca[asigActual];
         const hoy = (typeof window.getFechaHoy === 'function') ? window.getFechaHoy() : new Date().toISOString().slice(0, 10);
         let aProcesarPorIA = 0;
 
-        // Cálculo del índice máximo actual para garantizar secuencialidad inmutable
-        const maxIdx = arrayAsignatura.reduce((max, c) => Math.max(max, c.IndiceGlobal ?? 0), 0);
-
-        newCards.forEach((c, i) => {
+        // 1. Preparar las nuevas tarjetas
+        newCards.forEach(c => {
             if (c._needsAutoTitle) {
                 c.Titulo = "Generando título... (IA)";
                 aProcesarPorIA++;
             }
             c.Dificultad = 2; 
             c.ProximoRepaso = hoy;
-            
-            // Asignación estricta de Identidad e Índice
-            c.IndiceGlobal = maxIdx + i + 1;
-            if (!c.id) {
-                c.id = typeof crypto !== 'undefined' && crypto.randomUUID 
-                    ? crypto.randomUUID() 
-                    : 'c_' + Date.now() + Math.random().toString(36).substr(2, 9);
-            }
         });
 
-        arrayAsignatura.push(...newCards);
+        // 2. Insertar en la biblioteca
+        biblioteca[asigActual].push(...newCards);
+
+        // 3. REINDEXACIÓN GLOBAL (Lo que faltaba)
+        // Recorremos TODA la asignatura y asignamos el índice según su posición real en el array
+        biblioteca[asigActual].forEach((card, idx) => {
+            card.IndiceGlobal = idx + 1;
+        });
+
+        // 4. Guardar cambios en el Estado
         State.set('biblioteca', biblioteca);
 
         EventBus.emit('DATA_REQUIRES_SAVE');
         EventBus.emit('STATE_CHANGED', { keys: ['colaEstudio', 'biblioteca'] });
+        
+        const importArea = document.getElementById('import-area-latex');
+        if (importArea) importArea.value = "";
+        
+        if (aProcesarPorIA > 0) {
+            alert(`${newCards.length} tarjetas importadas. La IA procesará ${aProcesarPorIA} títulos vacíos.`);
+        } else {
+            alert(`${newCards.length} tarjetas importadas con sus títulos originales respetados.`);
+        }
         
         if (typeof window.cancelarEdicion === 'function') window.cancelarEdicion();
         if (typeof window.aplicarFiltros === 'function') window.aplicarFiltros();
@@ -70,7 +72,6 @@ const DataIO = (() => {
         if (aProcesarPorIA > 0 && typeof AI !== 'undefined' && AI.procesarTitulosEnLote) {
             AI.procesarTitulosEnLote(asigActual);
         }
-        return { count: newCards.length, conIA: aProcesarPorIA };
     }
 
     // 2. CREACIÓN DE ASIGNATURA (Operación de datos pura)

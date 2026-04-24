@@ -80,10 +80,36 @@ const Parser = (() => {
     function cleanLatexToHtml(latexStr) {
         let text = latexStr;
         
-        // 1. Formato básico de texto
-        text = text.replace(/\\textbf{([^}]+)}/g, '<strong>$1</strong>');
-        text = text.replace(/\\textit{([^}]+)}/g, '<em>$1</em>');
-        text = text.replace(/\\underline{([^}]+)}/g, '<u>$1</u>');
+        // 1. Formato básico de texto: Procesador recursivo de bloques
+        // Resuelve el problema de llaves anidadas como \textbf{\mathcal{F}} o variables como $\sigma$
+        function processFormatting(txt) {
+            const formats = [
+                { cmd: '\\textbf', tag: 'strong' },
+                { cmd: '\\textit', tag: 'em' },
+                { cmd: '\\underline', tag: 'u' }
+            ];
+            let res = txt;
+            for (const fmt of formats) {
+                let cursor = 0;
+                while (true) {
+                    const idx = res.indexOf(fmt.cmd, cursor);
+                    if (idx === -1) break;
+                    const block = extractBraceBlock(res, idx + fmt.cmd.length);
+                    if (block) {
+                        const before = res.substring(0, idx);
+                        const after = res.substring(block.endIndex);
+                        const inner = processFormatting(block.content); // Soporta anidación
+                        res = before + `<${fmt.tag}>` + inner + `</${fmt.tag}>` + after;
+                        cursor = before.length + `<${fmt.tag}>`.length + inner.length + `</${fmt.tag}>`.length;
+                    } else {
+                        cursor = idx + fmt.cmd.length;
+                    }
+                }
+            }
+            return res;
+        }
+        
+        text = processFormatting(text);
         
         // 2. Entornos de listas (enumerate, itemize)
         text = text.replace(/\\begin\{enumerate\}/g, '<ol>');
@@ -96,7 +122,7 @@ const Parser = (() => {
             return opt ? `<li><strong>${opt}</strong> ` : `<li>`;
         });
         
-        // 4. Saltos de línea de párrafo (evita romper estructuras HTML recién formadas)
+        // 4. Saltos de línea de párrafo
         text = text.replace(/\n\n/g, '<br><br>');
         
         // 5. Delegar saneamiento estricto a la whitelist de HTML

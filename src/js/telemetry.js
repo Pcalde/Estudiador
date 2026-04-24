@@ -300,15 +300,6 @@ const Telemetry = (() => {
         }
     }
 
-    function setWeeklyView(mode) {
-        window.weeklyViewMode = mode; 
-        const btn7 = document.getElementById('btn-week-7');
-        const btn28 = document.getElementById('btn-week-28');
-        if (btn7) btn7.classList.toggle('active', mode === '7d');
-        if (btn28) btn28.classList.toggle('active', mode === '28d');
-        updateWeeklyWidget();
-    }
-
     function updateWeeklyWidget() {
         const pomoHistory        = JSON.parse(localStorage.getItem('pomo_history') || '{}');
         const pomoLogHoy         = JSON.parse(localStorage.getItem('pomo_log_today') || '{}');

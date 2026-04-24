@@ -168,29 +168,36 @@ const StudyEngine = (() => {
                 const stats = State.get('sessionData') || {};
                 stats.tarjetas = (stats.tarjetas || 0) + 1;
                 if (calidad === 1) stats.faciles = (stats.faciles || 0) + 1;
-                if (calidad === 1) {
-                    if (typeof EventBus !== 'undefined') {
-                        EventBus.emit('CARD_RATED_EASY');
-                    }
-                }
                 if (calidad === 4) stats.criticas = (stats.criticas || 0) + 1;
                 State.set('sessionData', stats);
-                
 
-                // EXTRACCIÓN de la tarjeta de la cola viva
+                // EXTRACCIÓN O REENCOLADO (Corrección FSRS)
                 let cola = State.get('colaEstudio') || [];
                 const currentIdx = State.get('indiceNavegacion');
-                cola.splice(currentIdx, 1);
-                State.set('colaEstudio', cola);
-
-                // Mover puntero automáticamente sin avanzar el índice
-                if (cola.length === 0) {
-                    State.set('indiceNavegacion', 0);
-                    State.set('conceptoActual', null);
-                } else {
-                    const nextIdx = currentIdx % cola.length; // Si borramos la última, salta a la 0
+                
+                if (calidad === 4) {
+                    // REENCOLAR: Extrae y la envía al final de la cola activa
+                    const tarjetaFallada = cola.splice(currentIdx, 1)[0];
+                    cola.push(tarjetaFallada);
+                    State.set('colaEstudio', cola);
+                    
+                    // El puntero se mantiene (apuntando al nuevo elemento en esa posición)
+                    const nextIdx = currentIdx % cola.length;
                     State.set('indiceNavegacion', nextIdx);
                     State.set('conceptoActual', structuredClone(cola[nextIdx]));
+                } else {
+                    // EXTRACCIÓN NORMAL (Éxito)
+                    cola.splice(currentIdx, 1);
+                    State.set('colaEstudio', cola);
+                    
+                    if (cola.length === 0) {
+                        State.set('indiceNavegacion', 0);
+                        State.set('conceptoActual', null);
+                    } else {
+                        const nextIdx = currentIdx % cola.length; 
+                        State.set('indiceNavegacion', nextIdx);
+                        State.set('conceptoActual', structuredClone(cola[nextIdx]));
+                    }
                 }
             });
 

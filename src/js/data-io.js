@@ -137,6 +137,11 @@ const DataIO = (() => {
             let parsed = JSON.parse(rawJsonString);
             if (!Array.isArray(parsed)) throw new Error("Debe ser una lista []");
             
+            // Reconstrucción determinista del Índice Global según la nueva posición
+            parsed.forEach((card, idx) => {
+                card.IndiceGlobal = idx + 1;
+            });
+            
             let biblioteca = State.get('biblioteca') || {};
             biblioteca[asigActual] = parsed;
             

@@ -77,39 +77,67 @@ const Parser = (() => {
         return sanearLatex(safe);
     }
 
+    // ════════════════════════════════════════════════════════════════
+    // TRANSPILADOR DE MACROS PERSONALIZADAS (tcolorbox -> MathJax)
+    // ════════════════════════════════════════════════════════════════
+    function processCajaEq(text) {
+        if (!text) return "";
+        let result = "";
+        let cursor = 0;
+        const CMD = "\\cajaeq";
+
+        while (cursor < text.length) {
+            const idx = text.indexOf(CMD, cursor);
+            if (idx === -1) {
+                result += text.substring(cursor);
+                break;
+            }
+
+            // Texto previo al comando
+            result += text.substring(cursor, idx);
+            let tempCursor = idx + CMD.length;
+
+            // 1. Argumento opcional de color [color]
+            let color = "#f44336"; // Rojo por defecto
+            if (text[tempCursor] === '[') {
+                const closeBracket = text.indexOf(']', tempCursor);
+                if (closeBracket !== -1) {
+                    const rawColor = text.substring(tempCursor + 1, closeBracket).toLowerCase().trim();
+                    // Mapeo semántico al "Dark Mode Aesthetic" (CSS HEX)
+                    const colorMap = { 
+                        'rojo': '#ef5350', 'azul': '#42a5f5', 'verde': '#66bb6a', 
+                        'amarillo': '#ffee58', 'naranja': '#ffa726', 'blanco': '#ffffff', 'negro': '#ffffff' 
+                    };
+                    color = colorMap[rawColor] || rawColor;
+                    tempCursor = closeBracket + 1;
+                }
+            }
+
+            // 2. Extraer el bloque de ecuación con llaves balanceadas
+            const block = extractBraceBlock(text, tempCursor);
+            if (block) {
+                // Transpilar a MathJax \bbox con diseño equivalente al tcbox
+                result += `\\[ \\bbox[8px, border: 1.5px solid ${color}]{\\displaystyle ${block.content}} \\]`;
+                cursor = block.endIndex;
+            } else {
+                // Bloque malformado (fallback de seguridad)
+                result += CMD;
+                cursor = tempCursor;
+            }
+        }
+        return result;
+    }
+
     function cleanLatexToHtml(latexStr) {
         let text = latexStr;
         
-        // 1. Formato básico de texto: Procesador recursivo de bloques
-        // Resuelve el problema de llaves anidadas como \textbf{\mathcal{F}} o variables como $\sigma$
-        function processFormatting(txt) {
-            const formats = [
-                { cmd: '\\textbf', tag: 'strong' },
-                { cmd: '\\textit', tag: 'em' },
-                { cmd: '\\underline', tag: 'u' }
-            ];
-            let res = txt;
-            for (const fmt of formats) {
-                let cursor = 0;
-                while (true) {
-                    const idx = res.indexOf(fmt.cmd, cursor);
-                    if (idx === -1) break;
-                    const block = extractBraceBlock(res, idx + fmt.cmd.length);
-                    if (block) {
-                        const before = res.substring(0, idx);
-                        const after = res.substring(block.endIndex);
-                        const inner = processFormatting(block.content); // Soporta anidación
-                        res = before + `<${fmt.tag}>` + inner + `</${fmt.tag}>` + after;
-                        cursor = before.length + `<${fmt.tag}>`.length + inner.length + `</${fmt.tag}>`.length;
-                    } else {
-                        cursor = idx + fmt.cmd.length;
-                    }
-                }
-            }
-            return res;
-        }
+        // 0. Transpilar macros matemáticas personalizadas (cajaeq)
+        text = processCajaEq(text);
         
-        text = processFormatting(text);
+        // 1. Formato básico de texto
+        text = text.replace(/\\textbf{([^}]+)}/g, '<strong>$1</strong>');
+        text = text.replace(/\\textit{([^}]+)}/g, '<em>$1</em>');
+        text = text.replace(/\\underline{([^}]+)}/g, '<u>$1</u>');
         
         // 2. Entornos de listas (enumerate, itemize)
         text = text.replace(/\\begin\{enumerate\}/g, '<ol>');
@@ -122,7 +150,7 @@ const Parser = (() => {
             return opt ? `<li><strong>${opt}</strong> ` : `<li>`;
         });
         
-        // 4. Saltos de línea de párrafo
+        // 4. Saltos de línea de párrafo (evita romper estructuras HTML recién formadas)
         text = text.replace(/\n\n/g, '<br><br>');
         
         // 5. Delegar saneamiento estricto a la whitelist de HTML

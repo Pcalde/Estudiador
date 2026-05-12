@@ -338,10 +338,45 @@ const POMODORO = (() => {
                 );
             }
 
-            // 3. ACTUALIZACIÓN DE UI PRINCIPAL (Pasa los 2 argumentos correctamente)
-            const wMin = Number((config || {}).work) || 25;
-            const sMin = Number((config || {}).short) || 5;
-            const totalMin = pomosRestantes * wMin + Math.max(0, pomosRestantes - 1) * sMin;
+            // 3. ACTUALIZACIÓN DE UI PRINCIPAL (Dinámica y precisa)
+            const wMin = Number(config.work) || 25;
+            const sMin = Number(config.short) || 5;
+            const lMin = Number(config.long) || 15;
+            const cMax = Number(config.cyclesBeforeLong) || 4;
+
+            let totalSegundos = 0;
+
+            if (pomosRestantes > 0) {
+                // 1. Partir del tiempo exacto que le queda al reloj en este instante
+                totalSegundos += timeLeftSeconds;
+
+                // 2. Proyectar pomodoros futuros
+                let pomosFuturos = pomosRestantes;
+                let ciclosSimulados = ciclos;
+
+                // Si ya estamos trabajando, el reloj actual ya es un pomodoro.
+                // Lo restamos del futuro y simulamos que el ciclo avanzará.
+                if (currentMode === 'work') {
+                    pomosFuturos--;
+                    ciclosSimulados++;
+                }
+
+                // Sumar los bloques que faltan
+                for (let i = 0; i < pomosFuturos; i++) {
+                    // ¿Toca descanso antes de este pomodoro? (No se añade si estamos actualmente en un descanso y es el primer pomodoro futuro)
+                    if (i > 0 || currentMode === 'work') {
+                        if (ciclosSimulados > 0 && ciclosSimulados % cMax === 0) {
+                            totalSegundos += lMin * 60; // Toca largo
+                        } else {
+                            totalSegundos += sMin * 60; // Toca corto
+                        }
+                    }
+                    totalSegundos += wMin * 60;
+                    ciclosSimulados++;
+                }
+            }
+
+            const totalMin = Math.ceil(totalSegundos / 60);
             const h = Math.floor(totalMin / 60);
             const m = totalMin % 60;
             const tiempoStr = pomosRestantes > 0 ? (h > 0 ? `~${h}h ${m}m` : `${m}min`) : null;

@@ -16,49 +16,58 @@ const DataIO = (() => {
         a.remove();
     }
 
-    // ════════════════════════════════════════════════════════════
-    // 1. IMPORTACIÓN LaTeX (Restaurada a Arquitectura Original)
-    // ════════════════════════════════════════════════════════════
     function procesarImportacionLatex(rawInput, temaDefault) {
         const asigActual = State.get('nombreAsignaturaActual');
         if (!asigActual) { alert("Selecciona una asignatura primero."); return; }
 
-        const newCards = (typeof Parser !== 'undefined') ? Parser.parseLatexToCards(rawInput, temaDefault) : [];
+        // Saneamiento Léxico: Despliega las macros dinámicas en llaves seguras para MathJax
+        // y elimina las definiciones del preámbulo para evitar inyecciones anómalas en parser.js
+        const sanitizedInput = rawInput
+            .replace(/\\newcommand\{\\cajaeq\}[\s\S]*?\\usepackage\[most\]\{tcolorbox\}/g, '')
+            .replace(/\\newtcbox\{\\cajapaso\}[\s\S]*?right=1pt\}/g, '')
+            .replace(/\\cajaeq(?:\[[^\]]*\])?\{/g, '{')
+            .replace(/\\cajapaso\{/g, '{');
+
+        const newCards = (typeof Parser !== 'undefined') ? Parser.parseLatexToCards(sanitizedInput, temaDefault) : [];
         if (newCards.length === 0) { alert("No se detectaron comandos válidos."); return; }
 
         let biblioteca = State.get('biblioteca') || {};
         if (!biblioteca[asigActual]) biblioteca[asigActual] = [];
 
+        // Obtener fecha hoy de forma segura
         const hoy = (typeof window.getFechaHoy === 'function') ? window.getFechaHoy() : new Date().toISOString().slice(0, 10);
+
+        // Tipos base que devuelve el parser
+        const titulosGenericos = ['Definición', 'Teorema', 'Proposición', 'Lema', 'Corolario', 'Nota', 'Ejemplo', 'Concepto', 'Axioma', 'Observación', 'Demostración'];
         let aProcesarPorIA = 0;
 
-        // 1. Preparar las nuevas tarjetas
         newCards.forEach(c => {
-            if (c._needsAutoTitle) {
-                c.Titulo = "Generando título... (IA)";
+            // INYECCIÓN DE INTEGRIDAD REFERENCIAL: Garantiza que el Editor encuentre el índice exacto
+            if (!c.id) {
+                c.id = typeof crypto !== 'undefined' && crypto.randomUUID 
+                    ? crypto.randomUUID() 
+                    : 'c_' + Date.now() + Math.random().toString(36).slice(2);
+            }
+
+            const tituloBase = c.Titulo.replace(' (Auto)', '').trim();
+
+            if (titulosGenericos.includes(tituloBase)) {
+                c._needsAutoTitle = true; 
+                c.Titulo = "Generando título... (IA)"; 
                 aProcesarPorIA++;
             }
+            
             c.Dificultad = 2; 
             c.ProximoRepaso = hoy;
         });
 
-        // 2. Insertar en la biblioteca
         biblioteca[asigActual].push(...newCards);
-
-        // 3. REINDEXACIÓN GLOBAL (Lo que faltaba)
-        // Recorremos TODA la asignatura y asignamos el índice según su posición real en el array
-        biblioteca[asigActual].forEach((card, idx) => {
-            card.IndiceGlobal = idx + 1;
-        });
-
-        // 4. Guardar cambios en el Estado
         State.set('biblioteca', biblioteca);
 
         EventBus.emit('DATA_REQUIRES_SAVE');
         EventBus.emit('STATE_CHANGED', { keys: ['colaEstudio', 'biblioteca'] });
         
-        const importArea = document.getElementById('import-area-latex');
-        if (importArea) importArea.value = "";
+        document.getElementById('import-area-latex').value = "";
         
         if (aProcesarPorIA > 0) {
             alert(`${newCards.length} tarjetas importadas. La IA procesará ${aProcesarPorIA} títulos vacíos.`);
@@ -96,7 +105,8 @@ const DataIO = (() => {
     }
 
     // 2. IMPORTACIÓN JSON
-    function procesarImportacion(raw) {
+    function procesarImportacion() {
+        const raw = document.getElementById('import-area').value;
         try {
             const data = JSON.parse(raw);
             if (!Array.isArray(data)) throw new Error("El JSON debe ser una lista [].");
@@ -104,33 +114,29 @@ const DataIO = (() => {
             const asigActual = State.get('nombreAsignaturaActual');
             if (!asigActual) throw new Error("Selecciona una asignatura primero.");
 
-            let biblioteca = State.get('biblioteca') || {};
-            const arrayAsignatura = biblioteca[asigActual] || [];
-
-            // Identificación de la base para auto-incremento local
-            const maxIdx = arrayAsignatura.reduce((max, c) => Math.max(max, c.IndiceGlobal ?? 0), 0);
-
-            data.forEach((c, i) => {
-                if (c.IndiceGlobal === undefined) c.IndiceGlobal = maxIdx + i + 1;
+            // INYECCIÓN DE INTEGRIDAD REFERENCIAL
+            data.forEach(c => {
                 if (!c.id) {
                     c.id = typeof crypto !== 'undefined' && crypto.randomUUID 
                         ? crypto.randomUUID() 
-                        : 'c_' + Date.now() + Math.random().toString(36).substr(2, 9);
+                        : 'c_' + Date.now() + Math.random().toString(36).slice(2);
                 }
             });
 
-            biblioteca[asigActual] = [...arrayAsignatura, ...data];
+            let biblioteca = State.get('biblioteca') || {};
+            biblioteca[asigActual] = [...(biblioteca[asigActual] || []), ...data];
+
             State.set('biblioteca', biblioteca);
-            
             EventBus.emit('DATA_REQUIRES_SAVE');
             EventBus.emit('STATE_CHANGED', { keys: ['colaEstudio', 'biblioteca'] });
 
-            return { success: true };
+            alert("Importación JSON exitosa.");
+            if (typeof window.cancelarEdicion === 'function') window.cancelarEdicion();
+            if (typeof window.aplicarFiltros === 'function') window.aplicarFiltros();
         } catch (e) {
-            return { success: false, error: e.message };
+            alert("Error en JSON: " + e.message);
         }
     }
-
     // 3. GESTIÓN DE ASIGNATURAS
     function guardarEdicionJSON(rawJsonString) {
         const asigActual = State.get('nombreAsignaturaActual');

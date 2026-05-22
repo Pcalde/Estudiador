@@ -38,6 +38,7 @@ const Telemetry = (() => {
         _run('widget-deuda',        updateDeudaEstudio);
         _run('widget-eficiencia',   updateEficienciaWidget);
         _run('widget-horas',        updateMapaHoras);
+        _run('widget-curva-olvido', updateCurvaOlvidoWidget);
         updateProbabilidadAprobado(); 
         
         // Emitir evento para que UI redibuje sin acoplamiento directo
@@ -484,6 +485,19 @@ const OlvidoAnalytics = {
     })).sort((a, b) => a.tau - b.tau);
   }
 };
+async function updateCurvaOlvidoWidget() {
+    try {
+        const data = await OlvidoAnalytics.procesarCurvaOlvido();
+        // Exigir al menos n > 3 por cada bucket para evitar picos por varianza
+        const datosValidos = data.filter(d => d.n > 3); 
+        
+        if (typeof UI !== 'undefined' && UI.updateCurvaOlvido) {
+            UI.updateCurvaOlvido(datosValidos);
+        }
+    } catch (e) {
+        Logger.error("Error orquestando Curva de Olvido:", e);
+    }
+}
 
 /**
  * Construye el objeto de estadísticas públicas del usuario para Firestore.

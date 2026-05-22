@@ -171,6 +171,17 @@ const StudyEngine = (() => {
 
         const result = Scheduler.calcularSiguienteRepaso(concepto, calidad);
         const tarjetaActualizada = result.tarjeta;
+        
+        if (typeof DB !== 'undefined' && typeof DB.addRevlog === 'function') {
+            DB.addRevlog({
+                cardId: concepto.id,
+                reviewTime: Date.now(),
+                // Si la tarjeta es nueva y no tiene UltimoRepaso, usamos Date.now() como punto 0
+                lastReviewTime: concepto.UltimoRepaso ? new Date(concepto.UltimoRepaso).getTime() : Date.now(),
+                grade: calidad,
+                stability: tarjetaActualizada.fsrs_stability || 0.1 
+            }).catch(e => console.error("Error guardando log FSRS:", e));
+        }
 
         const biblioteca = State.get('biblioteca');
         const idxOriginal = biblioteca[asigActual].findIndex(c => c.id === concepto.id || (c.Titulo === concepto.Titulo && c.Contenido === concepto.Contenido));

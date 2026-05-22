@@ -15,6 +15,7 @@ const State = (() => {
         conceptoActual:          null,
         indiceNavegacion:        0,
         modoSecuencial:          false,
+        modoEstudio:             'aleatorio',
         modoLectura:             false,
 
         // Variables dinámicas de UI del Controlador

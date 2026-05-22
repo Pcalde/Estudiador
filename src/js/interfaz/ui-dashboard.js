@@ -363,64 +363,62 @@ const UIDashboard = (() => {
             </div>`;
     }
 
-    async function renderCurvaOlvido(containerId) {
-  const container = document.getElementById(containerId);
-  if (!container) return;
+let curvaOlvidoChartInstance = null;
 
-  container.innerHTML = `
-    <div class="olvido-widget">
-      <h3>Curva de Olvido (Teórica vs Empírica)</h3>
-      <canvas id="olvido-chart" width="600" height="300"></canvas>
-    </div>
-  `;
+UI.updateCurvaOlvido = function(datosValidos) {
+    const canvas = document.getElementById('olvido-chart');
+    const emptyMsg = document.getElementById('olvido-empty-msg');
+    
+    if (!canvas || !emptyMsg) return;
 
-  const data = await Telemetry.getForgettingCurveData();
-
-  // Descartar intervalos con varianza extrema por escasez de datos (n <= 5)
-  const datosValidos = data.filter(d => d.n > 5);
-
-  const ctx = document.getElementById('olvido-chart').getContext('2d');
-  
-  // Requiere Chart.js cargado en el index.html
-  new Chart(ctx, {
-    type: 'scatter',
-    data: {
-      datasets: [
-        {
-          type: 'line',
-          label: 'Teórica R(τ)',
-          data: datosValidos.map(d => ({ x: d.tau, y: d.retencionTeorica })),
-          borderColor: 'rgba(76, 175, 80, 1)',
-          borderWidth: 2,
-          fill: false,
-          tension: 0.3,
-          pointRadius: 0
-        },
-        {
-          type: 'scatter',
-          label: 'Empírica (Tus respuestas)',
-          data: datosValidos.map(d => ({ x: d.tau, y: d.retencionReal })),
-          backgroundColor: 'rgba(255, 87, 34, 1)',
-          pointRadius: 4
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      scales: {
-        x: { 
-          title: { display: true, text: 'Tiempo Normalizado (τ = t / S)' },
-          min: 0
-        },
-        y: { 
-          title: { display: true, text: 'Probabilidad de Retención (R)' }, 
-          min: 0, 
-          max: 1.05 
-        }
-      }
+    if (!datosValidos || datosValidos.length === 0) {
+        canvas.style.display = 'none';
+        emptyMsg.style.display = 'block';
+        return;
     }
-  });
-}
+
+    canvas.style.display = 'block';
+    emptyMsg.style.display = 'none';
+
+    const ctx = canvas.getContext('2d');
+    if (curvaOlvidoChartInstance) curvaOlvidoChartInstance.destroy();
+
+    curvaOlvidoChartInstance = new Chart(ctx, {
+        type: 'scatter',
+        data: {
+            datasets: [
+                {
+                    type: 'line',
+                    label: 'Teórica R(τ)',
+                    data: datosValidos.map(d => ({ x: d.tau, y: d.retencionTeorica })),
+                    borderColor: 'rgba(76, 175, 80, 0.8)', // Verde FSRS
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.4,
+                    pointRadius: 0
+                },
+                {
+                    type: 'scatter',
+                    label: 'Empírica (Tus aciertos)',
+                    data: datosValidos.map(d => ({ x: d.tau, y: d.retencionReal })),
+                    backgroundColor: 'rgba(33, 150, 243, 1)', // Azul de usuario
+                    pointRadius: 5
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { title: { display: true, text: 'Tiempo Normalizado (τ)', color: '#666' }, min: 0 },
+                y: { title: { display: true, text: 'Retención (R)', color: '#666' }, min: 0, max: 1.05 }
+            },
+            plugins: {
+                legend: { labels: { color: '#aaa', boxWidth: 12 } }
+            }
+        }
+    });
+};
 
     function updateEficienciaWidget(bib, asigActual, pomoLogHoy) {
         const elTarjetas  = document.getElementById('ef-tarjetas');

@@ -391,7 +391,7 @@ UI.updateCurvaOlvido = function(datosValidos) {
                     type: 'line',
                     label: 'Teórica R(τ)',
                     data: datosValidos.map(d => ({ x: d.tau, y: d.retencionTeorica })),
-                    borderColor: 'rgba(76, 175, 80, 0.8)', // Verde FSRS
+                    borderColor: 'rgba(76, 175, 80, 0.8)', // Verde
                     borderWidth: 2,
                     fill: false,
                     tension: 0.4,
@@ -401,7 +401,7 @@ UI.updateCurvaOlvido = function(datosValidos) {
                     type: 'scatter',
                     label: 'Empírica (Tus aciertos)',
                     data: datosValidos.map(d => ({ x: d.tau, y: d.retencionReal })),
-                    backgroundColor: 'rgba(33, 150, 243, 1)', // Azul de usuario
+                    backgroundColor: 'rgba(33, 150, 243, 1)', // Azul
                     pointRadius: 5
                 }
             ]
@@ -419,7 +419,6 @@ UI.updateCurvaOlvido = function(datosValidos) {
         }
     });
 };
-
     function updateEficienciaWidget(bib, asigActual, pomoLogHoy) {
         const elTarjetas  = document.getElementById('ef-tarjetas');
         const elRatio     = document.getElementById('ef-ratio');

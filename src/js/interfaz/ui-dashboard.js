@@ -363,6 +363,65 @@ const UIDashboard = (() => {
             </div>`;
     }
 
+    async function renderCurvaOlvido(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  container.innerHTML = `
+    <div class="olvido-widget">
+      <h3>Curva de Olvido (Teórica vs Empírica)</h3>
+      <canvas id="olvido-chart" width="600" height="300"></canvas>
+    </div>
+  `;
+
+  const data = await Telemetry.getForgettingCurveData();
+
+  // Descartar intervalos con varianza extrema por escasez de datos (n <= 5)
+  const datosValidos = data.filter(d => d.n > 5);
+
+  const ctx = document.getElementById('olvido-chart').getContext('2d');
+  
+  // Requiere Chart.js cargado en el index.html
+  new Chart(ctx, {
+    type: 'scatter',
+    data: {
+      datasets: [
+        {
+          type: 'line',
+          label: 'Teórica R(τ)',
+          data: datosValidos.map(d => ({ x: d.tau, y: d.retencionTeorica })),
+          borderColor: 'rgba(76, 175, 80, 1)',
+          borderWidth: 2,
+          fill: false,
+          tension: 0.3,
+          pointRadius: 0
+        },
+        {
+          type: 'scatter',
+          label: 'Empírica (Tus respuestas)',
+          data: datosValidos.map(d => ({ x: d.tau, y: d.retencionReal })),
+          backgroundColor: 'rgba(255, 87, 34, 1)',
+          pointRadius: 4
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        x: { 
+          title: { display: true, text: 'Tiempo Normalizado (τ = t / S)' },
+          min: 0
+        },
+        y: { 
+          title: { display: true, text: 'Probabilidad de Retención (R)' }, 
+          min: 0, 
+          max: 1.05 
+        }
+      }
+    }
+  });
+}
+
     function updateEficienciaWidget(bib, asigActual, pomoLogHoy) {
         const elTarjetas  = document.getElementById('ef-tarjetas');
         const elRatio     = document.getElementById('ef-ratio');

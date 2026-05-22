@@ -242,7 +242,7 @@ const StudyEngine = (() => {
         procesarRepaso,
         toggleModoSecuencial,
         toggleModoLectura,
-        setmodoestudio
+        setModoEstudio
     };
 })();
 

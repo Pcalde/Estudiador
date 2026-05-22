@@ -116,12 +116,18 @@ const DB = (() => {
         });
     };
 
+    const getAll = async (storeName) => {
+        const db = await init();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(storeName, 'readonly');
+            const req = tx.objectStore(storeName).getAll();
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = (e) => reject(e.target.error);
+        });
+    };
+
     return { 
-        init, 
-        addRevlog, 
-        getUnsyncedRevlogs, 
-        markRevlogsAsSynced, 
-        setVar, 
-        getVar 
+        init, addRevlog, getUnsyncedRevlogs, markRevlogsAsSynced, setVar, getVar, 
+        getAll // <--- Añadir aquí
     };
 })();

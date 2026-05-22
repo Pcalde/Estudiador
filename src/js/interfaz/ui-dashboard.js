@@ -363,62 +363,7 @@ const UIDashboard = (() => {
             </div>`;
     }
 
-let curvaOlvidoChartInstance = null;
 
-UI.updateCurvaOlvido = function(datosValidos) {
-    const canvas = document.getElementById('olvido-chart');
-    const emptyMsg = document.getElementById('olvido-empty-msg');
-    
-    if (!canvas || !emptyMsg) return;
-
-    if (!datosValidos || datosValidos.length === 0) {
-        canvas.style.display = 'none';
-        emptyMsg.style.display = 'block';
-        return;
-    }
-
-    canvas.style.display = 'block';
-    emptyMsg.style.display = 'none';
-
-    const ctx = canvas.getContext('2d');
-    if (curvaOlvidoChartInstance) curvaOlvidoChartInstance.destroy();
-
-    curvaOlvidoChartInstance = new Chart(ctx, {
-        type: 'scatter',
-        data: {
-            datasets: [
-                {
-                    type: 'line',
-                    label: 'Teórica R(τ)',
-                    data: datosValidos.map(d => ({ x: d.tau, y: d.retencionTeorica })),
-                    borderColor: 'rgba(76, 175, 80, 0.8)', // Verde
-                    borderWidth: 2,
-                    fill: false,
-                    tension: 0.4,
-                    pointRadius: 0
-                },
-                {
-                    type: 'scatter',
-                    label: 'Empírica (Tus aciertos)',
-                    data: datosValidos.map(d => ({ x: d.tau, y: d.retencionReal })),
-                    backgroundColor: 'rgba(33, 150, 243, 1)', // Azul
-                    pointRadius: 5
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                x: { title: { display: true, text: 'Tiempo Normalizado (τ)', color: '#666' }, min: 0 },
-                y: { title: { display: true, text: 'Retención (R)', color: '#666' }, min: 0, max: 1.05 }
-            },
-            plugins: {
-                legend: { labels: { color: '#aaa', boxWidth: 12 } }
-            }
-        }
-    });
-};
     function updateEficienciaWidget(bib, asigActual, pomoLogHoy) {
         const elTarjetas  = document.getElementById('ef-tarjetas');
         const elRatio     = document.getElementById('ef-ratio');

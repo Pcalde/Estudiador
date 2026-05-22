@@ -93,6 +93,8 @@
     <link rel="preload" href="https://use.fontawesome.com/releases/v6.7.2/css/all.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
     <noscript><link rel="stylesheet" href="https://use.fontawesome.com/releases/v6.5.1/css/all.css"></noscript>
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
     <link rel="stylesheet" href="src/css/styles.css">
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
     <style>
@@ -656,6 +658,15 @@
                     <div style="font-size:0.65em; color:#888; text-transform:uppercase; margin-top:2px;">puntos de deuda</div>
                 </div>
                 <div id="deuda-breakdown" class="deuda-breakdown"></div>
+            </div>
+            <div class="stat-widget" data-widget-id="widget-curva-olvido">
+                <div class="stat-title">Curva de Olvido (Teórica vs Empírica)</div>
+                <div style="position: relative; height: 180px; width: 100%;">
+                    <canvas id="olvido-chart"></canvas>
+                </div>
+                <div id="olvido-empty-msg" style="display: none; font-size: 0.75em; color: #888; text-align: center; margin-top: 30px;">
+                    <i class="fa-solid fa-chart-line"></i> Faltan datos (n>3) para proyectar la curva.
+                </div>
             </div>
 
             <!-- WIDGET: Eficiencia de Sesión -->

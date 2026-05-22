@@ -752,6 +752,26 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         picker.addEventListener('change', () => guardarColoresGlobales());
     });
+    // Evento al cambiar un radio del modal
+    document.querySelectorAll('input[name="radio-modo-estudio"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            window.setModoEstudio(e.target.value);
+            
+            // Actualizar la etiqueta visual del botón principal
+            const etiquetas = {
+                'aleatorio': 'Aleatorio',
+                'secuencial_retraso': 'Sec. Retraso',
+                'secuencial_puro': 'Sec. Puro',
+                'lectura': 'Lectura'
+            };
+            document.getElementById('label-modo-estudio').textContent = etiquetas[e.target.value];
+            
+            // Cerrar con un pequeño retraso
+            setTimeout(() => {
+                document.getElementById('modo-estudio-modal').style.display = 'none';
+            }, 150);
+        });
+    });
 
     // Sidebar y navegación
     on('#sidebar-toggle',              'click',  toggleSidebar);
@@ -792,8 +812,17 @@ document.addEventListener('DOMContentLoaded', () => {
     on('#btn-prev',            'click',  window.anteriorTarjeta);
     on('#btn-siguientetarjeta','click',  () => window.siguienteTarjeta(true));
     on('#btn-filtros-dropdown','click',  abrirModalFiltros);
-    on('#check-secuencial',    'change', window.toggleModoSecuencial);
-    on('#check-lectura',       'change', window.toggleModoLectura);
+    on('#btn-modal-modo-estudio', 'click', () => {
+        const modoActual = State.get('modoEstudio') || 'aleatorio';
+        const radio = document.querySelector(`input[name="radio-modo-estudio"][value="${modoActual}"]`);
+        if (radio) radio.checked = true;
+        document.getElementById('modo-estudio-modal').style.display = 'flex';
+    });
+
+    // Cerrar Modal
+    on('#btn-cerrar-modo-estudio', 'click', () => {
+        document.getElementById('modo-estudio-modal').style.display = 'none';
+    });
 
     // PDF
     on('#pdf-toggle-mini',      'click',  toggleAcordeonPDF);

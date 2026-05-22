@@ -236,15 +236,9 @@
                             <i id="filtros-icon" class="fa-solid fa-filter filtros-icon"></i>
                             Filtros
                         </button>
-                        <label class="study-check-label" title="Atajo: Tecla S">
-                            <input type="checkbox" id="check-secuencial"> 
-                            Sec. <span class="study-check-shortcut">(S)</span>
-                        </label>
-                        
-                        <label class="study-check-label" title="Atajo: Tecla L">
-                            <input type="checkbox" id="check-lectura"> 
-                            Lectura <span class="study-check-shortcut">(L)</span>
-                        </label>
+                        <button id="btn-modal-modo-estudio" title="Elegir Modo de Estudio" style="background:transparent; border:1px solid var(--border-light); color:var(--text-muted); padding:5px 12px; border-radius:6px; cursor:pointer; font-size:0.82em; transition:all 0.2s;">
+                            <i class="fa-solid fa-layer-group"></i> <span id="label-modo-estudio">Aleatorio</span>
+                        </button>
                         <span id="contador-filtro" class="contador-filtro"></span>
                     </div>
                 </div>
@@ -1825,6 +1819,48 @@
         
         <div id="montecarlo-modal-body"></div>
         
+    </div>
+</div>
+<div id="modo-estudio-modal" style="display:none; position:fixed; inset:0; z-index:10000; background:rgba(0,0,0,0.85); backdrop-filter:blur(4px); justify-content:center; align-items:center;">
+    <div class="modal-content" style="max-width:420px; width:95%; border:1px solid #444; background:var(--card-bg); border-radius:12px; padding:20px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <h3 style="margin:0; color:#eee;">Modo de Estudio</h3>
+            <button id="btn-cerrar-modo-estudio" style="background:transparent; border:none; color:var(--text-muted); font-size:1.2em; cursor:pointer;">✕</button>
+        </div>
+        
+        <div style="display:flex; flex-direction:column; gap:10px;">
+            <label class="exam-mode-card" style="display:flex; align-items:center; gap:15px; padding:15px; background:#1a1a1a; border:1px solid #333; border-radius:8px; cursor:pointer; text-align:left;">
+                <input type="radio" name="radio-modo-estudio" value="aleatorio" style="transform:scale(1.2);">
+                <div>
+                    <strong style="color:#eee; display:block; font-size:1.05em;"><i class="fa-solid fa-shuffle"></i> Aleatorio (FSRS)</strong>
+                    <span style="color:#888; font-size:0.85em;">Baraja las tarjetas para un repaso activo óptimo.</span>
+                </div>
+            </label>
+            
+            <label class="exam-mode-card" style="display:flex; align-items:center; gap:15px; padding:15px; background:#1a1a1a; border:1px solid #333; border-radius:8px; cursor:pointer; text-align:left;">
+                <input type="radio" name="radio-modo-estudio" value="secuencial_retraso" style="transform:scale(1.2);">
+                <div>
+                    <strong style="color:#eee; display:block; font-size:1.05em;"><i class="fa-solid fa-sort-amount-down"></i> Secuencial c/ Retraso</strong>
+                    <span style="color:#888; font-size:0.85em;">Primero las atrasadas, luego el temario en orden.</span>
+                </div>
+            </label>
+            
+            <label class="exam-mode-card" style="display:flex; align-items:center; gap:15px; padding:15px; background:#1a1a1a; border:1px solid #333; border-radius:8px; cursor:pointer; text-align:left;">
+                <input type="radio" name="radio-modo-estudio" value="secuencial_puro" style="transform:scale(1.2);">
+                <div>
+                    <strong style="color:#eee; display:block; font-size:1.05em;"><i class="fa-solid fa-list-ol"></i> Secuencial Puro</strong>
+                    <span style="color:#888; font-size:0.85em;">Sigue el temario de principio a fin, ignorando fechas.</span>
+                </div>
+            </label>
+
+            <label class="exam-mode-card" style="display:flex; align-items:center; gap:15px; padding:15px; background:#1a1a1a; border:1px solid #333; border-radius:8px; cursor:pointer; text-align:left;">
+                <input type="radio" name="radio-modo-estudio" value="lectura" style="transform:scale(1.2);">
+                <div>
+                    <strong style="color:#eee; display:block; font-size:1.05em;"><i class="fa-solid fa-book-open"></i> Modo Lectura</strong>
+                    <span style="color:#888; font-size:0.85em;">Secuencial puro, pero la respuesta siempre es visible.</span>
+                </div>
+            </label>
+        </div>
     </div>
 </div>
 <div id="modal-montecarlo" class="modal-overlay"></div>

@@ -6,6 +6,22 @@
 
 const Telemetry = (() => {
 
+    
+    async function updateCurvaOlvidoWidget() {
+        try {
+            const data = await OlvidoAnalytics.procesarCurvaOlvido();
+            // Filtramos para exigir un tamaño muestral mínimo por intervalo de tiempo
+            const datosValidos = data.filter(d => d.n > 3); 
+            
+            if (typeof UI !== 'undefined' && UI.updateCurvaOlvido) {
+                UI.updateCurvaOlvido(datosValidos);
+            }
+        } catch (e) {
+            console.error("Error orquestando Curva de Olvido:", e);
+        }
+    }
+
+    
     function updateDashboard() {
         const asig = State.get('nombreAsignaturaActual');
         
@@ -17,7 +33,6 @@ const Telemetry = (() => {
 
         const _hidden = (State.get('widgetConfig') || {}).hidden || {};
         
-        // Error Boundary para evitar fallos en cascada en el Dashboard
         const _run = (wid, fn) => { 
             if (!_hidden[wid]) {
                 try {
@@ -38,14 +53,16 @@ const Telemetry = (() => {
         _run('widget-deuda',        updateDeudaEstudio);
         _run('widget-eficiencia',   updateEficienciaWidget);
         _run('widget-horas',        updateMapaHoras);
+        
+        // Ejecución delegada de la curva de olvido
         _run('widget-curva-olvido', updateCurvaOlvidoWidget);
+        
         updateProbabilidadAprobado(); 
         
-        // Emitir evento para que UI redibuje sin acoplamiento directo
         if (typeof EventBus !== 'undefined') {
             EventBus.emit('TELEMETRY_UPDATED', { widgets: ['upcoming-events', 'horas', 'probability'] });
         }
-}
+    }
         
  //////////////////////////////
  // SIMULACIÓN DE MONTECARLO

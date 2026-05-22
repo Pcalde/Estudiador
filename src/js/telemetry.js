@@ -446,6 +446,44 @@ function _calcularRachaDesdeEstado(biblioteca) {
         }
         return streak;
     }
+const OlvidoAnalytics = {
+  async procesarCurvaOlvido() {
+    const logs = await DB.getAll('fsrs_logs'); 
+    
+    const datosGrafica = logs.map(log => {
+      const diasDesdeRepaso = (log.reviewTime - log.lastReviewTime) / 86400000;
+      const tau = diasDesdeRepaso / log.stability; 
+      
+      return {
+        tau: tau,
+        yProb: Math.pow(0.9, tau),
+        yReal: log.grade > 1 ? 1 : 0 
+      };
+    }).filter(d => !isNaN(d.tau) && isFinite(d.tau)); // Filtrar fallos de datos
+
+    return this.agruparDatos(datosGrafica);
+  },
+  
+  agruparDatos(datosRaw) {
+    // Binning por intervalos de tau de 0.1
+    const binned = {};
+    datosRaw.forEach(d => {
+      const bucket = (Math.round(d.tau * 10) / 10).toFixed(1);
+      if(!binned[bucket]) {
+        binned[bucket] = { sumReal: 0, count: 0, rTeorico: Math.pow(0.9, parseFloat(bucket)) };
+      }
+      binned[bucket].sumReal += d.yReal;
+      binned[bucket].count += 1;
+    });
+
+    return Object.keys(binned).map(bucket => ({
+      tau: parseFloat(bucket),
+      retencionReal: binned[bucket].sumReal / binned[bucket].count,
+      retencionTeorica: binned[bucket].rTeorico,
+      n: binned[bucket].count // Tamaño muestral
+    })).sort((a, b) => a.tau - b.tau);
+  }
+};
 
 /**
  * Construye el objeto de estadísticas públicas del usuario para Firestore.
@@ -514,6 +552,7 @@ function construirResumenPublico() {
         updatePronostico, updateDeudaEstudio, updateEficienciaWidget, construirResumenPublico,
         updateMapaHoras, showResumenSesion, cerrarResumenSesion, updatePendingWindow, registrarExamen,
         updateProbabilidadAprobado, lanzarSimulacionMonteCarlo,
+        getForgettingCurveData: () => OlvidoAnalytics.procesarCurvaOlvido(),
     };
 })();
 

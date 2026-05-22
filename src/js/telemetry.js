@@ -506,7 +506,9 @@ async function updateCurvaOlvidoWidget() {
     try {
         const data = await OlvidoAnalytics.procesarCurvaOlvido();
         // Exigir al menos n > 3 por cada bucket para evitar picos por varianza
-        const datosValidos = data.filter(d => d.n > 3); 
+        // const datosValidos = data.filter(d => d.n > 3); 
+        console.log("Datos procesados para la curva:", data); // <-- AÑADE ESTO
+        const datosValidos = data; // Quita el .filter(d => d.n > 3) temporalmente
         
         if (typeof UI !== 'undefined' && UI.updateCurvaOlvido) {
             UI.updateCurvaOlvido(datosValidos);

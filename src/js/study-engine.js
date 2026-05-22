@@ -74,13 +74,18 @@ const StudyEngine = (() => {
 
         // 2. Lógica de Ordenación y Barajado
         const isSecuencial = State.get('modoSecuencial');
-        if (isSecuencial) {
+        const modoEstudio = State.get('modoEstudio') || 'aleatorio';
+
+        if (modoEstudio === 'secuencial_retraso') {
             filtrados.sort((a, b) => {
                 const valA = a.ProximoRepaso ? window.fechaValor(a.ProximoRepaso) : 0;
                 const valB = b.ProximoRepaso ? window.fechaValor(b.ProximoRepaso) : 0;
-                return valA - valB;
+                return valA - valB; // Primero las atrasadas
             });
+        } else if (modoEstudio === 'secuencial_puro' || modoEstudio === 'lectura') {
+            // No hacemos sort, se mantiene el orden natural de creación/JSON del temario
         } else {
+            // Aleatorio
             for (let i = filtrados.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [filtrados[i], filtrados[j]] = [filtrados[j], filtrados[i]];
@@ -107,6 +112,18 @@ const StudyEngine = (() => {
 
         if (filtrados.length === 0 && typeof UI !== 'undefined' && UI.renderTarjetaVacia) {
             UI.renderTarjetaVacia();
+        }
+    }
+    function setModoEstudio(modo) {
+        State.set('modoEstudio', modo);
+        // Mantenemos actualizados los estados viejos para no romper los renderizadores (como el auto-revelar en modo lectura)
+        State.set('modoLectura', modo === 'lectura');
+        State.set('modoSecuencial', modo !== 'aleatorio');
+        
+        aplicarFiltros();
+        
+        if (modo === 'lectura' && typeof UI !== 'undefined' && UI.revelar) {
+            UI.revelar();
         }
     }
 
@@ -224,7 +241,8 @@ const StudyEngine = (() => {
         siguienteTarjeta,
         procesarRepaso,
         toggleModoSecuencial,
-        toggleModoLectura
+        toggleModoLectura,
+        setmodoestudio
     };
 })();
 
@@ -235,6 +253,7 @@ window.aplicarFiltros = (isManual = true) => StudyEngine.aplicarFiltros(isManual
 window.anteriorTarjeta = () => StudyEngine.anteriorTarjeta();
 window.siguienteTarjeta = () => StudyEngine.siguienteTarjeta();
 window.procesarRepaso = (c) => StudyEngine.procesarRepaso(c);
+window.setModoEstudio = (modo) => StudyEngine.setModoEstudio(modo);
 
 window.toggleModoSecuencial = (eventOrBool) => {
     let isSeq;

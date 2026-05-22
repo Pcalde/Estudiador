@@ -155,9 +155,9 @@ const Telemetry = (() => {
     
     function updatePomoStats() {
     const pomoLogHoy = JSON.parse(localStorage.getItem('pomo_log_today') || '{"date":"","count":0,"details":{}}');
-    const plan = State.get('planificador') || { schedule: {} };
+    const plan = State.get('planificador') || {};
     const todayStr = window.getFechaHoy();
-    const planHoy = plan.schedule[todayStr] || [];
+    const planHoy = (plan.schedule || {})[todayStr] || [];
     const plannerTasks = planHoy.map(t => ({
         text: `[${t.asigNombre}] ${t.temaNombre}`,
         est: t.pomosAsignados || 0,

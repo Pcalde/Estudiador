@@ -815,37 +815,49 @@ const UIDashboard = (() => {
         `;
     }
 
-    function renderWidgetMonteCarlo(res) {
+    function renderWidgetMonteCarlo(res, history = []) {
         const contenedor = document.getElementById('widget-montecarlo-container');
         if (!contenedor) return;
 
         if (!res) {
             contenedor.innerHTML = `
-                <div class="stat-value" style="font-size: 0.75rem; color:var(--text-subtle)">Pendiente de cálculo</div>
-                <button onclick="window.abrirModalMonteCarlo()" class="btn-modern btn-muted" style="
-                    margin-top: 10px; 
-                    width: 100%; 
-                    justify-content: center; 
-                    font-weight: bold;">
-                    <i class="fa-solid fa-dice"></i> Empezar Simulación
+                <div class="stat-value" style="font-size: 0.8rem; color:var(--text-muted); text-align:center;">
+                    Sin análisis previo
+                </div>
+                <button onclick="window.abrirModalMonteCarlo()" class="btn-modern btn-muted" style="margin-top: 10px; width: 100%; justify-content: center; font-weight: bold;">
+                    <i class="fa-solid fa-dice"></i> Realizar simulación
                 </button>
             `;
             return;
         }
 
-        let color = res.probabilidad >= 90 ? '#2a701d' : (res.probabilidad>=70 ? '#2b78a4': (res.probabilidad >= 50 ? '#a7a339' : '#e63434'));
+        let color = res.probabilidad >= 80 ? 'var(--status-green)' : (res.probabilidad >= 50 ? 'var(--status-blue)' : 'var(--status-red)');
+        
+        let trendHtml = '';
+        if (history.length >= 2) {
+            const current = history[history.length - 1].prob;
+            const previous = history[history.length - 2].prob;
+            const delta = current - previous;
+            if (delta <= -2.0) trendHtml = `<span style="color:var(--status-red); font-size:0.8em; margin-left:6px;" title="Derivada negativa (Riesgo)"><i class="fa-solid fa-arrow-trend-down"></i> ${delta.toFixed(1)}%</span>`;
+            else if (delta >= 2.0) trendHtml = `<span style="color:var(--status-green); font-size:0.8em; margin-left:6px;" title="Derivada positiva (Convergencia)"><i class="fa-solid fa-arrow-trend-up"></i> +${delta.toFixed(1)}%</span>`;
+            else trendHtml = `<span style="color:var(--text-muted); font-size:0.8em; margin-left:6px;" title="Estable"><i class="fa-solid fa-arrow-right"></i></span>`;
+        }
         
         contenedor.innerHTML = `
             <div style="font-size: 0.9rem; color: var(--text-main);">
-                Aprobarías el <strong style="color: ${color}; font-size: 1.05rem;">${res.probabilidad}%</strong> de los exámenes.
+                Aprobarías el <strong style="color: ${color}; font-size: 1.05rem;">${res.probabilidad}%</strong> de los exámenes. ${trendHtml}
             </div>
             <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 5px;">
                 Nota media estimada: <strong>${res.notaMedia} / ${res.notaMaxima}</strong>
             </div>
-            <button onclick="window.abrirModalMonteCarlo()" class="btn-modern btn-muted" style="
-            margin-top: 10px; font-size: 0.8rem;width: 100%;justify-content: center;">
-                <i class="fa-solid fa-dice"></i> Recalcular
-            </button>
+            <div style="display: flex; gap: 6px; margin-top: 10px;">
+                <button onclick="window.abrirModalMonteCarlo()" class="btn-modern btn-muted" style="flex:1; font-size: 0.8rem; justify-content: center;">
+                    <i class="fa-solid fa-magnifying-glass-chart"></i> Consultar
+                </button>
+                <button onclick="window.recalcularMonteCarlo()" class="btn-modern btn-muted" style="flex:1; font-size: 0.8rem; justify-content: center;">
+                    <i class="fa-solid fa-rotate-right"></i> Recalcular
+                </button>
+            </div>
         `;
     }
 
@@ -880,123 +892,178 @@ const UIDashboard = (() => {
         if (subtitle) subtitle.innerText = `Analizando impacto marginal de la tarjeta ${index} de ${total}`;
     }
 
-    function abrirModalMonteCarlo() {
-        const modalOverlay = document.getElementById('modal-montecarlo');
-        if (modalOverlay) modalOverlay.classList.add('visible');
+    function abrirModalMonteCarlo(modo = 'auto') {
+    const asigActual = State.get('nombreAsignaturaActual');
+    if (!asigActual) {
+        if (typeof Toast !== 'undefined') Toast.show('Selecciona una asignatura primero.', 'warning');
+        return;
+    }
 
-        const asigActual = State.get('nombreAsignaturaActual');
-        const tarjetas = State.get('biblioteca')[asigActual] || [];
-        
-        const tiposSet = new Set();
-        tarjetas.forEach(c => {
-            let t = c.Apartado ? c.Apartado.trim().toLowerCase() : '';
-            if (!t) tiposSet.add('General');
-            else if (t.startsWith('demo')) tiposSet.add('Demostraciones');
-            else tiposSet.add(t.charAt(0).toUpperCase() + t.slice(1));
-        });
-        const tipos = Array.from(tiposSet).sort();
+    const resultados = State.get('resultadosMonteCarlo') || {};
+    const res = resultados[asigActual];
 
-        let cuerpo = `
-            <p style="font-size:0.85em; color:#bbb; margin-top:0;">Configura las reglas del examen y focaliza la predicción en el tiempo.</p>
+    // 1. Inferencia de modo según estado
+    if (modo === 'auto') {
+        modo = res ? 'ver' : 'config';
+    }
+
+    const modalOverlay = document.getElementById('modal-montecarlo');
+    if (modalOverlay) modalOverlay.classList.add('visible');
+
+    // 2. Bifurcación: mostrar resultados si existen y modo es 'ver'
+    if (modo === 'ver' && res) {
+        const inyectarTarjetaCache = (idTarjeta) => {
+            const tarjetasTotales = State.get('biblioteca')[asigActual] || [];
+            const tarjetaOriginal = tarjetasTotales.find(t => t.id === idTarjeta);
+            if (!tarjetaOriginal) return;
             
-            <div style="background:#1a1a1a; border:1px solid #2a2a2a; border-radius:6px; padding:10px; margin-bottom:5px;">
+            State.batch(() => {
+                let cola = State.get('colaEstudio') || [];
+                cola = [tarjetaOriginal, ...cola.filter(t => t.id !== idTarjeta)];
+                State.set('colaEstudio', cola);
+                State.set('indiceNavegacion', 0);
+                State.set('conceptoActual', structuredClone(tarjetaOriginal));
+            });
+            
+            cerrarModalMonteCarlo();
+            if (typeof Toast !== 'undefined') Toast.show(`Añadida al estudio: ${tarjetaOriginal.Titulo}`, 'success');
+        };
+
+        renderResultadosMonteCarlo(res, res.top5 || null, inyectarTarjetaCache);
+        return;
+    }
+
+    // 3. Renderizado de Configuración (HTML CORREGIDO)
+    const tarjetas = State.get('biblioteca')[asigActual] || [];
+    const tiposSet = new Set();
+    tarjetas.forEach(c => {
+        let t = c.Apartado ? c.Apartado.trim().toLowerCase() : '';
+        if (!t) tiposSet.add('General');
+        else if (t.startsWith('demo')) tiposSet.add('Demostraciones');
+        else tiposSet.add(t.charAt(0).toUpperCase() + t.slice(1));
+    });
+    const tipos = Array.from(tiposSet).sort();
+
+    let cuerpo = `
+        <p style="font-size:0.85em; color:#bbb; margin-top:0;">Configura las reglas del examen y focaliza la predicción en el tiempo.</p>
+        
+        <div style="background:#1a1a1a; border:1px solid #2a2a2a; border-radius:6px; padding:10px; margin-bottom:5px;">
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+                <div style="display:flex; flex-direction:column; gap:3px;">
+                    <label style="font-size:0.7em; color:#888;">Nota Máxima</label>
+                    <input type="number" id="mc-nota-max" value="10.0" step="0.5" class="input-glass" style="width:100%; font-size:0.8em; padding:5px;">
+                </div>
+                <div style="display:flex; flex-direction:column; gap:3px;">
+                    <label style="font-size:0.7em; color:#888;">Corte Aprobado</label>
+                    <input type="number" id="mc-nota-obj" value="5.0" class="input-glass" style="width:100%; font-size:0.8em; padding:5px;">
+                </div>
+                <div style="display:flex; flex-direction:column; gap:3px;">
+                    <label style="font-size:0.7em; color:#888;">Límite Preguntas</label>
+                    <input type="number" id="mc-max-preguntas" value="10" class="input-glass" style="width:100%; font-size:0.8em; padding:5px;">
+                </div>
+                <div style="display:flex; flex-direction:column; gap:3px;">
+                    <label style="font-size:0.7em; color:#888;">Pts/Tarjeta Máx.</label>
+                    <input type="number" id="mc-max-peso" value="3.0" step="0.25" class="input-glass" style="width:100%; font-size:0.8em; padding:5px;">
+                </div>
+            </div>
+        </div>
+
+        <div style="background:#1a1a1a; border:1px solid #2a2a2a; border-radius:6px; padding:10px; margin-bottom:5px;">
+            <div style="display:flex; flex-direction:column; gap:8px;">
+                <div style="display:flex; flex-direction:column; gap:3px;">
+                    <label style="font-size:0.7em; color:#888;">Rango de Temas a Evaluar (Ej: 1,2,4-7)</label>
+                    <input type="text" id="mc-filtro-tema-input" class="input-glass" placeholder="Vacío = toda la asignatura" style="width:100%; font-size:0.8em; padding:5px;">
+                </div>
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
                     <div style="display:flex; flex-direction:column; gap:3px;">
-                        <label style="font-size:0.7em; color:#888;">Nota Máxima</label>
-                        <input type="number" id="mc-nota-max" value="10.0" step="0.5" class="input-glass" style="width:100%; font-size:0.8em; padding:5px;">
+                        <label style="font-size:0.7em; color:#888;">Fecha del Examen</label>
+                        <input type="date" id="mc-fecha-examen" class="input-glass" style="width:100%; font-size:0.8em; padding:5px;">
                     </div>
                     <div style="display:flex; flex-direction:column; gap:3px;">
-                        <label style="font-size:0.7em; color:#888;">Corte Aprobado</label>
-                        <input type="number" id="mc-nota-obj" value="5.0" class="input-glass" style="width:100%; font-size:0.8em; padding:5px;">
+                        <label style="font-size:0.7em; color:#888;">Simulaciones Base</label>
+                        <input type="number" id="mc-simulaciones" value="3000" step="500" class="input-glass" style="width:100%; font-size:0.8em; padding:5px;">
                     </div>
                     <div style="display:flex; flex-direction:column; gap:3px;">
-                        <label style="font-size:0.7em; color:#888;">Límite Preguntas</label>
-                        <input type="number" id="mc-max-preguntas" value="10" class="input-glass" style="width:100%; font-size:0.8em; padding:5px;">
+                        <label style="font-size:0.7em; color:#888;">Perfil de Ansiedad (Estrés)</label>
+                        <select id="mc-ansiedad" class="input-glass" style="width:100%; font-size:0.8em; padding:5px;">
+                            <option value="baja">Baja (Mínimo impacto)</option>
+                            <option value="media" selected>Media (Ruido estándar)</option>
+                            <option value="alta">Alta (Penalización severa)</option>
+                        </select>
                     </div>
-                    <div style="display:flex; flex-direction:column; gap:3px;">
-                        <label style="font-size:0.7em; color:#888;">Pts/Tarjeta Máx.</label>
-                        <input type="number" id="mc-max-peso" value="3.0" step="0.25" class="input-glass" style="width:100%; font-size:0.8em; padding:5px;">
+                    <div style="display:flex; flex-direction:column; gap:3px; justify-content:flex-end;">
+                        <label style="display:flex; align-items:center; gap:5px; font-size:0.75em; color:#ccc; cursor:pointer;">
+                            <input type="checkbox" id="mc-decaimiento" checked> Decaimiento sin repasos
+                        </label>
                     </div>
                 </div>
             </div>
+        </div>
 
-            <div style="background:#1a1a1a; border:1px solid #2a2a2a; border-radius:6px; padding:10px; margin-bottom:5px;">
-                <div style="display:flex; flex-direction:column; gap:8px;">
-                    <div style="display:flex; flex-direction:column; gap:3px;">
-                        <label style="font-size:0.7em; color:#888;">Rango de Temas a Evaluar (Ej: 1,2,4-7)</label>
-                        <input type="text" id="mc-filtro-tema-input" class="input-glass" placeholder="Vacío = toda la asignatura" style="width:100%; font-size:0.8em; padding:5px;">
-                    </div>
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
-                        <div style="display:flex; flex-direction:column; gap:3px;">
-                            <label style="font-size:0.7em; color:#888;">Fecha del Examen</label>
-                            <input type="date" id="mc-fecha-examen" class="input-glass" style="width:100%; font-size:0.8em; padding:5px;">
-                        </div>
-                        <div style="display:flex; flex-direction:column; gap:3px;">
-                            <label style="font-size:0.7em; color:#888;">Simulaciones Base</label>
-                            <input type="number" id="mc-simulaciones" value="3000" step="500" class="input-glass" style="width:100%; font-size:0.8em; padding:5px;">
-                        </div>
-                    </div>
-                </div>
+        <div style="background:#1a1a1a; border:1px solid #2a2a2a; border-radius:6px; padding:10px;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+                <i class="fa-solid fa-layer-group" style="color:var(--accent); font-size:0.9em;"></i>
+                <span style="font-size:0.85em; color:#ccc; font-weight:bold;">Distribución de preguntas</span>
             </div>
+            <div style="max-height:160px; overflow-y:auto; display:flex; flex-direction:column; gap:6px;">
+    `;
 
-            <div style="background:#1a1a1a; border:1px solid #2a2a2a; border-radius:6px; padding:10px;">
-                <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
-                    <i class="fa-solid fa-layer-group" style="color:var(--accent); font-size:0.9em;"></i>
-                    <span style="font-size:0.85em; color:#ccc; font-weight:bold;">Distribución de preguntas</span>
-                </div>
-                <div style="max-height:160px; overflow-y:auto; display:flex; flex-direction:column; gap:6px;">
-        `;
-
-        tipos.forEach(t => {
-            const tagColor = _generarColorPorTag(t);
-            cuerpo += `
-                <div class="mc-regla-row" data-tipo="${_escapeHtml(t)}" data-excluido="false" style="display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:6px; background:#111; border:1px solid #333;">
-                    <button class="mc-btn-exclude" onclick="window.toggleExcludeMC(this)" style="background:transparent; border:none; color:${tagColor}; cursor:pointer; font-size:1.1em; width:24px; display:flex; justify-content:center; transition:0.2s;" title="En la bolsa">
-                        <i class="fa-solid fa-check-circle"></i>
-                    </button>
-                    <span style="font-size:0.8em; color:#ccc; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:bold;">${_escapeHtml(t)}</span>
-                    <input type="number" class="mc-total input-glass" placeholder="Pts total" step="0.25" min="0.25" style="width:75px; font-size:0.75em; padding:4px;">
-                    <input type="number" class="mc-valor input-glass" placeholder="Peso c/u" step="0.25" min="0.25" style="width:75px; font-size:0.75em; padding:4px;">
-                </div>
-            `;
-        });
-        
-        if (tipos.length === 0) cuerpo += `<p style="color:#888; font-size:0.75em;">No tienes tarjetas con apartado asignado.</p>`;
-        
+    tipos.forEach(t => {
+        const tagColor = _generarColorPorTag(t);
         cuerpo += `
-                </div>
-            </div>
-            <div style="background:#1a1a1a; border:1px solid #2a2a2a; border-radius:6px; padding:12px; margin-top:5px; display:flex; flex-direction:column; gap:12px;">
-                <div style="display:flex; align-items:center; gap:12px;">
-                    <button id="mc-btn-estrategia" onclick="window.toggleEstrategiaMC(this)" data-activo="true" style="background:transparent; border:none; color:var(--status-green); cursor:pointer; font-size:1.5em; display:flex; align-items:center; justify-content:center; transition:0.2s;" title="Activar/Desactivar">
-                        <i class="fa-solid fa-lightbulb"></i>
-                    </button>
-                    <div>
-                        <strong style="font-size: 0.95em; color:var(--text-main);">Calcular Estrategia Óptima</strong>
-                        <span style="display:block; font-size:0.8em; color:#888; margin-top:2px;">Analiza el retorno marginal (ΔE) de cada concepto.</span>
-                    </div>
-                </div>
-                <div id="mc-estrategia-filtros" style="display:flex; align-items:center; gap:10px; margin-left: 36px;">
-                    <i class="fa-solid fa-arrow-turn-up fa-rotate-90" style="color:#444;"></i>
-                    <select id="mc-estrategia-tipo" class="input-glass" style="flex:1; font-size:0.85em; padding:6px; border:1px solid #444; border-radius:4px; background:#111; color:#eee;">
-                        <option value="">Evaluar todos los tipos</option>
-                        ${tipos.map(t => `<option value="${_escapeHtml(t)}">Solo ${_escapeHtml(t)}</option>`).join('')}
-                    </select>
-                </div>
+            <div class="mc-regla-row" data-tipo="${_escapeHtml(t)}" data-excluido="false" style="display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:6px; background:#111; border:1px solid #333;">
+                <button class="mc-btn-exclude" onclick="window.toggleExcludeMC(this)" style="background:transparent; border:none; color:${tagColor}; cursor:pointer; font-size:1.1em; width:24px; display:flex; justify-content:center; transition:0.2s;" title="En la bolsa">
+                    <i class="fa-solid fa-check-circle"></i>
+                </button>
+                <span style="font-size:0.8em; color:#ccc; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:bold;">${_escapeHtml(t)}</span>
+                <input type="number" class="mc-total input-glass" placeholder="Pts total" step="0.25" min="0.25" style="width:75px; font-size:0.75em; padding:4px;">
+                <input type="number" class="mc-valor input-glass" placeholder="Peso c/u" step="0.25" min="0.25" style="width:75px; font-size:0.75em; padding:4px;">
             </div>
         `;
+    });
+    
+    if (tipos.length === 0) cuerpo += `<p style="color:#888; font-size:0.75em;">No tienes tarjetas con apartado asignado.</p>`;
+    
+    cuerpo += `
+            </div>
+        </div>
+        <div style="background:#1a1a1a; border:1px solid #2a2a2a; border-radius:6px; padding:12px; margin-top:5px; display:flex; flex-direction:column; gap:12px;">
+            <div style="display:flex; align-items:center; gap:12px;">
+                <button id="mc-btn-estrategia" onclick="window.toggleEstrategiaMC(this)" data-activo="true" style="background:transparent; border:none; color:var(--status-green); cursor:pointer; font-size:1.5em; display:flex; align-items:center; justify-content:center; transition:0.2s;" title="Activar/Desactivar">
+                    <i class="fa-solid fa-lightbulb"></i>
+                </button>
+                <div>
+                    <strong style="font-size: 0.95em; color:var(--text-main);">Calcular Estrategia Óptima</strong>
+                    <span style="display:block; font-size:0.8em; color:#888; margin-top:2px;">Analiza el retorno marginal (ΔE) de cada concepto.</span>
+                </div>
+            </div>
+            <div id="mc-estrategia-filtros" style="display:flex; align-items:center; gap:10px; margin-left: 36px;">
+                <i class="fa-solid fa-arrow-turn-up fa-rotate-90" style="color:#444;"></i>
+                <select id="mc-estrategia-tipo" class="input-glass" style="flex:1; font-size:0.85em; padding:6px; border:1px solid #444; border-radius:4px; background:#111; color:#eee;">
+                    <option value="">Evaluar todos los tipos</option>
+                    ${tipos.map(t => `<option value="${_escapeHtml(t)}">Solo ${_escapeHtml(t)}</option>`).join('')}
+                </select>
+            </div>
+        </div>
+    `;
 
-        const footer = `
-            <button onclick="window.lanzarSimulacionDesdeUI()" style="background:rgba(143, 47, 162,0.15); border:1px solid #AE39C6; color:#AE39C6; font-size:0.9em; cursor:pointer; padding:8px 16px; border-radius:6px; font-weight:bold; display:flex; align-items:center; gap:8px;">
-                <i class="fa-solid fa-bolt"></i> Ejecutar Análisis
-            </button>
-        `;
+    const footer = `
+        <button onclick="window.lanzarSimulacionDesdeUI()" style="background:rgba(143, 47, 162,0.15); border:1px solid #AE39C6; color:#AE39C6; font-size:0.9em; cursor:pointer; padding:8px 16px; border-radius:6px; font-weight:bold; display:flex; align-items:center; gap:8px;">
+            <i class="fa-solid fa-bolt"></i> Ejecutar Análisis
+        </button>
+    `;
 
-        modalOverlay.innerHTML = _renderEstructuraModal("Arquitectura Estocástica", "fa-solid fa-gears", cuerpo, footer);
-    }
+    modalOverlay.innerHTML = _renderEstructuraModal("Arquitectura Estocástica", "fa-solid fa-gears", cuerpo, footer);
+}
 
     function lanzarSimulacionDesdeUI() {
         const btnEst = document.getElementById('mc-btn-estrategia');
+        
+        const perfilAnsiedad = document.getElementById('mc-ansiedad')?.value || 'media';
+        let estresMedia = 0.92, estresStd = 0.05;
+        if (perfilAnsiedad === 'baja') { estresMedia = 0.98; estresStd = 0.02; }
+        else if (perfilAnsiedad === 'alta') { estresMedia = 0.80; estresStd = 0.15; }
+
         const config = {
             notaMaxima: parseFloat(document.getElementById('mc-nota-max').value) || 10.0,
             notaObjetivo: parseFloat(document.getElementById('mc-nota-obj').value) || 5.0,
@@ -1007,6 +1074,9 @@ const UIDashboard = (() => {
             filtroTemaRaw: document.getElementById('mc-filtro-tema-input')?.value || null,
             calcularEstrategia: btnEst ? btnEst.getAttribute('data-activo') === 'true' : false,
             estrategiaFiltroTipo: document.getElementById('mc-estrategia-tipo')?.value || null,
+            estresMedia: estresMedia,
+            estresStd: estresStd,
+            proyectarDecaimiento: document.getElementById('mc-decaimiento')?.checked ?? true,
             reglas: []
         };
         
@@ -1048,11 +1118,21 @@ const UIDashboard = (() => {
                 </div>
             </div>
 
-            <div id="mc-estrategia-seccion">
-                <h4 style="margin:5px 0 10px 0; font-size:0.9em; color:var(--text-main);"><i class="fa-solid fa-bullseye" style="color:var(--status-blue)"></i> Conceptos de Máximo Retorno (Top 5)</h4>
-                <div id="mc-top5-container" style="display:flex; flex-direction:column; gap:6px; margin-bottom: 20px;"></div>
+            <div style="height: 180px; width: 100%; margin-bottom: 20px;">
+                <canvas id="mc-dist-chart"></canvas>
             </div>
 
+            <div id="mc-estrategia-seccion">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <h4 style="margin:0; font-size:0.9em; color:var(--text-main);"><i class="fa-solid fa-bullseye" style="color:var(--status-blue)"></i> Conceptos Críticos (Top 5)</h4>
+                    ${resBase.tarjetasCriticas && resBase.tarjetasCriticas.length > 0 ? 
+                        `<button id="mc-btn-mazo" class="btn-glass" style="font-size:0.75em; padding:4px 8px; color:var(--status-green); border-color:var(--status-green);">
+                            <i class="fa-solid fa-play"></i> Estudiar Críticos (${resBase.tarjetasCriticas.length})
+                        </button>` : ''}
+                </div>
+                <div id="mc-top5-container" style="display:flex; flex-direction:column; gap:6px; margin-bottom: 20px;"></div>
+            </div>
+            
             <h4 style="margin:0 0 10px 0; font-size:0.9em; color:var(--text-main);"><i class="fa-solid fa-magnifying-glass-chart" style="color:var(--accent)"></i> Auditoría Estocástica</h4>
             <div style="display: flex; flex-direction: column; gap: 8px;">
         `;
@@ -1086,7 +1166,7 @@ const UIDashboard = (() => {
         cuerpo += `</div>`;
 
         const footer = `
-            <button onclick="window.abrirModalMonteCarlo()" class="btn-glass" style="font-size:0.85em; padding:8px 14px; cursor:pointer;">
+            <button onclick="window.abrirModalMonteCarlo('config')" class="btn-glass" style="font-size:0.85em; padding:8px 14px; cursor:pointer;">
                 <i class="fa-solid fa-rotate-left"></i> Reconfigurar
             </button>
         `;
@@ -1094,18 +1174,20 @@ const UIDashboard = (() => {
         modalOverlay.innerHTML = _renderEstructuraModal("Resultados de Simulación", "fa-solid fa-chart-pie", cuerpo, footer);
 
         const top5Container = document.getElementById('mc-top5-container');
-        if (!top5Container) return;
+        const btnMazo = document.getElementById('mc-btn-mazo');
+        
+        if (btnMazo && onClickTarjeta) {
+            btnMazo.onclick = () => onClickTarjeta(resBase.tarjetasCriticas);
+        }
 
         if (top5 === null) {
             document.getElementById('mc-estrategia-seccion').style.display = 'none';
         } else if (top5.length === 0) {
-            top5Container.innerHTML = '<div style="color:#888; text-align:center; font-size:0.85em; padding:10px; background:rgba(0,0,0,0.2); border-radius:6px;">No se identificó beneficio marginal o filtros muy restrictivos.</div>';
+            top5Container.innerHTML = '<div style="color:#888; text-align:center; font-size:0.85em; padding:10px; background:rgba(0,0,0,0.2); border-radius:6px;">Sin beneficio marginal (ΔE < 0.1).</div>';
         } else {
             top5.forEach(item => {
                 const div = document.createElement('div');
-                div.style.cssText = 'padding: 10px 12px; background: rgba(255,255,255,0.05); border-radius: 6px; cursor: pointer; border: 1px solid #333; transition: 0.2s; display:flex; justify-content:space-between; align-items:center;';
-                div.onmouseover = () => div.style.borderColor = 'var(--status-blue)';
-                div.onmouseout  = () => div.style.borderColor = '#333';
+                div.style.cssText = 'padding: 10px 12px; background: rgba(255,255,255,0.05); border-radius: 6px; border: 1px solid #333; display:flex; justify-content:space-between; align-items:center;';
                 div.innerHTML = `
                     <div style="overflow:hidden; padding-right:10px;">
                         <strong style="font-size:0.9em; display:block; white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">${_escapeHtml(item.titulo)}</strong>
@@ -1113,10 +1195,66 @@ const UIDashboard = (() => {
                     </div>
                     <span style="color:var(--status-green); font-weight:bold; font-size:0.9em; white-space:nowrap;">+${item.deltaNota.toFixed(2)} pts</span>
                 `;
-                div.onclick = () => onClickTarjeta(item.id);
                 top5Container.appendChild(div);
             });
         }
+
+        // Renderizado Aislado del Histograma PDF / CDF
+        setTimeout(() => {
+            const ctx = document.getElementById('mc-dist-chart');
+            if (!ctx || !resBase.todosLosScores) return;
+
+            const numBins = 20;
+            const binSize = resBase.notaMaxima / numBins;
+            const bins = Array.from({length: numBins}, (_, i) => i * binSize + (binSize/2)); 
+            const counts = new Array(numBins).fill(0);
+            
+            resBase.todosLosScores.forEach(s => {
+                const idx = Math.min(numBins - 1, Math.max(0, Math.floor(s / binSize)));
+                counts[idx]++;
+            });
+            
+            const total = resBase.todosLosScores.length;
+            const pdf = counts.map(c => (c / total) * 100);
+            let acc = 0;
+            const cdf = pdf.map(p => { acc += p; return acc; });
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: bins.map(b => b.toFixed(1)),
+                    datasets: [
+                        {
+                            label: 'Densidad (PDF) %',
+                            data: pdf,
+                            backgroundColor: 'rgba(143, 47, 162, 0.5)',
+                            borderColor: '#AE39C6',
+                            borderWidth: 1,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Acumulada (CDF) %',
+                            data: cdf,
+                            type: 'line',
+                            borderColor: 'var(--status-blue)',
+                            pointRadius: 0,
+                            borderWidth: 2,
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { title: { display: true, text: 'Nota', color: '#888' }, grid: {color: '#333'} },
+                        y: { type: 'linear', position: 'left', max: Math.max(...pdf) * 1.2, display: false },
+                        y1: { type: 'linear', position: 'right', max: 100, grid: {drawOnChartArea: false}, ticks: {color: '#888'} }
+                    },
+                    plugins: { legend: { display: true, labels: { color: '#ccc', font: {size: 10} } } }
+                }
+            });
+        }, 50);
     }
 
     function cerrarModalMonteCarlo() {
@@ -1149,7 +1287,7 @@ const UIDashboard = (() => {
 })(); 
 
 window.lanzarSimulacionDesdeUI = () => UIDashboard.lanzarSimulacionDesdeUI();
-window.abrirModalMonteCarlo    = () => UIDashboard.abrirModalMonteCarlo();
+window.abrirModalMonteCarlo    = (modo) => UIDashboard.abrirModalMonteCarlo(modo); // Argumento preservado
 window.cerrarModalMonteCarlo   = () => UIDashboard.cerrarModalMonteCarlo();
 
 window.toggleEstrategiaMC = function(btn) {
@@ -1191,4 +1329,9 @@ window.toggleExcludeMC = function(btn) {
         row.style.opacity = '0.5';
         row.querySelectorAll('input').forEach(i => { i.disabled = true; i.value = ''; });
     }
+};
+
+window.recalcularMonteCarlo = function() {
+    // Abre el modal en modo configuración para que el usuario ajuste y ejecute
+    window.abrirModalMonteCarlo('config');
 };

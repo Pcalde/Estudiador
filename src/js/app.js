@@ -8,7 +8,7 @@
 //   → ui.js → app.js  ← este archivo
 // ════════════════════════════════════════════════════════════════
 
-const APP_VERSION = "2.0.1";
+const APP_VERSION = "2.2.2";
 
 // ────────────────────────────────────────────────────────────────
 // UTIL — helpers privados reutilizables
@@ -514,6 +514,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('lista-asignaturas')?.addEventListener('click', () => {
         if (window.innerWidth < 950) setTimeout(cerrarPanelesMoviles, 150);
     });
+    document.getElementById('mc-btn-simular')?.addEventListener('click', () => {
+        if (typeof window.lanzarSimulacionMonteCarlo === 'function') {
+            window.lanzarSimulacionMonteCarlo();
+        }
+    });
 
     // 7. Importación masiva de JSON
     document.getElementById('file-input-unified')?.addEventListener('change', async (e) => {
@@ -762,9 +767,32 @@ document.addEventListener('DOMContentLoaded', () => {
                 'aleatorio': 'Aleatorio',
                 'secuencial_retraso': 'Sec. Retraso',
                 'secuencial_puro': 'Sec. Puro',
-                'lectura': 'Lectura'
+                'lectura': 'Lectura',
+                'anki': 'Anki'
             };
             document.getElementById('label-modo-estudio').textContent = etiquetas[e.target.value];
+            
+            // Actualizar estilos de selección visual
+            document.querySelectorAll('#modo-estudio-modal label').forEach(label => {
+                label.style.borderColor = '#333';
+                label.style.background = '#1a1a1a';
+                label.style.boxShadow = 'none';
+            });
+            
+            const selectedLabel = document.querySelector(`label[for="check-modo-${e.target.id.replace('check-modo-', '')}"]`);
+            if (selectedLabel) {
+                selectedLabel.style.borderColor = 'var(--accent)';
+                selectedLabel.style.background = 'rgba(76, 175, 80, 0.1)';
+                selectedLabel.style.boxShadow = '0 0 12px rgba(76, 175, 80, 0.3)';
+                
+                // Colorear el icono
+                const icon = selectedLabel.querySelector('i');
+                if (icon) icon.style.color = 'var(--accent)';
+                
+                // Colorear el texto fuerte
+                const strong = selectedLabel.querySelector('strong');
+                if (strong) strong.style.color = 'var(--accent)';
+            }
             
             // Cerrar con un pequeño retraso
             setTimeout(() => {
@@ -803,8 +831,8 @@ document.addEventListener('DOMContentLoaded', () => {
     on('#btn-procesarimportacionlatex',   'click',  procesarImportacionLatex);
 
     // Tarjeta de estudio
-    on('#btn-main-revelar',    'click',  UI.revelar);
-    on('#btn-ocultar',         'click',  UI.ocultarRespuesta);
+    on('#btn-main-revelar', 'click', () => { if (typeof UI !== 'undefined' && UI.revelar) UI.revelar(); });
+    on('#btn-ocultar', 'click', () => { if (typeof UI !== 'undefined' && UI.ocultarRespuesta) UI.ocultarRespuesta(); });
     on('#btn-procesarrepaso',  'click',  () => window.procesarRepaso(1));
     on('#btn-procesarrepaso-2','click',  () => window.procesarRepaso(2));
     on('#btn-procesarrepaso-3','click',  () => window.procesarRepaso(3));
@@ -816,6 +844,29 @@ document.addEventListener('DOMContentLoaded', () => {
         const modoActual = State.get('modoEstudio') || 'aleatorio';
         const radio = document.querySelector(`input[name="radio-modo-estudio"][value="${modoActual}"]`);
         if (radio) radio.checked = true;
+        
+        // Actualizar estilos visuales
+        document.querySelectorAll('#modo-estudio-modal label').forEach(label => {
+            label.style.borderColor = '#333';
+            label.style.background = '#1a1a1a';
+            label.style.boxShadow = 'none';
+            const icon = label.querySelector('i');
+            const strong = label.querySelector('strong');
+            if (icon) icon.style.color = '#555';
+            if (strong) strong.style.color = '#ccc';
+        });
+        
+        const selectedLabel = document.querySelector(`label[for="check-modo-${modoActual}"]`);
+        if (selectedLabel) {
+            selectedLabel.style.borderColor = 'var(--accent)';
+            selectedLabel.style.background = 'rgba(76, 175, 80, 0.1)';
+            selectedLabel.style.boxShadow = '0 0 12px rgba(76, 175, 80, 0.3)';
+            const icon = selectedLabel.querySelector('i');
+            const strong = selectedLabel.querySelector('strong');
+            if (icon) icon.style.color = 'var(--accent)';
+            if (strong) strong.style.color = 'var(--accent)';
+        }
+        
         document.getElementById('modo-estudio-modal').style.display = 'flex';
     });
 
@@ -859,7 +910,7 @@ document.addEventListener('DOMContentLoaded', () => {
     on('#btn-cerrarresumensesion', 'click', cerrarResumenSesion);
 
     // Ajustes
-    on('#btn-cerrarajustes',    'click',  UI.cerrarAjustes);
+    on('#btn-cerrarajustes', 'click', () => { if (typeof UI !== 'undefined' && UI.cerrarAjustes) UI.cerrarAjustes(); });
     on('#btn-guardarhorariodia','click',  guardarHorarioDia);
     on('#set-visual-theme',     'change', guardarApariencia);
     on('#set-click-effect',     'change', guardarApariencia);
@@ -992,4 +1043,4 @@ window.abrirAjustes = function() {
     }
 };
 
-window.cambiarPestanaAjustes = UI.cambiarPestanaAjustes;
+window.cambiarPestanaAjustes = (...args) => { if (typeof UI !== 'undefined' && UI.cambiarPestanaAjustes) return UI.cambiarPestanaAjustes(...args); };

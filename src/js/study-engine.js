@@ -116,15 +116,13 @@ const StudyEngine = (() => {
     }
     function setModoEstudio(modo) {
         State.set('modoEstudio', modo);
-        // Mantenemos actualizados los estados viejos para no romper los renderizadores (como el auto-revelar en modo lectura)
         State.set('modoLectura', modo === 'lectura');
-        State.set('modoSecuencial', modo !== 'aleatorio');
-        
+        State.set('modoSecuencial', modo !== 'aleatorio' && modo !== 'anki');
+
         aplicarFiltros();
-        
-        if (modo === 'lectura' && typeof UI !== 'undefined' && UI.revelar) {
-            UI.revelar();
-        }
+
+        if (modo === 'lectura' && typeof UI !== 'undefined' && UI.revelar) UI.revelar();
+        if (typeof UI !== 'undefined' && UI.renderBotonesDificultad) UI.renderBotonesDificultad(modo);
     }
 
     function siguienteTarjeta() {
@@ -153,6 +151,74 @@ const StudyEngine = (() => {
         });
     }
 
+    function _siguienteIndiceAnkiDisponible(cola, idxActual) {
+        const ahora = Date.now();
+        const n = cola.length;
+        if (n === 0) return -1;
+        for (let i = 1; i <= n; i++) {
+            const idx = (idxActual + i) % n;
+            const due = cola[idx]._ankiDueAt;
+            if (!due || due <= ahora) return idx;
+        }
+        // Ninguna lista todavía: mostramos la más próxima en lugar de bloquear
+        let mejor = (idxActual + 1) % n;
+        cola.forEach((c, idx) => {
+            if (idx === idxActual) return;
+            if ((c._ankiDueAt || 0) < (cola[mejor]._ankiDueAt || 0)) mejor = idx;
+        });
+        return mejor;
+    }
+
+    function procesarRepasoAnki(calidad, concepto, asigActual) {
+        const result = Scheduler.calcularSiguienteRepasoAnki(concepto, calidad);
+        const tarjetaActualizada = result.tarjeta;
+
+        const biblioteca = State.get('biblioteca');
+        const idxOriginal = biblioteca[asigActual].findIndex(
+            c => c.id === concepto.id || (c.Titulo === concepto.Titulo && c.Contenido === concepto.Contenido)
+        );
+        if (idxOriginal === -1) return;
+
+        State.batch(() => {
+            biblioteca[asigActual][idxOriginal] = tarjetaActualizada;
+            State.set('biblioteca', biblioteca);
+
+            const stats = State.get('sessionData') || {};
+            stats.tarjetas = (stats.tarjetas || 0) + 1;
+            if (calidad === 1) stats.faciles  = (stats.faciles  || 0) + 1;
+            if (calidad === 4) stats.criticas = (stats.criticas || 0) + 1;
+            State.set('sessionData', stats);
+
+            let cola = State.get('colaEstudio') || [];
+            const currentIdx = State.get('indiceNavegacion');
+
+            if (result.graduado) {
+                cola.splice(currentIdx, 1);
+                State.set('colaEstudio', cola);
+                if (cola.length === 0) {
+                    State.set('indiceNavegacion', 0);
+                    State.set('conceptoActual', null);
+                } else {
+                    const nextIdx = currentIdx % cola.length;
+                    State.set('indiceNavegacion', nextIdx);
+                    State.set('conceptoActual', structuredClone(cola[nextIdx]));
+                }
+            } else {
+                cola[currentIdx] = tarjetaActualizada;
+                State.set('colaEstudio', cola);
+                const nextIdx = _siguienteIndiceAnkiDisponible(cola, currentIdx);
+                State.set('indiceNavegacion', nextIdx);
+                State.set('conceptoActual', nextIdx === -1 ? null : structuredClone(cola[nextIdx]));
+            }
+        });
+
+        EventBus.emit('DATA_REQUIRES_SAVE');
+        if (typeof window.updateDashboard === 'function') window.updateDashboard();
+        if (State.get('colaEstudio').length === 0 && typeof UI !== 'undefined' && UI.renderTarjetaVacia) {
+            UI.renderTarjetaVacia();
+        }
+    }
+
     /**
      * @function procesarRepaso
      * @description Evalúa la tarjeta actual usando el algoritmo FSRS (Scheduler),
@@ -164,6 +230,12 @@ const StudyEngine = (() => {
         const concepto = State.get('conceptoActual');
         const asigActual = State.get('nombreAsignaturaActual');
         if (!concepto || !asigActual) return;
+
+        if (State.get('modoEstudio') === 'anki') {
+            procesarRepasoAnki(calidad, concepto, asigActual);
+            return;
+        }
+
         if (typeof Scheduler === 'undefined') {
             Logger.error("Error Crítico: Scheduler no definido.");
             return;

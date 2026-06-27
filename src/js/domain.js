@@ -374,6 +374,33 @@ const Scheduler = {
         return { tarjeta: t, reencolar, intervalDias, R };
     },
 
+    /**
+     * Modo Anki: pasos cortos intra-sesión sin tocar FSRS hasta graduar.
+     * Al graduar (calidad=1), delega al Scheduler real con una calidad
+     * rebajada según cuánto se ha luchado en esta sesión, en vez de
+     * usar valores fijos que ignorarían el historial de la tarjeta.
+     */
+    calcularSiguienteRepasoAnki(tarjeta, calidad, w = FSRS6_W_DEFAULT) {
+        const ANKI_MIN = { 2: 10, 3: 6, 4: 1 };
+
+        let t = structuredClone(tarjeta);
+        t._ankiStruggle = t._ankiStruggle || 0;
+
+        if (calidad === 1) {
+            const struggle = t._ankiStruggle;
+            // 0 tropiezos -> Fácil real; 1 -> Bien; 2+ -> Difícil (tope)
+            const calidadEfectiva = struggle === 0 ? 1 : (struggle === 1 ? 2 : 3);
+            delete t._ankiStruggle;
+            delete t._ankiDueAt;
+            const result = this.calcularSiguienteRepaso(t, calidadEfectiva);
+            return { ...result, graduado: true };
+        }
+
+        if (calidad === 3 || calidad === 4) t._ankiStruggle += 1;
+        t._ankiDueAt = Date.now() + (ANKI_MIN[calidad] || 1) * 60000;
+        return { tarjeta: t, graduado: false };
+    },
+
     diasHastaRepaso(tarjeta) {
         if (!tarjeta.ProximoRepaso) return 0;
         return diffDiasCalendario(getFechaHoy(), tarjeta.ProximoRepaso);
@@ -587,6 +614,92 @@ function _clamp(val, min, max) {
     return Math.max(min, Math.min(max, val));
 }
 
+const MonteCarloEngine = {
+    // 1. Proyección temporal y ponderación
+    simularExamen(tarjetas, config) {
+        const iteraciones = config.iteraciones || 1000;
+        const fechaExamen = config.fechaExamen ? new Date(config.fechaExamen).getTime() : Date.now();
+        const umbralAprobado = config.umbral || 5.0;
+        
+        let aprobados = 0;
+        let notaAcumulada = 0;
+
+        // Precalcular retenciones proyectadas para no recalcular en el bucle
+        const tarjetasProyectadas = tarjetas.map(t => {
+            let rProyectada = t.fsrs_retrievability || 0;
+            if (t.UltimoRepaso && t.fsrs_stability) {
+                const diasHastaExamen = Math.max(0, (fechaExamen - new Date(t.UltimoRepaso).getTime()) / 86400000);
+                rProyectada = Math.pow(0.9, diasHastaExamen / t.fsrs_stability);
+            }
+            // Asignar pesos por defecto si no existen en la config
+            const pesoTema = (config.pesosTema && config.pesosTema[t.Tema]) || 1.0;
+            const pesoTipo = (config.pesosTipo && config.pesosTipo[t.Apartado]) || 1.0;
+            
+            return { R: rProyectada, peso: pesoTema * pesoTipo, id: t.id, titulo: t.Titulo };
+        });
+
+        const sumaPesosGoblal = tarjetasProyectadas.reduce((acc, t) => acc + t.peso, 0);
+
+        for (let i = 0; i < iteraciones; i++) {
+            let notaSimulada = 0;
+            for (const t of tarjetasProyectadas) {
+                if (Math.random() < t.R) {
+                    notaSimulada += t.peso;
+                }
+            }
+            // Normalizar nota a base 10
+            const notaFinal = (notaSimulada / sumaPesosGoblal) * 10;
+            notaAcumulada += notaFinal;
+            if (notaFinal >= umbralAprobado) aprobados++;
+        }
+
+        return {
+            probabilidad: aprobados / iteraciones,
+            esperanzaNota: notaAcumulada / iteraciones,
+            tarjetasProyectadas // Útil para la fase 2
+        };
+    },
+
+    // 2. Cálculo del Beneficio Marginal (Estrategia Óptima)
+    calcularEstrategiaOptima(tarjetasTotales, subsetObjetivo, config) {
+        // Al reducir el N (subsetObjetivo.length ≈ 50), podemos aumentar iteraciones (M)
+        const iteracionesMarginales = 400; 
+        const configRapida = { ...config, iteraciones: iteracionesMarginales };
+        
+        // 1. Esperanza matemática base (evaluada sobre toda la asignatura)
+        const baseResult = this.simularExamen(tarjetasTotales, configRapida);
+        const resultadosMarginales = [];
+
+        // 2. Iterar solo sobre el subconjunto acotado por el usuario
+        for (const tarjeta of subsetObjetivo) {
+            // Replicar mazo completo para la simulación
+            const tarjetasModificadas = [...tarjetasTotales];
+            const idx = tarjetasModificadas.findIndex(t => t.id === tarjeta.id);
+            if (idx === -1) continue;
+
+            // Simular retención perfecta (R ≈ 1.0) post-repaso
+            tarjetasModificadas[idx] = { 
+                ...tarjeta, 
+                UltimoRepaso: new Date().toISOString(),
+                fsrs_stability: 1000 
+            };
+
+            const sim = this.simularExamen(tarjetasModificadas, configRapida);
+
+            resultadosMarginales.push({
+                id: tarjeta.id,
+                titulo: tarjeta.Titulo,
+                tema: tarjeta.Tema,
+                apartado: tarjeta.Apartado,
+                deltaNota: sim.esperanzaNota - baseResult.esperanzaNota,
+                deltaProb: sim.probabilidad - baseResult.probabilidad
+            });
+        }
+
+        return resultadosMarginales.sort((a, b) => b.deltaNota - a.deltaNota).slice(0, 5); // Top 5
+    }
+};
+
 function calcularProbabilidadExito(tarjetas, config = {}) {
     if (!tarjetas || !Array.isArray(tarjetas) || tarjetas.length === 0) return null;
 
@@ -672,20 +785,27 @@ function calcularProbabilidadExito(tarjetas, config = {}) {
         // FASE C: Simulación con Distribución Normal
         let scoreObtenido = 0;
         let desgloseEjemplo = [];
+        const fechaExamenMs = config.fechaExamen ? new Date(config.fechaExamen).getTime() : null;
 
         for (const item of examen) {
             let r = 0;
-            
-            if (item.c.fsrs_stability != null && item.c.UltimoRepaso) {
-                // Tarjeta Consolidada: Retención real FSRS afectada por estrés gaussiano
+            if (fechaExamenMs && item.c.fsrs_stability != null && item.c.UltimoRepaso) {
+                const msDesdeRepaso = fechaExamenMs - new Date(item.c.UltimoRepaso).getTime();
+                const diasHastaExamen = Math.max(0, msDesdeRepaso / 86400000);
+                r = Math.pow(0.9, diasHastaExamen / item.c.fsrs_stability);
+                // Factor de estrés opcional
                 const factorEstres = _clamp(_sampleNormal(0.92, 0.05), 0.70, 1.05);
-                r = _clamp((Scheduler.retencionActual(item.c) || 0) * factorEstres, 0, 1);
-            } else if (item.c.EtapaRepaso > 0) {
-                // Vista pero sin datos firmes
-                r = _clamp(_sampleNormal(0.35, 0.10), 0.05, 0.65);
+                r = _clamp(r * factorEstres, 0, 1);
             } else {
-                // Nunca vista (Pura deducción)
-                r = _clamp(_sampleNormal(0.15, 0.05), 0.01, 0.35);
+                // Fallback a la lógica existente
+                if (item.c.fsrs_stability != null && item.c.UltimoRepaso) {
+                    const factorEstres = _clamp(_sampleNormal(0.92, 0.05), 0.70, 1.05);
+                    r = _clamp((Scheduler.retencionActual(item.c) || 0) * factorEstres, 0, 1);
+                } else if (item.c.EtapaRepaso > 0) {
+                    r = _clamp(_sampleNormal(0.35, 0.10), 0.05, 0.65);
+                } else {
+                    r = _clamp(_sampleNormal(0.15, 0.05), 0.01, 0.35);
+                }
             }
 
             const acierto = Math.random() <= r;

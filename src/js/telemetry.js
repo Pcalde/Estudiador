@@ -78,31 +78,202 @@ const Telemetry = (() => {
         }
     }
 
-    function lanzarSimulacionMonteCarlo(config = {}) {
-        const asigActual = State.get('nombreAsignaturaActual');
-        const bib = State.get('biblioteca');
-        if (!asigActual || !bib[asigActual]) return;
+    // Lee los valores actuales de los inputs del modal (solo para pasar a la simulación)
+function obtenerFiltrosSimulacion() {
+    return {
+        fechaExamen: document.getElementById('mc-fecha-examen')?.value || null,
+        umbral: parseFloat(document.getElementById('mc-umbral')?.value) || 5.0,
+        filtroTema: document.getElementById('mc-filtro-tema')?.value || null,
+        filtroApartado: document.getElementById('mc-filtro-apartado')?.value || null
+    };
+}
 
-        if (typeof UI !== 'undefined' && UI.mostrarCargaMonteCarlo) {
-            UI.mostrarCargaMonteCarlo();
+// ========== MODIFICACIÓN DENTRO DEL IIFE DE telemetry.js ==========
+
+function _parsearRangoTemas(str) {
+    if (!str || !str.trim()) return null;
+    const bloques = str.split(',');
+    const temasValidos = new Set();
+    
+    bloques.forEach(b => {
+        const elemento = b.trim();
+        if (elemento.includes('-')) {
+            const [inicio, fin] = elemento.split('-').map(Number);
+            if (!isNaN(inicio) && !isNaN(fin) && inicio <= fin) {
+                for (let i = inicio; i <= fin; i++) temasValidos.add(i);
+            }
+        } else {
+            const num = Number(elemento);
+            if (!isNaN(num) && elemento !== '') temasValidos.add(num);
         }
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                const res = Domain.calcularProbabilidadExito(bib[asigActual], config);
-                
-                State.batch(() => {
-                    const todos = State.get('resultadosMonteCarlo') || {};
-                    todos[asigActual] = res;
-                    State.set('resultadosMonteCarlo', todos);
+    });
+    return temasValidos;
+}
+
+async function lanzarSimulacionMonteCarlo(config) {
+    const asigActual = State.get('nombreAsignaturaActual');
+    const bib = State.get('biblioteca');
+    if (!asigActual || !bib[asigActual]) {
+        if (typeof Toast !== 'undefined') Toast.show('Selecciona una asignatura primero.', 'warning');
+        return;
+    }
+
+    const tarjetasTotales = bib[asigActual];
+    
+    // Parsear reglas para excluir del subconjunto a evaluar (si el usuario excluyó un apartado, no tiene sentido calcular su margen)
+    const apartadosExcluidos = (config.reglas || []).filter(r => r.excluido).map(r => r.tipo.toLowerCase());
+    const temasFiltrados = _parsearRangoTemas(config.filtroTemaRaw);
+
+    let subsetObjetivo = tarjetasTotales.filter(t => {
+        if (temasFiltrados && !temasFiltrados.has(Number(t.Tema))) return false;
+        if (t.Apartado && apartadosExcluidos.includes(t.Apartado.trim().toLowerCase())) return false;
+        return true;
+    });
+
+    if (subsetObjetivo.length === 0) {
+        if (typeof Toast !== 'undefined') Toast.show('Tus filtros excluyen todas las tarjetas.', 'warning');
+        return;
+    }
+
+    if (typeof UI !== 'undefined' && UI.mostrarCargaMonteCarlo) UI.mostrarCargaMonteCarlo();
+
+    // Retardo inicial para renderizar la pantalla de carga
+    setTimeout(() => {
+        // Enviar la configuración completa al motor (incluyendo las matrices clásicas)
+        const configSim = {
+            notaMaxima: config.notaMaxima,
+            notaObjetivo: config.notaObjetivo,
+            maxTarjetas: config.maxTarjetas,
+            maxPeso: config.maxPeso,
+            fechaExamen: config.fechaExamen,
+            simulaciones: config.simulaciones,
+            reglas: config.reglas || []
+        };
+
+        const resultadoBase = Domain.calcularProbabilidadExito(tarjetasTotales, configSim);
+
+        State.batch(() => {
+            const todos = State.get('resultadosMonteCarlo') || {};
+            todos[asigActual] = resultadoBase;
+            State.set('resultadosMonteCarlo', todos);
+        });
+        Telemetry.updateProbabilidadAprobado();
+
+        if (resultadoBase.error || !config.calcularEstrategia) {
+            if (typeof UI !== 'undefined' && UI.renderResultadosMonteCarlo) {
+                UI.renderResultadosMonteCarlo(resultadoBase, null, null);
+            }
+            return;
+        }
+
+        // Aplicar el filtro secundario de estrategia si el usuario seleccionó un tipo específico
+        let subsetMarginal = subsetObjetivo;
+        if (config.estrategiaFiltroTipo) {
+            subsetMarginal = subsetObjetivo.filter(t => 
+                t.Apartado && t.Apartado.trim().toLowerCase() === config.estrategiaFiltroTipo.toLowerCase()
+            );
+        }
+
+        if (subsetMarginal.length === 0) {
+            // El examen es válido, pero no hay tarjetas del tipo buscado para mejorar la nota
+            if (typeof UI !== 'undefined' && UI.renderResultadosMonteCarlo) {
+                UI.renderResultadosMonteCarlo(resultadoBase, [], null);
+            }
+            return;
+        }
+
+        const candidatos = subsetMarginal.slice(0, 75); 
+        const resultadosMarginales = [];
+        let idx = 0;
+
+        function procesarSiguienteTarjeta() {
+            if (idx < candidatos.length) {
+                if (typeof UI !== 'undefined' && UI.actualizarProgresoMarginal) {
+                    UI.actualizarProgresoMarginal(idx + 1, candidatos.length);
+                }
+
+                const tarjeta = candidatos[idx];
+                const tarjetasModificadas = tarjetasTotales.map(t =>
+                    t.id === tarjeta.id
+                        ? { ...t, fsrs_stability: 1000, UltimoRepaso: Domain.getFechaHoy() }
+                        : t
+                );
+
+                const sim = Domain.calcularProbabilidadExito(tarjetasModificadas, configSim);
+                resultadosMarginales.push({
+                    id: tarjeta.id,
+                    titulo: tarjeta.Titulo,
+                    tema: tarjeta.Tema,
+                    apartado: tarjeta.Apartado,
+                    deltaNota: sim.notaMedia - resultadoBase.notaMedia
                 });
 
-                if (typeof UI !== 'undefined' && UI.renderModalMonteCarlo) {
-                    UI.renderModalMonteCarlo(res);
+                idx++;
+                setTimeout(procesarSiguienteTarjeta, 0); // Ejecución no bloqueante
+            } else {
+                const top5 = resultadosMarginales
+                    .sort((a, b) => b.deltaNota - a.deltaNota)
+                    .slice(0, 5);
+
+                const inyectarTarjeta = (idTarjeta) => {
+                    const tarjetaOriginal = tarjetasTotales.find(t => t.id === idTarjeta);
+                    if (!tarjetaOriginal) return;
+                    State.batch(() => {
+                        let cola = State.get('colaEstudio') || [];
+                        cola = [tarjetaOriginal, ...cola.filter(t => t.id !== idTarjeta)];
+                        State.set('colaEstudio', cola);
+                        State.set('indiceNavegacion', 0);
+                        State.set('conceptoActual', structuredClone(tarjetaOriginal));
+                    });
+                    if (typeof UI !== 'undefined' && UI.cerrarModalMonteCarlo) UI.cerrarModalMonteCarlo();
+                    if (typeof Toast !== 'undefined') Toast.show(`Añadida al estudio: ${tarjetaOriginal.Titulo}`, 'success');
+                };
+
+                if (typeof UI !== 'undefined' && UI.renderResultadosMonteCarlo) {
+                    UI.renderResultadosMonteCarlo(resultadoBase, top5, inyectarTarjeta);
                 }
-                updateProbabilidadAprobado();
-            });
-        });
+            }
+        }
+
+        procesarSiguienteTarjeta();
+
+    }, 50);
+}
+
+// Abrir modal y poblar los filtros dinámicamente
+function abrirModalMonteCarlo() {
+    const asigActual = State.get('nombreAsignaturaActual');
+    const bib = State.get('biblioteca');
+    if (!asigActual || !bib[asigActual]) {
+        Toast.show('Selecciona una asignatura primero.', 'warning');
+        return;
     }
+
+    const tarjetas = bib[asigActual];
+    const temas = [...new Set(tarjetas.map(t => t.Tema).filter(Boolean))].sort((a,b) => a-b);
+    const apartados = [...new Set(tarjetas.map(t => t.Apartado).filter(Boolean))].sort();
+
+    // Mostrar modal
+    const modal = document.getElementById('modal-montecarlo');
+    if (modal) modal.classList.add('visible');
+
+    // Resetear paneles
+    const configPanel = document.getElementById('mc-config-panel');
+    const resultadosPanel = document.getElementById('mc-resultados');
+    if (configPanel) configPanel.style.display = 'block';
+    if (resultadosPanel) resultadosPanel.style.display = 'none';
+
+    // Poblar selects mediante la UI
+    if (typeof UI !== 'undefined' && UI.poblarFiltrosMonteCarlo) {
+        UI.poblarFiltrosMonteCarlo(temas, apartados);
+    } else {
+        console.error('UI.poblarFiltrosMonteCarlo no está definida');
+    }
+}
+
+
+
+    
 
 
 
@@ -583,8 +754,9 @@ function construirResumenPublico() {
         updateGlobalStats, setWeeklyView, updateWeeklyWidget,
         updatePronostico, updateDeudaEstudio, updateEficienciaWidget, construirResumenPublico,
         updateMapaHoras, showResumenSesion, cerrarResumenSesion, updatePendingWindow, registrarExamen,
-        updateProbabilidadAprobado, lanzarSimulacionMonteCarlo,
+        updateProbabilidadAprobado, lanzarSimulacionMonteCarlo, abrirModalMonteCarlo,
         getForgettingCurveData: () => OlvidoAnalytics.procesarCurvaOlvido(),
+        cerrarModalMonteCarlo: () => document.getElementById('modal-montecarlo')?.classList.remove('visible'),
     };
 })();
 

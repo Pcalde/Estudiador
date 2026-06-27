@@ -128,10 +128,23 @@ const UIStudy = (() => {
         }
     }
 
+    function renderBotonesDificultad(modoEstudio) {
+        const esAnki = modoEstudio === 'anki';
+        const config = esAnki
+            ? [['1', '5 días'], ['2', '10 min'], ['3', '6 min'], ['4', '&lt;1 min']]
+            : [['1', 'Fácil'],  ['2', 'Bien'],   ['3', 'Difícil'], ['4', 'Mal']];
+        const ids = ['btn-procesarrepaso', 'btn-procesarrepaso-2', 'btn-procesarrepaso-3', 'btn-procesarrepaso-4'];
+        ids.forEach((id, i) => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = `${config[i][0]}<br><span style="font-size:0.7em">${config[i][1]}</span>`;
+        });
+    }
+
     return {
         getEstadoFiltros,
         renderEstadoFiltros,
         renderizarConceptoActual,
         renderControlesModoEstudio,
+        renderBotonesDificultad,
     };
 })();

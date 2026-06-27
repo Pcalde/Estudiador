@@ -1818,58 +1818,117 @@
 </div>
 
 <div id="modal-montecarlo" class="modal-overlay">
-    <div class="modal-content glass-card" style="max-width: 650px; width: 95%;">
+    <div class="modal-content glass-card" style="max-width: 700px; width: 95%;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
             <h2 style="margin: 0; color: var(--accent); font-size: 1.2rem;">
                 <i class="fa-solid fa-microchip"></i> Motor de Simulación FSRS
             </h2>
-            <button onclick="window.cerrarModalMonteCarlo()" style="background: transparent; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer; transition: color 0.2s;">
-                <i class="fa-solid fa-xmark"></i>
+            <button onclick="window.cerrarModalMonteCarlo()" style="background: transparent; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer;">✕</button>
+        </div>
+
+        <!-- Panel de configuración -->
+        <div id="mc-config-panel">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 15px;">
+                <div>
+                    <label style="font-size: 0.75em; color: #888;">Fecha del examen</label>
+                    <input type="date" id="mc-fecha-examen" class="form-input" style="padding: 6px;">
+                </div>
+                <div>
+                    <label style="font-size: 0.75em; color: #888;">Nota de corte</label>
+                    <input type="number" id="mc-umbral" value="5.0" step="0.5" class="form-input" style="padding: 6px;">
+                </div>
+                <div>
+                    <label style="font-size: 0.75em; color: #888;">Filtrar por tema</label>
+                    <select id="mc-filtro-tema" class="form-input" style="padding: 6px;">
+                        <option value="">-- Todos --</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size: 0.75em; color: #888;">Filtrar por tipo</label>
+                    <select id="mc-filtro-apartado" class="form-input" style="padding: 6px;">
+                        <option value="">-- Todos --</option>
+                    </select>
+                </div>
+            </div>
+            <button id="mc-btn-simular" onclick="window.lanzarSimulacionMonteCarlo()" class="btn-modern btn-success" style="width: 100%; justify-content: center; margin-bottom: 20px;">
+                <i class="fa-solid fa-chart-line"></i> Simular escenario
             </button>
         </div>
-        
-        <div id="montecarlo-modal-body"></div>
-        
+
+        <!-- Resultados de la simulación -->
+        <div id="mc-resultados" style="display: none;">
+            <div style="background: rgba(0,0,0,0.3); border-radius: 8px; padding: 10px; margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                    <span><i class="fa-solid fa-arrow-up-right-dots"></i> Probabilidad de aprobar</span>
+                    <span id="mc-probabilidad" style="font-weight: bold; color: var(--accent);">--%</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <span><i class="fa-solid fa-crosshairs"></i> Nota media esperada</span>
+                    <span id="mc-nota-media" style="font-weight: bold;">--</span>
+                </div>
+            </div>
+
+            <h4 style="font-size: 0.85em; margin: 10px 0 8px;"><i class="fa-solid fa-lightbulb"></i> Estrategia óptima (Top 5)</h4>
+            <div id="mc-estrategia-lista" style="max-height: 250px; overflow-y: auto; margin-bottom: 15px;">
+                <!-- Aquí se listarán las tarjetas recomendadas -->
+            </div>
+
+            <div style="font-size: 0.7em; color: #666; text-align: center; border-top: 1px solid #333; padding-top: 10px;">
+                <i class="fa-solid fa-info-circle"></i> Haz clic en una tarjeta para añadirla al principio de tu cola de estudio.
+            </div>
+        </div>
+
+        <div style="margin-top: 15px; text-align: right;">
+            <button onclick="window.cerrarModalMonteCarlo()" class="btn-modern btn-neutral" style="padding: 6px 14px;">Cerrar</button>
+        </div>
     </div>
 </div>
+
 <div id="modo-estudio-modal" style="display:none; position:fixed; inset:0; z-index:10000; background:rgba(0,0,0,0.85); backdrop-filter:blur(4px); justify-content:center; align-items:center;">
-    <div class="modal-content" style="max-width:420px; width:95%; border:1px solid #444; background:var(--card-bg); border-radius:12px; padding:20px;">
+    <div class="modal-content" style="max-width:500px; width:95%; border:1px solid #444; background:var(--card-bg); border-radius:12px; padding:20px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
             <h3 style="margin:0; color:#eee;">Modo de Estudio</h3>
             <button id="btn-cerrar-modo-estudio" style="background:transparent; border:none; color:var(--text-muted); font-size:1.2em; cursor:pointer;">✕</button>
         </div>
         
-        <div style="display:flex; flex-direction:column; gap:10px;">
-            <label class="exam-mode-card" style="display:flex; align-items:center; gap:15px; padding:15px; background:#1a1a1a; border:1px solid #333; border-radius:8px; cursor:pointer; text-align:left;">
-                <input type="radio" name="radio-modo-estudio" value="aleatorio" style="transform:scale(1.2);">
-                <div>
-                    <strong style="color:#eee; display:block; font-size:1.05em;"><i class="fa-solid fa-shuffle"></i> Aleatorio (FSRS)</strong>
-                    <span style="color:#888; font-size:0.85em;">Baraja las tarjetas para un repaso activo óptimo.</span>
-                </div>
-            </label>
-            
-            <label class="exam-mode-card" style="display:flex; align-items:center; gap:15px; padding:15px; background:#1a1a1a; border:1px solid #333; border-radius:8px; cursor:pointer; text-align:left;">
-                <input type="radio" name="radio-modo-estudio" value="secuencial_retraso" style="transform:scale(1.2);">
-                <div>
-                    <strong style="color:#eee; display:block; font-size:1.05em;"><i class="fa-solid fa-sort-amount-down"></i> Secuencial c/ Retraso</strong>
-                    <span style="color:#888; font-size:0.85em;">Primero las atrasadas, luego el temario en orden.</span>
-                </div>
-            </label>
-            
-            <label class="exam-mode-card" style="display:flex; align-items:center; gap:15px; padding:15px; background:#1a1a1a; border:1px solid #333; border-radius:8px; cursor:pointer; text-align:left;">
-                <input type="radio" name="radio-modo-estudio" value="secuencial_puro" style="transform:scale(1.2);">
-                <div>
-                    <strong style="color:#eee; display:block; font-size:1.05em;"><i class="fa-solid fa-list-ol"></i> Secuencial Puro</strong>
-                    <span style="color:#888; font-size:0.85em;">Sigue el temario de principio a fin, ignorando fechas.</span>
-                </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <!-- Aleatorio -->
+            <input type="radio" name="radio-modo-estudio" id="check-modo-aleatorio" value="aleatorio" style="display:none;">
+            <label for="check-modo-aleatorio" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px; background:#1a1a1a; border:2px solid #333; border-radius:10px; cursor:pointer; text-align:center; user-select:none; transition:all 0.2s;">
+                <i id="icon-modo-aleatorio" class="fa-solid fa-shuffle" style="font-size:2em; color:#555; transition:color 0.2s;"></i>
+                <strong style="color:#ccc; font-size:0.95em;">Aleatorio</strong>
+                <span style="color:#777; font-size:0.75em;">Baraja activo</span>
             </label>
 
-            <label class="exam-mode-card" style="display:flex; align-items:center; gap:15px; padding:15px; background:#1a1a1a; border:1px solid #333; border-radius:8px; cursor:pointer; text-align:left;">
-                <input type="radio" name="radio-modo-estudio" value="lectura" style="transform:scale(1.2);">
-                <div>
-                    <strong style="color:#eee; display:block; font-size:1.05em;"><i class="fa-solid fa-book-open"></i> Modo Lectura</strong>
-                    <span style="color:#888; font-size:0.85em;">Secuencial puro, pero la respuesta siempre es visible.</span>
-                </div>
+            <!-- Secuencial c/ Retraso -->
+            <input type="radio" name="radio-modo-estudio" id="check-modo-retraso" value="secuencial_retraso" style="display:none;">
+            <label for="check-modo-retraso" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px; background:#1a1a1a; border:2px solid #333; border-radius:10px; cursor:pointer; text-align:center; user-select:none; transition:all 0.2s;">
+                <i id="icon-modo-retraso" class="fa-solid fa-sort-amount-down" style="font-size:2em; color:#555; transition:color 0.2s;"></i>
+                <strong style="color:#ccc; font-size:0.95em;">Retraso</strong>
+                <span style="color:#777; font-size:0.75em;">Atrasadas 1º</span>
+            </label>
+
+            <!-- Secuencial Puro -->
+            <input type="radio" name="radio-modo-estudio" id="check-modo-puro" value="secuencial_puro" style="display:none;">
+            <label for="check-modo-puro" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px; background:#1a1a1a; border:2px solid #333; border-radius:10px; cursor:pointer; text-align:center; user-select:none; transition:all 0.2s;">
+                <i id="icon-modo-puro" class="fa-solid fa-list-ol" style="font-size:2em; color:#555; transition:color 0.2s;"></i>
+                <strong style="color:#ccc; font-size:0.95em;">Secuencial</strong>
+                <span style="color:#777; font-size:0.75em;">Orden temario</span>
+            </label>
+
+            <!-- Lectura -->
+            <input type="radio" name="radio-modo-estudio" id="check-modo-lectura" value="lectura" style="display:none;">
+            <label for="check-modo-lectura" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px; background:#1a1a1a; border:2px solid #333; border-radius:10px; cursor:pointer; text-align:center; user-select:none; transition:all 0.2s;">
+                <i id="icon-modo-lectura" class="fa-solid fa-book-open" style="font-size:2em; color:#555; transition:color 0.2s;"></i>
+                <strong style="color:#ccc; font-size:0.95em;">Lectura</strong>
+                <span style="color:#777; font-size:0.75em;">Visible siempre</span>
+            </label>
+
+            <input type="radio" name="radio-modo-estudio" id="check-modo-anki" value="anki" style="display:none;">
+            <label for="check-modo-anki" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px; background:#1a1a1a; border:2px solid #333; border-radius:10px; cursor:pointer; text-align:center; user-select:none; transition:all 0.2s;">
+                <i id="icon-modo-anki" class="fa-solid fa-stopwatch" style="font-size:2em; color:#555; transition:color 0.2s;"></i>
+                <strong style="color:#ccc; font-size:0.95em;">Anki</strong>
+                <span style="color:#777; font-size:0.75em;">Pasos cortos (1m, 10m, 1h, 1d)</span>
             </label>
         </div>
     </div>
@@ -1885,10 +1944,11 @@
 <script src="src/js/db.js" defer></script>
 <script src="src/js/domain.js" defer></script>
 <script src="src/js/study-engine.js" defer></script>
+<script src="src/js/ui.js" defer></script>
 <script src="src/js/telemetry.js" defer></script>
 <script src="src/js/exam.js" defer></script> 
-<script src="src/js/timer.js"></script>
-<script src="src/js/tasks.js"></script>
+<script src="src/js/timer.js" defer></script>
+<script src="src/js/tasks.js" defer></script>
 <script src="src/js/pdf-manager.js" defer></script> 
 <script src="src/js/toast.js"></script>
 <script src="src/js/interfaz/ui-core.js"></script>
@@ -1902,7 +1962,6 @@
 <script src="src/js/interfaz/ui-amigos.js"></script>
 <script src="src/js/interfaz/ui-graph.js"></script>
 <script src="src/js/interfaz/ui-examplanner.js"></script>
-<script src="src/js/ui.js" defer></script>
 <script src="src/js/ai.js" defer></script> 
 <script src="src/js/parser.js" defer></script>
 <script src="src/js/data-io.js" defer></script> <script src="src/js/pizarra.js" defer></script>

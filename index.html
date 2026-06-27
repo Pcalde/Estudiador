@@ -308,6 +308,7 @@
                             <option value="Proposición">Proposiciones</option>
                             <option value="Lema">Lemas</option>
                             <option value="Corolario">Corolarios</option>
+                            <option value="Ejercicio">Ejercicios</option>
                             <option value="Demo">Demostraciones</option>
                         </select>
                         <input type="number" id="graph-search-tema" placeholder="Tema" min="1" style="
@@ -394,7 +395,7 @@
                             <option value="Lema">Lema</option>
                             <option value="Corolario">Corolario</option>
                             <option value="Axioma">Axioma</option>
-                            <option value="Propiedad">Propiedad</option>
+                            <option value="Ejercicio">Ejercicio</option>
                             <option value="Observación">Observación</option>
                             <option value="Nota">Nota</option>
                             <option value="Ejemplo">Ejemplo</option>
@@ -1929,6 +1930,13 @@
                 <i id="icon-modo-anki" class="fa-solid fa-stopwatch" style="font-size:2em; color:#555; transition:color 0.2s;"></i>
                 <strong style="color:#ccc; font-size:0.95em;">Anki</strong>
                 <span style="color:#777; font-size:0.75em;">Pasos cortos (1m, 10m, 1h, 1d)</span>
+            </label>
+
+            <input type="radio" name="radio-modo-estudio" id="check-modo-montecarlo" value="montecarlo" style="display:none;">
+            <label for="check-modo-montecarlo" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px; background:#1a1a1a; border:2px solid #333; border-radius:10px; cursor:pointer; text-align:center; user-select:none; transition:all 0.2s;">
+                <i id="icon-modo-montecarlo" class="fa-solid fa-chart-line" style="font-size:2em; color:#555; transition:color 0.2s;"></i>
+                <strong style="color:#ccc; font-size:0.95em;">Máx. Utilidad</strong>
+                <span style="color:#777; font-size:0.75em;">Top Impacto (FSRS)</span>
             </label>
         </div>
     </div>

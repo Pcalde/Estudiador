@@ -1510,6 +1510,7 @@ iframe#pdf-frame { width: 100%; height: 100%; border: none; display: none; }
 .color-Observación { color: #7242A3; }
 .color-Nota        { color: #9e9e9e; }
 .color-Ejemplo     { color: #3CAF6E; }
+.color-Ejercicio   { color: #ff8c00; }
 .color-Demot           { color: #1e4fb2; border-left-color: #1e4fb2; }
 .color-Demop           { color: #16a116; border-left-color: #16a116; }
 .color-Demol           { color: #20603D; border-left-color: #20603D; }
@@ -1698,4 +1699,41 @@ iframe#pdf-frame { width: 100%; height: 100%; border: none; display: none; }
 
 .modal-overlay.visible .modal-content {
     transform: translateY(0);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   MODO ESTUDIO MODAL — Icon-based selection
+   ════════════════════════════════════════════════════════════════ */
+#modo-estudio-modal label {
+    margin: 0;
+    transition: all var(--t-base) var(--ease-out);
+}
+
+#modo-estudio-modal label:hover {
+    border-color: #555 !important;
+    background: #222 !important;
+}
+
+#check-modo-aleatorio:checked ~ label[for="check-modo-aleatorio"],
+#check-modo-retraso:checked ~ label[for="check-modo-retraso"],
+#check-modo-puro:checked ~ label[for="check-modo-puro"],
+#check-modo-lectura:checked ~ label[for="check-modo-lectura"] {
+    border-color: var(--accent) !important;
+    background: rgba(76, 175, 80, 0.1) !important;
+    box-shadow: 0 0 12px rgba(76, 175, 80, 0.3);
+}
+
+#check-modo-aleatorio:checked ~ label[for="check-modo-aleatorio"] #icon-modo-aleatorio,
+#check-modo-retraso:checked ~ label[for="check-modo-retraso"] #icon-modo-retraso,
+#check-modo-puro:checked ~ label[for="check-modo-puro"] #icon-modo-puro,
+#check-modo-lectura:checked ~ label[for="check-modo-lectura"] #icon-modo-lectura {
+    color: var(--accent) !important;
+    font-size: 2.2em;
+}
+
+#check-modo-aleatorio:checked ~ label[for="check-modo-aleatorio"] strong,
+#check-modo-retraso:checked ~ label[for="check-modo-retraso"] strong,
+#check-modo-puro:checked ~ label[for="check-modo-puro"] strong,
+#check-modo-lectura:checked ~ label[for="check-modo-lectura"] strong {
+    color: var(--accent) !important;
 }

@@ -43,7 +43,7 @@ const EXAM = (() => {
         'Proposición': '#16a116', 'Lema':        '#3b9c67',
         'Corolario':   '#00bcd4', 'Axioma':      '#9c27b0',
         'Observación': '#7242A3', 'Nota':        '#9e9e9e',
-        'Ejemplo':     '#3db370'
+        'Ejemplo':     '#3db370', 'Ejercicio':   '#ff8c00',
     };
     const PESOS = { 1: 1.0, 2: 0.75, 3: 0.40, 4: 0.0 };
 
@@ -91,7 +91,7 @@ const EXAM = (() => {
             Object.keys(biblioteca).map(a => `<option value="${a}">${a}</option>`).join('');
             
         if (asigActual && biblioteca[asigActual]) sel.value = asigActual;
-        const tipos = ['Definición', 'Teorema', 'Proposición', 'Lema', 'Corolario', 'Ejemplo', 'Observación', 'Axioma'];
+        const tipos = ['Definición', 'Teorema', 'Proposición', 'Lema', 'Corolario', 'Ejemplo', 'Observación', 'Ejercicio', 'Axioma'];
         document.getElementById('ex-tipos-grid').innerHTML = tipos.map(t => {
             const c = TIPOS_COLORES[t] || '#888';
             return `<label

@@ -710,6 +710,10 @@ function calcularProbabilidadExito(tarjetas, config = {}) {
     const simulaciones = config.simulaciones || 5000;
     const reglas = config.reglas || []; 
 
+    const estresMedia = config.estresMedia ?? 0.92;
+    const estresStd   = config.estresStd ?? 0.05;
+    const proyectarDecaimiento = config.proyectarDecaimiento ?? true;
+
     const pesosValidosBase = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.5, 4.0, 5.0];
     const pesosValidos = pesosValidosBase.filter(p => p <= maxPeso);
     if (pesosValidos.length === 0) pesosValidos.push(0.25);
@@ -728,15 +732,11 @@ function calcularProbabilidadExito(tarjetas, config = {}) {
     reglas.filter(r => !r.excluido && r.valor > 0).forEach(r => pesosFijos[r.tipo] = r.valor);
     const reglasForzadas = reglas.filter(r => !r.excluido && r.total > 0);
 
-    // FASE 0: Pre-flight Check (Validación de Reglas Estrictas)
     for (const r of reglasForzadas) {
         const candidatas = tarjetasPorTipo[r.tipo] || [];
         const cantidadNecesaria = Math.round(r.total / r.valor);
         if (candidatas.length < cantidadNecesaria) {
-            return { 
-                error: true, 
-                msg: `Regla imposible: Exiges ${r.total} pts de [${r.tipo}] a ${r.valor} pts/c/u. Necesitas ${cantidadNecesaria} tarjetas pero solo hay ${candidatas.length} disponibles sin excluir.` 
-            };
+            return { error: true, msg: `Regla imposible: Exiges ${r.total} pts de [${r.tipo}] a ${r.valor} pts/c/u. Necesitas ${cantidadNecesaria} tarjetas pero solo hay ${candidatas.length} disponibles sin excluir.` };
         }
     }
 
@@ -744,13 +744,14 @@ function calcularProbabilidadExito(tarjetas, config = {}) {
     let sumaNotas = 0;
     const ejemplos = [];
     const todosLosScores = [];
+    
+    const mitades = Math.floor(simulaciones / 2);
 
-    for (let s = 0; s < simulaciones; s++) {
+    for (let s = 0; s < mitades; s++) {
         let examen = [];
         let sumaPesos = 0;
         let poolDisponible = [...poolFiltrado];
 
-        // FASE A: Obligatorias
         for (const r of reglasForzadas) {
             let candidatas = poolDisponible.filter(c => normalizarApartado(c.Apartado) === r.tipo);
             const cantidadNecesaria = Math.round(r.total / r.valor);
@@ -764,7 +765,6 @@ function calcularProbabilidadExito(tarjetas, config = {}) {
             }
         }
 
-        // FASE B: Relleno
         while (sumaPesos < notaMaxima && poolDisponible.length > 0 && examen.length < maxTarjetas) {
             const randIdx = Math.floor(Math.random() * poolDisponible.length);
             const c = poolDisponible.splice(randIdx, 1)[0];
@@ -772,7 +772,6 @@ function calcularProbabilidadExito(tarjetas, config = {}) {
             
             let pesoRestante = notaMaxima - sumaPesos;
             let pesoAsignado = pesosFijos[tipoCard] || pesosValidos[Math.floor(Math.random() * pesosValidos.length)];
-            
             let pesoFinal = Math.min(pesoRestante, pesoAsignado);
             pesoFinal = Math.round(pesoFinal * 4) / 4; 
             if (pesoFinal <= 0) pesoFinal = 0.25;
@@ -782,71 +781,79 @@ function calcularProbabilidadExito(tarjetas, config = {}) {
             sumaPesos += pesoFinal;
         }
 
-        // FASE C: Simulación con Distribución Normal
-        let scoreObtenido = 0;
+        let scoreObtenido1 = 0;
+        let scoreObtenido2 = 0;
         let desgloseEjemplo = [];
         const fechaExamenMs = config.fechaExamen ? new Date(config.fechaExamen).getTime() : null;
+        const guardarDetalles = s < 3;
 
         for (const item of examen) {
             let r = 0;
-            if (fechaExamenMs && item.c.fsrs_stability != null && item.c.UltimoRepaso) {
+            if (proyectarDecaimiento && fechaExamenMs && item.c.fsrs_stability != null && item.c.UltimoRepaso) {
                 const msDesdeRepaso = fechaExamenMs - new Date(item.c.UltimoRepaso).getTime();
                 const diasHastaExamen = Math.max(0, msDesdeRepaso / 86400000);
                 r = Math.pow(0.9, diasHastaExamen / item.c.fsrs_stability);
-                // Factor de estrés opcional
-                const factorEstres = _clamp(_sampleNormal(0.92, 0.05), 0.70, 1.05);
-                r = _clamp(r * factorEstres, 0, 1);
+            } else if (item.c.fsrs_stability != null && item.c.UltimoRepaso) {
+                r = Scheduler.retencionActual(item.c) || 0;
+            } else if (item.c.EtapaRepaso > 0) {
+                r = 0.35;
             } else {
-                // Fallback a la lógica existente
-                if (item.c.fsrs_stability != null && item.c.UltimoRepaso) {
-                    const factorEstres = _clamp(_sampleNormal(0.92, 0.05), 0.70, 1.05);
-                    r = _clamp((Scheduler.retencionActual(item.c) || 0) * factorEstres, 0, 1);
-                } else if (item.c.EtapaRepaso > 0) {
-                    r = _clamp(_sampleNormal(0.35, 0.10), 0.05, 0.65);
-                } else {
-                    r = _clamp(_sampleNormal(0.15, 0.05), 0.01, 0.35);
-                }
+                r = 0.15;
             }
 
-            const acierto = Math.random() <= r;
-            if (acierto) scoreObtenido += item.peso;
+            const factorEstres = _clamp(_sampleNormal(estresMedia, estresStd), 0.1, 1.05);
+            r = _clamp(r * factorEstres, 0, 1);
 
-            if (s < 3) {
+            const U = Math.random();
+            const U_antithesis = 1.0 - U;
+
+            const acierto1 = U <= r;
+            const acierto2 = U_antithesis <= r;
+
+            if (acierto1) scoreObtenido1 += item.peso;
+            if (acierto2) scoreObtenido2 += item.peso;
+
+            if (guardarDetalles) {
                 desgloseEjemplo.push({
                     titulo: item.c.Titulo || item.c.Pregunta || 'Sin título',
                     tipo: normalizarApartado(item.c.Apartado),
                     peso: item.peso,
                     r: Math.round(r * 100),
-                    acertada: acierto
+                    acertada: acierto1
                 });
             }
         }
 
-        // Ya NO normalizamos a 10. Mantenemos el score bruto en base a la notaMaxima
-        sumaNotas += scoreObtenido;
-        todosLosScores.push(scoreObtenido);
-        if (scoreObtenido >= notaObjetivo) examenesAprobados++;
+        sumaNotas += scoreObtenido1;
+        todosLosScores.push(scoreObtenido1);
+        if (scoreObtenido1 >= notaObjetivo) examenesAprobados++;
 
-        if (s < 3) {
+        sumaNotas += scoreObtenido2;
+        todosLosScores.push(scoreObtenido2);
+        if (scoreObtenido2 >= notaObjetivo) examenesAprobados++;
+
+        if (guardarDetalles) {
             ejemplos.push({
-                id: s + 1,
-                nota: Math.round(scoreObtenido * 100) / 100,
-                aprobado: scoreObtenido >= notaObjetivo,
+                id: (s * 2) + 1,
+                nota: Math.round(scoreObtenido1 * 100) / 100,
+                aprobado: scoreObtenido1 >= notaObjetivo,
                 detalles: desgloseEjemplo
             });
         }
     }
 
     todosLosScores.sort((a, b) => a - b);
-    const mediaMedia = sumaNotas / simulaciones;
-    const varianza = todosLosScores.reduce((acc, val) => acc + Math.pow(val - mediaMedia, 2), 0) / simulaciones;
+    const totalSimulaciones = todosLosScores.length;
+    const mediaMedia = sumaNotas / totalSimulaciones;
+    const varianza = todosLosScores.reduce((acc, val) => acc + Math.pow(val - mediaMedia, 2), 0) / totalSimulaciones;
     
     return {
-        probabilidad: Math.round((examenesAprobados / simulaciones) * 1000) / 10,
+        probabilidad: Math.round((examenesAprobados / totalSimulaciones) * 1000) / 10,
         notaMedia: Math.round(mediaMedia * 100) / 100,
         desviacion: Math.round(Math.sqrt(varianza) * 100) / 100,
-        icMin: Math.round(todosLosScores[Math.floor(simulaciones * 0.025)] * 100) / 100,
-        icMax: Math.round(todosLosScores[Math.floor(simulaciones * 0.975)] * 100) / 100,
+        icMin: Math.round(todosLosScores[Math.floor(totalSimulaciones * 0.025)] * 100) / 100,
+        icMax: Math.round(todosLosScores[Math.floor(totalSimulaciones * 0.975)] * 100) / 100,
+        todosLosScores: todosLosScores,
         notaMaxima: notaMaxima,
         notaObjetivo: notaObjetivo,
         ejemplos: ejemplos

@@ -30,84 +30,100 @@ const StudyEngine = (() => {
         const todos = biblioteca[asigActual] || [];
         let filtrados = [...todos];
 
-        // LECTURA DEFENSIVA: Si UI.getEstadoFiltros() falla, aplicamos objeto vacío por defecto
-        const rawFiltros = (typeof UI !== 'undefined' && UI.getEstadoFiltros) ? UI.getEstadoFiltros() : null;
-        const f = rawFiltros || { 
-            hoy: false, nuevas: false, tema: false, rango: false, tipo: false, dificultad: false,
-            tiposSeleccionados: [], difsActivas: []
-        };
+        const modoEstudio = State.get('modoEstudio') || 'aleatorio';
 
-        // 1. Filtrado Matemático
-        if (f.hoy) filtrados = filtrados.filter(c => !c.ProximoRepaso || window.esVencido(c.ProximoRepaso));
-        if (f.nuevas) filtrados = filtrados.filter(c => !c.UltimoRepaso);
-        if (f.tema && f.temaVal) {
-            const temasSet = _parsearListaNumeros(f.temaVal);
-            if (temasSet.size > 0) filtrados = filtrados.filter(c => temasSet.has(parseInt(c.Tema)));
-        }
-        if (f.rango && f.rangoVal) {
-            const idxSet = _parsearListaNumeros(f.rangoVal);
-            if (idxSet.size > 0) {
-                filtrados = filtrados.filter(c => idxSet.has(c.IndiceGlobal !== undefined ? c.IndiceGlobal : 0));
+        // 1. INTERCEPCIÓN PRIORITARIA: Modo Máxima Utilidad (Monte Carlo)
+        if (modoEstudio === 'montecarlo') {
+            const resultadosMC = State.get('resultadosMonteCarlo') || {};
+            const res = resultadosMC[asigActual];
+            
+            if (res && res.tarjetasCriticas && res.tarjetasCriticas.length > 0) {
+                const idsCriticos = res.tarjetasCriticas.map(t => t.id);
+                filtrados = todos.filter(t => idsCriticos.includes(t.id));
+                
+                // Ordenar estrictamente por impacto estocástico (mayor a menor)
+                filtrados.sort((a, b) => {
+                    const critA = res.tarjetasCriticas.find(c => c.id === a.id)?.deltaNota || 0;
+                    const critB = res.tarjetasCriticas.find(c => c.id === b.id)?.deltaNota || 0;
+                    return critB - critA;
+                });
             } else {
-                const m = f.rangoVal.trim().match(/^(\d+)\s*[-–]\s*(\d+)$/);
-                if (m) {
-                    const desde = parseInt(m[1]), hasta = parseInt(m[2]);
-                    filtrados = filtrados.filter(c => {
-                        const idx = c.IndiceGlobal !== undefined ? c.IndiceGlobal : 0;
-                        return idx >= desde && idx <= hasta;
-                    });
+                filtrados = []; // Cola vacía si no hay simulaciones o conceptos críticos
+            }
+        } 
+        // 2. FILTRADO ESTÁNDAR
+        else {
+            const rawFiltros = (typeof UI !== 'undefined' && UI.getEstadoFiltros) ? UI.getEstadoFiltros() : null;
+            const f = rawFiltros || { 
+                hoy: false, nuevas: false, tema: false, rango: false, tipo: false, dificultad: false,
+                tiposSeleccionados: [], difsActivas: []
+            };
+
+            if (f.hoy) filtrados = filtrados.filter(c => !c.ProximoRepaso || window.esVencido(c.ProximoRepaso));
+            if (f.nuevas) filtrados = filtrados.filter(c => !c.UltimoRepaso);
+            if (f.tema && f.temaVal) {
+                const temasSet = _parsearListaNumeros(f.temaVal);
+                if (temasSet.size > 0) filtrados = filtrados.filter(c => temasSet.has(parseInt(c.Tema)));
+            }
+            if (f.rango && f.rangoVal) {
+                const idxSet = _parsearListaNumeros(f.rangoVal);
+                if (idxSet.size > 0) {
+                    filtrados = filtrados.filter(c => idxSet.has(c.IndiceGlobal !== undefined ? c.IndiceGlobal : 0));
+                } else {
+                    const m = f.rangoVal.trim().match(/^(\d+)\s*[-–]\s*(\d+)$/);
+                    if (m) {
+                        const desde = parseInt(m[1]), hasta = parseInt(m[2]);
+                        filtrados = filtrados.filter(c => {
+                            const idx = c.IndiceGlobal !== undefined ? c.IndiceGlobal : 0;
+                            return idx >= desde && idx <= hasta;
+                        });
+                    }
+                }
+            }
+            if (f.tipo && Array.isArray(f.tiposSeleccionados) && f.tiposSeleccionados.length > 0) {
+                filtrados = filtrados.filter(c => f.tiposSeleccionados.some(t => (c.Apartado || '').toLowerCase().startsWith(t)));
+            }
+            if (f.dificultad && Array.isArray(f.difsActivas) && f.difsActivas.length > 0) {
+                const REGLAS_DIFICULTAD = {
+                    '1': c => c.fsrs_state === 'review' && (c.fsrs_difficulty || 5) <= 4.0,
+                    '2': c => c.fsrs_state === 'review' && (c.fsrs_difficulty || 5) >  4.0 && (c.fsrs_difficulty || 5) <= 7.0,
+                    '3': c => c.fsrs_state === 'review' && (c.fsrs_difficulty || 5) >  7.0,
+                    '4': c => c.fsrs_state === 'learning',
+                };
+                filtrados = filtrados.filter(c => f.difsActivas.some(d => REGLAS_DIFICULTAD[d] && REGLAS_DIFICULTAD[d](c)));
+            }
+
+            // Lógica de Ordenación
+            const isSecuencial = State.get('modoSecuencial');
+            if (modoEstudio === 'secuencial_retraso') {
+                filtrados.sort((a, b) => {
+                    const valA = a.ProximoRepaso ? window.fechaValor(a.ProximoRepaso) : 0;
+                    const valB = b.ProximoRepaso ? window.fechaValor(b.ProximoRepaso) : 0;
+                    return valA - valB; 
+                });
+            } else if (modoEstudio === 'secuencial_puro' || modoEstudio === 'lectura') {
+                // Orden natural
+            } else {
+                for (let i = filtrados.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [filtrados[i], filtrados[j]] = [filtrados[j], filtrados[i]];
                 }
             }
         }
-        if (f.tipo && Array.isArray(f.tiposSeleccionados) && f.tiposSeleccionados.length > 0) {
-            filtrados = filtrados.filter(c => f.tiposSeleccionados.some(t => (c.Apartado || '').toLowerCase().startsWith(t)));
-        }
-        if (f.dificultad && Array.isArray(f.difsActivas) && f.difsActivas.length > 0) {
-            const REGLAS_DIFICULTAD = {
-                '1': c => c.fsrs_state === 'review' && (c.fsrs_difficulty || 5) <= 4.0,
-                '2': c => c.fsrs_state === 'review' && (c.fsrs_difficulty || 5) >  4.0 && (c.fsrs_difficulty || 5) <= 7.0,
-                '3': c => c.fsrs_state === 'review' && (c.fsrs_difficulty || 5) >  7.0,
-                '4': c => c.fsrs_state === 'learning',
-            };
-            filtrados = filtrados.filter(c => f.difsActivas.some(d => REGLAS_DIFICULTAD[d] && REGLAS_DIFICULTAD[d](c)));
-        }
 
-        // 2. Lógica de Ordenación y Barajado
-        const isSecuencial = State.get('modoSecuencial');
-        const modoEstudio = State.get('modoEstudio') || 'aleatorio';
+        // 3. Notificación a UI e Inyección de Estado
+        const isSecuencialGlobal = modoEstudio === 'montecarlo' ? true : State.get('modoSecuencial');
+        const nFiltros = modoEstudio === 'montecarlo' ? 1 : 0; // Falsa bandera para forzar UI activa
 
-        if (modoEstudio === 'secuencial_retraso') {
-            filtrados.sort((a, b) => {
-                const valA = a.ProximoRepaso ? window.fechaValor(a.ProximoRepaso) : 0;
-                const valB = b.ProximoRepaso ? window.fechaValor(b.ProximoRepaso) : 0;
-                return valA - valB; // Primero las atrasadas
-            });
-        } else if (modoEstudio === 'secuencial_puro' || modoEstudio === 'lectura') {
-            // No hacemos sort, se mantiene el orden natural de creación/JSON del temario
-        } else {
-            // Aleatorio
-            for (let i = filtrados.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [filtrados[i], filtrados[j]] = [filtrados[j], filtrados[i]];
-            }
-        }
-
-        // 3. Notificación a la Interfaz de Usuario
-        const nFiltros = [f.hoy, f.nuevas, f.tema, f.rango, f.tipo, f.dificultad].filter(Boolean).length;
         if (typeof UI !== 'undefined') {
-            if (UI.renderEstadoFiltros) UI.renderEstadoFiltros(nFiltros, filtrados.length);
-            if (UI.renderControlesModoEstudio) UI.renderControlesModoEstudio(isSecuencial);
+            if (UI.renderEstadoFiltros) UI.renderEstadoFiltros(nFiltros, filtrados.length, isSecuencialGlobal);
+            if (UI.renderControlesModoEstudio) UI.renderControlesModoEstudio(isSecuencialGlobal);
         }
 
-        // 4. Inyección Atómica en el Estado (Batch)
         State.batch(() => {
             State.set('colaEstudio', filtrados);
             State.set('indiceNavegacion', 0);
-            if (filtrados.length > 0) {
-                State.set('conceptoActual', structuredClone(filtrados[0]));
-            } else {
-                State.set('conceptoActual', null);
-            }
+            State.set('conceptoActual', filtrados.length > 0 ? structuredClone(filtrados[0]) : null);
         });
 
         if (filtrados.length === 0 && typeof UI !== 'undefined' && UI.renderTarjetaVacia) {

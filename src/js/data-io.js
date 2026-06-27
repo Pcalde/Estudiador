@@ -38,7 +38,7 @@ const DataIO = (() => {
         const hoy = (typeof window.getFechaHoy === 'function') ? window.getFechaHoy() : new Date().toISOString().slice(0, 10);
 
         // Tipos base que devuelve el parser
-        const titulosGenericos = ['Definición', 'Teorema', 'Proposición', 'Lema', 'Corolario', 'Nota', 'Ejemplo', 'Concepto', 'Axioma', 'Observación', 'Demostración'];
+        const titulosGenericos = ['Definición', 'Teorema', 'Proposición', 'Lema', 'Corolario', 'Nota', 'Ejemplo', 'Concepto', 'Axioma','Ejercicio', 'Observación', 'Demostración'];
         let aProcesarPorIA = 0;
 
         newCards.forEach(c => {

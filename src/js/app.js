@@ -8,7 +8,7 @@
 //   → ui.js → app.js  ← este archivo
 // ════════════════════════════════════════════════════════════════
 
-const APP_VERSION = "2.2.2";
+const APP_VERSION = "2.2.4";
 
 // ────────────────────────────────────────────────────────────────
 // UTIL — helpers privados reutilizables

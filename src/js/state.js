@@ -29,6 +29,7 @@ const State = (() => {
             'Observación':  { color: '#7242A3', comandoLatex: '\\obs' },
             'Nota':         { color: '#9e9e9e', comandoLatex: '\\nota' },
             'Ejemplo':      { color: '#3CAF6E', comandoLatex: '\\ejemplo' },
+            'Ejercicio':    { color: '#ff8c00', comandoLatex: '\\ejercicio' },
             'Demot':        { color: '#1e4fb2', comandoLatex: '\\demot' },
             'Demop':        { color: '#16a116', comandoLatex: '\\demop' },
             'Demol':        { color: '#20603D', comandoLatex: '\\demol' },

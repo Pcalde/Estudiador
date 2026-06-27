@@ -72,9 +72,12 @@ const Telemetry = (() => {
         const asigActual = State.get('nombreAsignaturaActual');
         const resultadosTotales = State.get('resultadosMonteCarlo') || {};
         const res = resultadosTotales[asigActual];
+        
+        const historyKey = `mc_history_${asigActual}`;
+        const history = JSON.parse(localStorage.getItem(historyKey) || '[]');
 
         if (typeof UI !== 'undefined' && UI.renderWidgetMonteCarlo) {
-            UI.renderWidgetMonteCarlo(res);
+            UI.renderWidgetMonteCarlo(res, history);
         }
     }
 
@@ -211,26 +214,55 @@ async function lanzarSimulacionMonteCarlo(config) {
                 idx++;
                 setTimeout(procesarSiguienteTarjeta, 0); // Ejecución no bloqueante
             } else {
-                const top5 = resultadosMarginales
-                    .sort((a, b) => b.deltaNota - a.deltaNota)
-                    .slice(0, 5);
+                const tarjetasCriticas = resultadosMarginales
+                    .filter(r => r.deltaNota >= 0.1)
+                    .sort((a, b) => b.deltaNota - a.deltaNota);
 
-                const inyectarTarjeta = (idTarjeta) => {
-                    const tarjetaOriginal = tarjetasTotales.find(t => t.id === idTarjeta);
-                    if (!tarjetaOriginal) return;
-                    State.batch(() => {
-                        let cola = State.get('colaEstudio') || [];
-                        cola = [tarjetaOriginal, ...cola.filter(t => t.id !== idTarjeta)];
-                        State.set('colaEstudio', cola);
-                        State.set('indiceNavegacion', 0);
-                        State.set('conceptoActual', structuredClone(tarjetaOriginal));
-                    });
-                    if (typeof UI !== 'undefined' && UI.cerrarModalMonteCarlo) UI.cerrarModalMonteCarlo();
-                    if (typeof Toast !== 'undefined') Toast.show(`Añadida al estudio: ${tarjetaOriginal.Titulo}`, 'success');
+                const top5 = tarjetasCriticas.slice(0, 5);
+
+                const historyKey = `mc_history_${asigActual}`;
+                let history = JSON.parse(localStorage.getItem(historyKey) || '[]');
+                history.push({ 
+                    ts: Date.now(), 
+                    prob: resultadoBase.probabilidad, 
+                    media: resultadoBase.notaMedia,
+                    ansiedad: config.estresMedia
+                });
+                if (history.length > 30) history.shift();
+                localStorage.setItem(historyKey, JSON.stringify(history));
+
+                State.batch(() => {
+                    const todos = State.get('resultadosMonteCarlo') || {};
+                    if (todos[asigActual]) {
+                        todos[asigActual].top5 = top5;
+                        todos[asigActual].tarjetasCriticas = tarjetasCriticas;
+                    }
+                    State.set('resultadosMonteCarlo', todos);
+                });
+
+                const inyectarMazoCritico = (listaCritica) => {
+                    if (!listaCritica || listaCritica.length === 0) {
+                        if (typeof Toast !== 'undefined') Toast.show('No hay conceptos críticos identificados.', 'warning');
+                        return;
+                    }
+                    
+                    // Delegación estricta al Controlador Oficial
+                    if (typeof window.setModoEstudio === 'function') {
+                        window.setModoEstudio('montecarlo');
+                        
+                        // Sincronizar UI del selector
+                        const radio = document.getElementById('check-modo-montecarlo');
+                        if (radio) radio.checked = true;
+                        const label = document.getElementById('label-modo-estudio');
+                        if (label) label.innerText = 'Máx. Utilidad';
+                    }
+                    
+                    if (typeof window.cerrarModalMonteCarlo === 'function') window.cerrarModalMonteCarlo();
+                    if (typeof Toast !== 'undefined') Toast.show(`Aislados ${listaCritica.length} conceptos críticos.`, 'success');
                 };
 
                 if (typeof UI !== 'undefined' && UI.renderResultadosMonteCarlo) {
-                    UI.renderResultadosMonteCarlo(resultadoBase, top5, inyectarTarjeta);
+                    UI.renderResultadosMonteCarlo(resultadoBase, top5, inyectarMazoCritico);
                 }
             }
         }
@@ -239,43 +271,6 @@ async function lanzarSimulacionMonteCarlo(config) {
 
     }, 50);
 }
-
-// Abrir modal y poblar los filtros dinámicamente
-function abrirModalMonteCarlo() {
-    const asigActual = State.get('nombreAsignaturaActual');
-    const bib = State.get('biblioteca');
-    if (!asigActual || !bib[asigActual]) {
-        Toast.show('Selecciona una asignatura primero.', 'warning');
-        return;
-    }
-
-    const tarjetas = bib[asigActual];
-    const temas = [...new Set(tarjetas.map(t => t.Tema).filter(Boolean))].sort((a,b) => a-b);
-    const apartados = [...new Set(tarjetas.map(t => t.Apartado).filter(Boolean))].sort();
-
-    // Mostrar modal
-    const modal = document.getElementById('modal-montecarlo');
-    if (modal) modal.classList.add('visible');
-
-    // Resetear paneles
-    const configPanel = document.getElementById('mc-config-panel');
-    const resultadosPanel = document.getElementById('mc-resultados');
-    if (configPanel) configPanel.style.display = 'block';
-    if (resultadosPanel) resultadosPanel.style.display = 'none';
-
-    // Poblar selects mediante la UI
-    if (typeof UI !== 'undefined' && UI.poblarFiltrosMonteCarlo) {
-        UI.poblarFiltrosMonteCarlo(temas, apartados);
-    } else {
-        console.error('UI.poblarFiltrosMonteCarlo no está definida');
-    }
-}
-
-
-
-    
-
-
 
     function setWeeklyView(mode) {
         window.weeklyViewMode = mode; 
@@ -754,7 +749,7 @@ function construirResumenPublico() {
         updateGlobalStats, setWeeklyView, updateWeeklyWidget,
         updatePronostico, updateDeudaEstudio, updateEficienciaWidget, construirResumenPublico,
         updateMapaHoras, showResumenSesion, cerrarResumenSesion, updatePendingWindow, registrarExamen,
-        updateProbabilidadAprobado, lanzarSimulacionMonteCarlo, abrirModalMonteCarlo,
+        updateProbabilidadAprobado, lanzarSimulacionMonteCarlo,
         getForgettingCurveData: () => OlvidoAnalytics.procesarCurvaOlvido(),
         cerrarModalMonteCarlo: () => document.getElementById('modal-montecarlo')?.classList.remove('visible'),
     };

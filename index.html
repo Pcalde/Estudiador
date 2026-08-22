@@ -1692,11 +1692,15 @@
      ════════════════════════════════════════════════════════════════ -->
 <div id="quiz-modal" style="display:none; position:fixed; inset:0; z-index:10001; background:rgba(0,0,0,0.88); backdrop-filter:blur(6px); align-items:center; justify-content:center;">
     
-    <!-- PANTALLA: Configuración -->
+<!-- PANTALLA: Configuración -->
     <div id="quiz-config" style="
         background:#1e1e1e; border:1px solid #444; border-radius:14px;
         padding:28px 32px; max-width:500px; width:100%; margin:auto;
         animation: popIn 0.3s cubic-bezier(0.34,1.56,0.64,1);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <h3 style="margin:0; color:#eee;"><i class="fa-solid fa-list-check"></i> Tipo Test</h3>
+            <button onclick="UI_Quiz.cerrar()" class="btn-cerrar-modal" style="background: transparent; border: none; color: var(--text-muted); font-size: 1.2em; cursor: pointer; padding: 5px; transition: color 0.2s;" onmouseover="this.style.color='var(--status-red)'" onmouseout="this.style.color='#888'">✕</button>
+        </div>
     </div>
 
     <!-- PANTALLA: Preguntas -->
@@ -1704,7 +1708,11 @@
         background:#1e1e1e; border:1px solid #444; border-radius:14px;
         padding:28px 32px; max-width:600px; width:100%; margin:auto;
         animation: popIn 0.3s cubic-bezier(0.34,1.56,0.64,1);">
-        
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+            <h3 style="margin:0; color:#eee;">Pregunta</h3>
+            <button onclick="UI_Quiz.cerrar()" class="btn-cerrar-modal" style="background: transparent; border: none; color: var(--text-muted); font-size: 1.2em; cursor: pointer; padding: 5px; transition: color 0.2s;" onmouseover="this.style.color='var(--status-red)'" onmouseout="this.style.color='#888'">✕</button>
+        </div>
         <div id="quiz-pregunta-container"></div>
     </div>
 
@@ -1713,8 +1721,11 @@
         background:#1e1e1e; border:1px solid #444; border-radius:14px;
         padding:28px 32px; max-width:550px; width:100%; margin:auto;
         animation: popIn 0.3s cubic-bezier(0.34,1.56,0.64,1);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <h3 style="margin:0; color:#eee;">Resultados</h3>
+            <button onclick="UI_Quiz.cerrar()" class="btn-cerrar-modal" style="background: transparent; border: none; color: var(--text-muted); font-size: 1.2em; cursor: pointer; padding: 5px; transition: color 0.2s;" onmouseover="this.style.color='var(--status-red)'" onmouseout="this.style.color='#888'">✕</button>
+        </div>
     </div>
-</div>
 
 
 <canvas id="pizarra-canvas" class="hidden" style="position: fixed; top: 0; left: 0; z-index: 9000; cursor: crosshair; touch-action: none;"></canvas>

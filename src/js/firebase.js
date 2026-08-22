@@ -123,6 +123,7 @@ async function guardarDatosUsuario() {
 
     const data = {
         biblioteca:   State.get('biblioteca')   || {},
+        bibliotecaConfig: State.get('bibliotecaConfig') || { carpetas: {}, archivadas: [] },
         projects:     State.get('projects')     || [],
         fechasClave:  State.get('fechasClave')  || [],
         horarioGlobal: State.get('horarioGlobal') || {},
@@ -164,6 +165,9 @@ async function cargarDatosUsuario() {
                 const biblio = data.biblioteca || {};
                 if (typeof window.normalizarBibliotecaFechas === 'function') window.normalizarBibliotecaFechas(biblio);
                 State.set('biblioteca', biblio);
+                
+                const bibConfig = data.bibliotecaConfig || { carpetas: {}, archivadas: [] };
+                State.set('bibliotecaConfig', bibConfig);
 
                 State.set('projects',      data.projects      || []);
                 State.set('horarioGlobal', data.horarioGlobal || {});

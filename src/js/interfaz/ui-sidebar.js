@@ -4,30 +4,149 @@
 
 const UISidebar = (() => {
 
-    function actualizarMenuLateral(bib, asigActual) {
+    function obtenerEstructuraBiblioteca() {
+        const bib = State.get('biblioteca') || {};
+        const config = State.get('bibliotecaConfig') || { carpetas: {}, archivadas: [] };
+        
+        return { bib, config };
+    }
+
+    function guardarConfigBiblioteca(config) {
+        State.set('bibliotecaConfig', config);
+        if (typeof EventBus !== 'undefined') EventBus.emit('DATA_REQUIRES_SAVE');
+    }
+
+    function renderizarArbolAsignaturas(bib, config, asigActual) {
         const lista = document.getElementById('lista-asignaturas');
         if (!lista) return;
 
         lista.innerHTML = '';
         const fragment = document.createDocumentFragment();
 
-        Object.keys(bib).forEach(nombre => {
-            const li = document.createElement('li');
-            li.className = 'asig-item';
-            li.style.setProperty('--dynamic-color', getColorAsignatura(nombre));
-            if (nombre === asigActual) li.classList.add('active');
+        const { carpetas, archivadas } = config;
+        const archivadasSet = new Set(archivadas || []);
+        
+        // Separar asignaturas activas y archivadas
+        const asignaturasActivas = [];
+        const asignaturasArchivadas = [];
 
-            li.innerHTML = `
-                <span style="flex-grow:1;display:flex;align-items:center;gap:8px;">${escapeHtml(nombre)}</span>
-                <div class="asig-actions">
-                    <button class="btn-mini" data-action="renombrarAsignatura" data-nombre="${escapeHtml(nombre)}" title="Renombrar"><i class="fa-regular fa-pen-to-square"></i></button>
-                    <button class="btn-mini" data-action="borrarAsignatura" data-nombre="${escapeHtml(nombre)}" title="Borrar">✕</button>
-                </div>`;
-            li.onclick = () => { if (typeof cargarAsignatura === 'function') cargarAsignatura(nombre); };
-            fragment.appendChild(li);
+        Object.keys(bib).forEach(nombre => {
+            if (archivadasSet.has(nombre)) {
+                asignaturasArchivadas.push(nombre);
+            } else {
+                asignaturasActivas.push(nombre);
+            }
         });
 
+        // Renderizar carpetas con sus asignaturas
+        if (carpetas && Object.keys(carpetas).length > 0) {
+            Object.entries(carpetas).forEach(([nombreCarpeta, asignaturasEnCarpeta]) => {
+                const carpetaLi = document.createElement('li');
+                carpetaLi.className = 'carpeta-item';
+                
+                const asignaturasFiltradas = asignaturasActivas.filter(a => asignaturasEnCarpeta.includes(a));
+                const tieneContenido = asignaturasFiltradas.length > 0;
+                
+                carpetaLi.innerHTML = `
+                    <div class="carpeta-header" style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 0;">
+                        <i class="fa-solid fa-folder folder-icon" style="color:var(--text-subtle);"></i>
+                        <span style="font-weight:bold;color:var(--text-primary);">${escapeHtml(nombreCarpeta)}</span>
+                        <span style="font-size:0.75em;color:var(--text-subtle);">(${asignaturasFiltradas.length})</span>
+                        <div style="margin-left:auto;display:flex;gap:4px;">
+                            <button class="btn-mini" data-action="editarCarpeta" data-carpeta="${escapeHtml(nombreCarpeta)}" title="Editar carpeta"><i class="fa-regular fa-pen-to-square"></i></button>
+                            <button class="btn-mini" data-action="borrarCarpeta" data-carpeta="${escapeHtml(nombreCarpeta)}" title="Eliminar carpeta">✕</button>
+                        </div>
+                    </div>
+                    <ul class="carpeta-content" style="list-style:none;padding-left:20px;margin:0;${tieneContenido ? '' : 'display:none;'}">
+                        ${asignaturasFiltradas.map(nombre => crearItemAsignaturaHTML(nombre, asigActual)).join('')}
+                    </ul>
+                `;
+                
+                const header = carpetaLi.querySelector('.carpeta-header');
+                header.addEventListener('click', (e) => {
+                    if (e.target.closest('button')) return;
+                    const content = carpetaLi.querySelector('.carpeta-content');
+                    const icon = header.querySelector('.folder-icon');
+                    if (content.style.display === 'none') {
+                        content.style.display = 'block';
+                        icon.classList.replace('fa-folder', 'fa-folder-open');
+                    } else {
+                        content.style.display = 'none';
+                        icon.classList.replace('fa-folder-open', 'fa-folder');
+                    }
+                });
+                
+                fragment.appendChild(carpetaLi);
+            });
+        }
+
+        // Renderizar asignaturas sin carpeta (activas)
+        const asignaturasSinCarpeta = asignaturasActivas.filter(a => {
+            return !Object.values(carpetas || {}).some(arr => arr.includes(a));
+        });
+
+        if (asignaturasSinCarpeta.length > 0) {
+            asignaturasSinCarpeta.forEach(nombre => {
+                const li = crearItemAsignatura(nombre, asigActual);
+                fragment.appendChild(li);
+            });
+        }
+
+        // Separador para archivadas
+        if (asignaturasArchivadas.length > 0) {
+            const separador = document.createElement('li');
+            separador.className = 'separador-archivadas';
+            separador.innerHTML = '<span style="font-size:0.75em;color:var(--text-subtle);padding:8px 0;display:block;border-top:1px solid var(--border-subtle);margin:8px 0;">ARCHIVADAS</span>';
+            fragment.appendChild(separador);
+
+            asignaturasArchivadas.forEach(nombre => {
+                const li = crearItemAsignatura(nombre, asigActual, true);
+                fragment.appendChild(li);
+            });
+        }
+
         lista.appendChild(fragment);
+    }
+
+    function crearItemAsignaturaHTML(nombre, asigActual, isArchived = false) {
+        const color = getColorAsignatura(nombre);
+        const archivedStyle = isArchived ? 'opacity:0.6;' : '';
+        return `
+            <li class="asig-item${nombre === asigActual ? ' active' : ''}" 
+                style="--dynamic-color:${color};${archivedStyle}">
+                <span style="flex-grow:1;display:flex;align-items:center;gap:8px;">${isArchived ? '📦' : ''}${escapeHtml(nombre)}</span>
+                <div class="asig-actions">
+                    <button class="btn-mini" data-action="renombrarAsignatura" data-nombre="${escapeHtml(nombre)}" title="Renombrar"><i class="fa-regular fa-pen-to-square"></i></button>
+                    <button class="btn-mini" data-action="${isArchived ? 'desarchivarAsignatura' : 'archivarAsignatura'}" data-nombre="${escapeHtml(nombre)}" title="${isArchived ? 'Desarchivar' : 'Archivar'}">${isArchived ? '📤' : '📥'}</button>
+                    <button class="btn-mini" data-action="organizarAsignatura" data-nombre="${escapeHtml(nombre)}" title="Organizar en carpeta"><i class="fa-solid fa-folder-plus"></i></button>
+                    <button class="btn-mini" data-action="borrarAsignatura" data-nombre="${escapeHtml(nombre)}" title="Borrar">✕</button>
+                </div>
+            </li>
+        `;
+    }
+
+    function crearItemAsignatura(nombre, asigActual, isArchived = false) {
+        const li = document.createElement('li');
+        li.className = 'asig-item' + (nombre === asigActual ? ' active' : '');
+        li.style.setProperty('--dynamic-color', getColorAsignatura(nombre));
+        if (isArchived) li.style.opacity = '0.6';
+        
+        li.innerHTML = `
+            <span style="flex-grow:1;display:flex;align-items:center;gap:8px;">${isArchived ? '📦' : ''}${escapeHtml(nombre)}</span>
+            <div class="asig-actions">
+                <button class="btn-mini" data-action="renombrarAsignatura" data-nombre="${escapeHtml(nombre)}" title="Renombrar"><i class="fa-regular fa-pen-to-square"></i></button>
+                <button class="btn-mini" data-action="${isArchived ? 'desarchivarAsignatura' : 'archivarAsignatura'}" data-nombre="${escapeHtml(nombre)}" title="${isArchived ? 'Desarchivar' : 'Archivar'}">${isArchived ? '📤' : '📥'}</button>
+                <button class="btn-mini" data-action="organizarAsignatura" data-nombre="${escapeHtml(nombre)}" title="Organizar en carpeta"><i class="fa-solid fa-folder-plus"></i></button>
+                <button class="btn-mini" data-action="borrarAsignatura" data-nombre="${escapeHtml(nombre)}" title="Borrar">✕</button>
+            </div>`;
+        
+        li.onclick = () => { if (typeof cargarAsignatura === 'function') cargarAsignatura(nombre); };
+        return li;
+    }
+
+    function actualizarMenuLateral(bib, asigActual) {
+        const { bib: bibData, config } = obtenerEstructuraBiblioteca();
+        renderizarArbolAsignaturas(bibData, config, asigActual);
     }
 
     function actualizarListaProyectos(projects) {
@@ -106,10 +225,129 @@ const UISidebar = (() => {
         if (modPdf) modPdf.style.setProperty('--dynamic-color', color);
     }
 
+    // Funciones de gestión de carpetas y archivado
+    function crearCarpeta() {
+        const nombre = prompt("Nombre de la carpeta (ej: 'Tercer año', 'Idiomas'):");
+        if (!nombre || nombre.trim() === "") return;
+        
+        const { config } = obtenerEstructuraBiblioteca();
+        if (config.carpetas[nombre]) {
+            alert("Ya existe una carpeta con ese nombre.");
+            return;
+        }
+        
+        config.carpetas[nombre] = [];
+        guardarConfigBiblioteca(config);
+        actualizarMenuLateral();
+    }
+
+    function editarCarpeta(nombreAntiguo) {
+        const nuevoNombre = prompt("Nuevo nombre para la carpeta:", nombreAntiguo);
+        if (!nuevoNombre || nuevoNombre.trim() === "" || nuevoNombre === nombreAntiguo) return;
+        
+        const { config } = obtenerEstructuraBiblioteca();
+        if (config.carpetas[nuevoNombre]) {
+            alert("Ya existe una carpeta con ese nombre.");
+            return;
+        }
+        
+        config.carpetas[nuevoNombre] = config.carpetas[nombreAntiguo];
+        delete config.carpetas[nombreAntiguo];
+        guardarConfigBiblioteca(config);
+        actualizarMenuLateral();
+    }
+
+    function borrarCarpeta(nombreCarpeta) {
+        if (!confirm(`¿Eliminar carpeta "${nombreCarpeta}"? Las asignaturas dentro no se eliminarán, quedarán sin carpeta.`)) return;
+        
+        const { config } = obtenerEstructuraBiblioteca();
+        delete config.carpetas[nombreCarpeta];
+        guardarConfigBiblioteca(config);
+        actualizarMenuLateral();
+    }
+
+    function archivarAsignatura(nombre) {
+        const { config } = obtenerEstructuraBiblioteca();
+        
+        // Remover de todas las carpetas
+        Object.keys(config.carpetas).forEach(carpeta => {
+            config.carpetas[carpeta] = config.carpetas[carpeta].filter(a => a !== nombre);
+            // Limpiar carpetas vacías opcionalmente
+            if (config.carpetas[carpeta].length === 0) {
+                // delete config.carpetas[carpeta]; // Opcional: mantener carpetas vacías
+            }
+        });
+        
+        if (!config.archivadas.includes(nombre)) {
+            config.archivadas.push(nombre);
+        }
+        
+        guardarConfigBiblioteca(config);
+        actualizarMenuLateral();
+    }
+
+    function desarchivarAsignatura(nombre) {
+        const { config } = obtenerEstructuraBiblioteca();
+        config.archivadas = config.archivadas.filter(a => a !== nombre);
+        guardarConfigBiblioteca(config);
+        actualizarMenuLateral();
+    }
+
+    function organizarAsignatura(nombre) {
+        const { bib, config } = obtenerEstructuraBiblioteca();
+        const carpetasExistentes = Object.keys(config.carpetas);
+        
+        if (carpetasExistentes.length === 0) {
+            const crearNueva = confirm("No hay carpetas creadas. ¿Quieres crear una nueva ahora?");
+            if (crearNueva) {
+                crearCarpeta();
+                // Después de crear, volver a organizar
+                setTimeout(() => organizarAsignatura(nombre), 100);
+            }
+            return;
+        }
+        
+        let menu = "Selecciona carpeta para '" + nombre + "':\n\n";
+        menu += "0. Sin carpeta\n";
+        carpetasExistentes.forEach((c, i) => {
+            menu += `${i + 1}. ${c}\n`;
+        });
+        
+        const resp = prompt(menu, "0");
+        const idx = parseInt(resp);
+        
+        if (isNaN(idx) || idx < 0 || idx > carpetasExistentes.length) return;
+        
+        // Remover de todas las carpetas primero
+        Object.keys(config.carpetas).forEach(carpeta => {
+            config.carpetas[carpeta] = config.carpetas[carpeta].filter(a => a !== nombre);
+        });
+        
+        // También quitar de archivadas si estaba
+        config.archivadas = config.archivadas.filter(a => a !== nombre);
+        
+        // Añadir a la carpeta seleccionada
+        if (idx > 0) {
+            const carpetaSeleccionada = carpetasExistentes[idx - 1];
+            if (!config.carpetas[carpetaSeleccionada].includes(nombre)) {
+                config.carpetas[carpetaSeleccionada].push(nombre);
+            }
+        }
+        
+        guardarConfigBiblioteca(config);
+        actualizarMenuLateral();
+    }
+
     return {
         actualizarMenuLateral,
         actualizarListaProyectos,
         renderRecursos,
         aplicarColorAsignaturaActiva,
+        crearCarpeta,
+        editarCarpeta,
+        borrarCarpeta,
+        archivarAsignatura,
+        desarchivarAsignatura,
+        organizarAsignatura,
     };
 })();

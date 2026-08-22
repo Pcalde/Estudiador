@@ -805,6 +805,7 @@ document.addEventListener('DOMContentLoaded', () => {
     on('#sidebar-toggle',              'click',  toggleSidebar);
     on('#btn-abrirajustes',            'click',  abrirAjustes);
     on('#btn-gestionarnuevaasignatura','click',  gestionarNuevaAsignatura);
+    on('#btn-crearcarpeta',            'click',  () => UI.crearCarpeta());
     on('#btn-crearproyecto',           'click',  crearProyecto);
     on('#btn-modoimportar',            'click',  modoImportar);
     on('#btn-abrirexamen',             'click',  abrirExamen);

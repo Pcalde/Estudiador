@@ -12,9 +12,9 @@ const AI = (() => {
     };
 
     const MODELOS_GROQ = [
-        { id: "llama-3.3-70b-versatile", nombre: "Llama 3.3 70B (Complejo)" },
-        { id: "llama-3.1-8b-instant", nombre: "Llama 3.1 8B Instant (Rápido)" },
-        { id: "gemma2-9b-it", nombre: "Gemma 2 9B" }
+        { id: "openai/gpt-oss-120b", nombre: "gpt-oss-120b (Complejo)" },
+        { id: "qwen/qwen3.6-27b", nombre: "Qwen 3.6 27b (Rápido)" },
+        { id: "groq/compound", nombre: "Groq Compound (ilimitado)" }
     ];
 
     let modelosOpenRouter = [];

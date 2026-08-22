@@ -9,6 +9,7 @@ const State = (() => {
     const _s = {
         // Biblioteca y estudio
         biblioteca:              {},
+        bibliotecaConfig:        null, // { carpetas: {}, archivadas: [] }
         projects:                [],
         nombreAsignaturaActual:  null,
         colaEstudio:             [],
@@ -127,6 +128,7 @@ const State = (() => {
 
     // ── Getters con lazy-init para valores de localStorage ────────
     const _lazyInits = {
+        bibliotecaConfig: () => JSON.parse(localStorage.getItem('estudiador_biblioteca_config') || '{"carpetas":{},"archivadas":[]}'),
         fechasClave:  () => JSON.parse(localStorage.getItem('estudiador_fechas_clave') || '[]'),
         groqApiKey:   () => sessionStorage.getItem('estudiador_groq_key_session')
                             || localStorage.getItem('estudiador_groq_key') || '',

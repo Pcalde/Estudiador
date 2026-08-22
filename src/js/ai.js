@@ -183,6 +183,12 @@ const AI = (() => {
         return `[ASIGNATURA]: ${asigActual || 'General'}\n[CONTENIDO]: ${concepto.Contenido || 'Vacío'}`;
     }
 
+    async function generarRespuesta(prompt) {
+        const context = _construirContexto();
+        const fullPrompt = `Eres un profesor experto. Contexto:\n${context}\n${prompt}`;
+        return await _llamarIA("Eres un profesor universitario experto.", fullPrompt);
+    }
+
     async function enviarMensajeIA() {
         const input = document.getElementById('ai-user-input');
         const texto = input.value.trim();
@@ -334,6 +340,7 @@ const AI = (() => {
         enviarMensajeIA, 
         generarTituloAutomatico, 
         procesarTitulosEnLote,
+        generarRespuesta,
         cargarModelosOpenRouter,
         getModelosDisponibles,
         setModeloActivo: (m) => { State.set('iaModel', m); localStorage.setItem('estudiador_ia_model', m); },
@@ -349,3 +356,4 @@ window.cambiarModeloIA = AI.setModeloActivo;
 window.cambiarProveedorIA = AI.setProveedor;
 window.cargarModelosOpenRouter = AI.cargarModelosOpenRouter;
 window.getModelosDisponibles = AI.getModelosDisponibles;
+window.generarRespuestaIA = AI.generarRespuesta;

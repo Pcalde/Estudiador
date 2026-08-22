@@ -92,7 +92,7 @@ ${contenido.substring(0, 8000)}
 `;
 
         try {
-            const respuestaIA = await window.aiService.generateResponse(prompt);
+            const respuestaIA = await window.generarRespuestaIA(prompt);
             
             // Parsear JSON de la respuesta
             let preguntas;

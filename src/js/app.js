@@ -72,11 +72,13 @@ EventBus.on('pomodoro:finished', (payload) => {
 
 EventBus.on('DATA_REQUIRES_SAVE', async () => {
     const biblioteca = State.get('biblioteca');
+    const bibliotecaConfig = State.get('bibliotecaConfig');
     const asigActual = State.get('nombreAsignaturaActual');
     const graphData  = State.get('graphData');
     const planificador = State.get('planificador');
     try {
         await DB.setVar('biblioteca', biblioteca);
+        await DB.setVar('bibliotecaConfig', bibliotecaConfig);
         await DB.setVar('graphData',  graphData);
         if (planificador) await DB.setVar('planificador_pro', planificador);
         if (asigActual) localStorage.setItem('estudiador_asig_actual', asigActual);
@@ -93,6 +95,9 @@ EventBus.on('DATOS_NUBE_CARGADOS', ({ asigActual }) => {
     if (asigActual && typeof cargarAsignatura === 'function') {
         cargarAsignatura(asigActual);
     }
+    
+    // Forzar recarga de bibliotecaConfig desde localStorage si existe
+    State.set('bibliotecaConfig', State.get('bibliotecaConfig'));
 });
 // REEMPLAZAR EN app.js
 EventBus.on('AJUSTES_GUARDADOS', ({ modoIA }) => {

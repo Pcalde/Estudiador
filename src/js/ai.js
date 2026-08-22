@@ -103,7 +103,6 @@ const AI = (() => {
                 { role: "user", content: userMsg }
             ],
             temperature: 0.3,
-            max_tokens: 1024
         };
 
         const url = proxyUrl || "https://api.groq.com/openai/v1/chat/completions";
@@ -135,7 +134,6 @@ const AI = (() => {
                 { role: "user", content: userMsg }
             ],
             temperature: 0.3,
-            max_tokens: 1024
         };
 
         const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {

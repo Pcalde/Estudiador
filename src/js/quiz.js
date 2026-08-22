@@ -55,9 +55,13 @@ const Quiz = (() => {
         
         modalContainer.innerHTML = `
             <div style="text-align:center; padding:60px 20px;">
+                <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
+                    <button onclick="UI_Quiz.cerrar()" style="background:none; border:none; color:#888; cursor:pointer; font-size:1.2em;" title="Cancelar">✕</button>
+                </div>
                 <i class="fa-solid fa-brain fa-pulse fa-3x" style="color:var(--accent); margin-bottom:20px;"></i>
                 <h3 style="color:#fff; margin:0 0 10px 0;">Generando preguntas...</h3>
                 <p style="color:#888;">La IA está creando ${num} preguntas nivel ${dificultad.toUpperCase()}</p>
+                <p style="color:#666; font-size:0.85em; margin-top:15px;">Puedes cerrar esta ventana si prefieres. El proceso continuará en segundo plano.</p>
             </div>
         `;
 

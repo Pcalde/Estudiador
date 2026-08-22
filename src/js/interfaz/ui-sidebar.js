@@ -13,6 +13,8 @@ const UISidebar = (() => {
 
     function guardarConfigBiblioteca(config) {
         State.set('bibliotecaConfig', config);
+        // Guardar también en localStorage como respaldo
+        localStorage.setItem('estudiador_biblioteca_config', JSON.stringify(config));
         if (typeof EventBus !== 'undefined') EventBus.emit('DATA_REQUIRES_SAVE');
     }
 

@@ -1790,28 +1790,29 @@
 </div>
 <div id="ai-chat-widget" class="hidden">
     <div class="chat-header">
-    <div style="display: flex; align-items: center; gap: 8px;">
-        <i class="fa-regular fa-eye"></i>
-        <span>EL OMNISCIENTE ESCUCHA</span>
-    </div>
-    <select id="selector-modelo-ia" onchange="window.cambiarModeloIA(this.value)" style="background: var(--card-bg); color: #fff; border: 1px solid var(--border); border-radius: 4px; padding: 2px;">
-    <option value="llama-3.3-70b-versatile">Llama 3.3 70B (Mejor razonamiento)</option>
-    <option value="llama-3.1-8b-instant">Llama 3.1 8B (Más rápido/económico)</option>
-    <option value="gemma2-9b-it">Gemma 2 9B (Alternativa de Google)</option>
-    <option value="mixtral-8x7b-32768">Mixtral 8x7B (Contexto largo)</option>
-    </select>
-    <button id="btn-togglechat" style="background:none; border:none; color:#fff; cursor:pointer; font-size: 1.2em;">&times;</button>
+        <div class="omni-header-content">
+            <i class="fa-regular fa-eye"></i>
+            <span>EL OMNISCIENTE ESCUCHA</span>
+        </div>
+        <div class="omni-controls">
+            <select id="selector-modelo-ia" class="omni-model-select">
+                <option value="" disabled selected>Cargando modelos...</option>
+            </select>
+            <button id="btn-togglechat" class="btn-close-chat" title="Cerrar">&times;</button>
+        </div>
     </div>
     <div id="chat-messages">
         <div class="chat-msg system">
-            Mi nombre es Llama 3, funciono gracias a una API que puedes enlazar en ajustes. Si no tienes, puedes conseguirla gratis en <a href="https://console.groq.com/keys" target="_blank" style="color: #4CAF50; text-decoration: underline; cursor: pointer;"> https://console.groq.com/keys
-    </a>.<br>Es una llave privada, no la compartas a la ligera. Puedo leer el contenido de lo que estás estudiando ahora mismo y en base a eso contestarte, no necesitas enlazar nada.<br>Recuerda que lo que compartas con la IA ya no es privado.
+            Mi nombre es Omnisciente, funciono gracias a una API que puedes enlazar en ajustes. Si no tienes, puedes conseguirla gratis en <a href="https://console.groq.com/keys" target="_blank" style="color: #4CAF50; text-decoration: underline; cursor: pointer;">Groq</a> o <a href="https://openrouter.ai/keys" target="_blank" style="color: #4CAF50; text-decoration: underline; cursor: pointer;">OpenRouter</a>.<br>Es una llave privada, no la compartas a la ligera. Puedo leer el contenido de lo que estás estudiando ahora mismo y en base a eso contestarte, no necesitas enlazar nada.<br>Recuerda que lo que compartas con la IA ya no es privado.
         </div>
     </div>
     <div class="chat-input-area">
-        <textarea id="ai-user-input" placeholder="Dile algo al todopoderoso"></textarea>
-        <button id="btn-send-ai">➤</button>
+        <textarea id="ai-user-input" placeholder="Dile algo al todopoderoso..." rows="1"></textarea>
+        <button id="btn-send-ai" title="Enviar">
+            <i class="fa-solid fa-paper-plane"></i>
+        </button>
     </div>
+    <div class="chat-footer-note">La IA puede cometer errores. Verifica la información importante.</div>
 </div>
 
 <button id="btn-open-chat" title="Invocar fuerza divina">

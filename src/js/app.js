@@ -1033,7 +1033,6 @@ document.addEventListener('DOMContentLoaded', () => {
     on('#btn-togglechat', 'click',   toggleChat);
     on('#btn-open-chat',  'click',   toggleChat);
     on('#ai-user-input',  'keydown', (e) => checkEnterIA(e));
-    on('#btn-send-ai',    'click',   enviarMensajeIA);
 
     // Amigos
     on('#btn-cerrarmodalamigos', 'click', cerrarModalAmigos);

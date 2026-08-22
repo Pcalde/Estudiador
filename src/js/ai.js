@@ -161,9 +161,82 @@ const AI = (() => {
         if (!chat) return;
         chat.classList.toggle('hidden');
         if (!chat.classList.contains('hidden')) {
-            document.getElementById('ai-user-input').focus();
+            const input = document.getElementById('ai-user-input');
+            if (input) {
+                input.focus();
+                input.style.height = 'auto';
+            }
             const container = document.getElementById('chat-messages');
             if (container) container.scrollTop = container.scrollHeight;
+            // Cargar modelos al abrir
+            cargarModelosEnSelector();
+        }
+    }
+
+    async function cargarModelosEnSelector() {
+        const select = document.getElementById('selector-modelo-ia');
+        if (!select) return;
+
+        const proveedor = State.get('iaProveedor') || 'groq';
+        const modeloActual = State.get('iaModel') || '';
+        
+        select.innerHTML = '<option value="" disabled>Cargando...</option>';
+        
+        try {
+            let modelos = [];
+            
+            if (proveedor === 'openrouter') {
+                const apiKey = State.get('openRouterApiKey');
+                if (!apiKey) {
+                    select.innerHTML = '<option value="" disabled>Falta API Key OpenRouter</option>';
+                    return;
+                }
+                
+                const response = await fetch('https://openrouter.ai/api/v1/models', {
+                    headers: { 
+                        'Authorization': `Bearer ${apiKey}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) throw new Error('Error al cargar modelos');
+                
+                const data = await response.json();
+                modelos = data.data
+                    .filter(m => m.pricing?.prompt === "0" || m.id.includes(':free'))
+                    .map(m => ({ id: m.id, nombre: m.name || m.id.split('/').pop() }));
+            } else {
+                // Groq
+                modelos = [
+                    { id: 'llama-3.3-70b-versatile', nombre: 'Llama 3.3 70B' },
+                    { id: 'llama-3.1-8b-instant', nombre: 'Llama 3.1 8B' },
+                    { id: 'gemma2-9b-it', nombre: 'Gemma 2 9B' }
+                ];
+            }
+            
+            select.innerHTML = '';
+            if (modelos.length === 0) {
+                select.innerHTML = '<option value="" disabled>No hay modelos disponibles</option>';
+                return;
+            }
+            
+            modelos.forEach(modelo => {
+                const option = document.createElement('option');
+                option.value = modelo.id;
+                option.textContent = modelo.nombre;
+                if (modelo.id === modeloActual) option.selected = true;
+                select.appendChild(option);
+            });
+            
+            // Event listener para cambiar modelo
+            select.onchange = (e) => {
+                State.set('iaModel', e.target.value);
+                localStorage.setItem('estudiador_ia_model', e.target.value);
+            };
+            
+        } catch (error) {
+            console.error('Error cargando modelos:', error);
+            select.innerHTML = '<option value="" disabled>Error al cargar</option>';
         }
     }
 
@@ -192,25 +265,68 @@ const AI = (() => {
         const texto = input.value.trim();
         if (!texto) return;
 
-        input.value = "";
-        if (typeof UI !== 'undefined' && UI.agregarMensajeChat) {
-            UI.agregarMensajeChat("user", texto);
-            UI.agregarMensajeChat("system", "Pensando...");
+        const select = document.getElementById('selector-modelo-ia');
+        const modelo = select ? select.value : (State.get('iaModel') || 'llama-3.3-70b-versatile');
+        
+        if (!modelo) {
+            agregarMensajeChatDirecto('system', 'Por favor, selecciona un modelo primero.');
+            return;
         }
+
+        input.value = "";
+        input.style.height = 'auto';
+        agregarMensajeChatDirecto("user", texto);
+        const loadingId = agregarLoadingIndicator();
         
         try {
             const context = _construirContexto();
-            const prompt = `Eres un profesor experto. Contexto:\n${context}\nResponde breve con LaTeX ($).`;
-            const respuesta = await _llamarIA(prompt, texto);
+            const systemPrompt = "Eres un profesor experto y didáctico llamado Omnisciente. Responde de forma clara, concisa y útil. Usa LaTeX para fórmulas matemáticas entre símbolos $.";
+            const fullPrompt = `Contexto del estudiante:\n${context}\n\nPregunta del alumno: ${texto}`;
             
-            const container = document.getElementById('chat-messages');
-            if (container && container.lastElementChild) container.removeChild(container.lastElementChild);
-            if (typeof UI !== 'undefined' && UI.agregarMensajeChat) UI.agregarMensajeChat("ai", respuesta);
+            const respuesta = await _llamarIA(systemPrompt, fullPrompt, modelo);
+            
+            removeLoadingIndicator(loadingId);
+            agregarMensajeChatDirecto("ai", respuesta);
         } catch (e) {
-            const container = document.getElementById('chat-messages');
-            if (container && container.lastElementChild) container.removeChild(container.lastElementChild);
-            if (typeof UI !== 'undefined' && UI.agregarMensajeChat) UI.agregarMensajeChat("system", " Error: " + e.message);
+            removeLoadingIndicator(loadingId);
+            agregarMensajeChatDirecto("system", "⚠️ Error: " + e.message);
         }
+    }
+
+    function agregarMensajeChatDirecto(role, text) {
+        const container = document.getElementById('chat-messages');
+        if (!container) return;
+        
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `chat-msg ${role}`;
+        
+        let formattedText = text
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\n/g, '<br>');
+        
+        msgDiv.innerHTML = `<div class="message-content">${formattedText}</div>`;
+        container.appendChild(msgDiv);
+        container.scrollTop = container.scrollHeight;
+    }
+
+    function agregarLoadingIndicator() {
+        const container = document.getElementById('chat-messages');
+        if (!container) return null;
+        
+        const id = 'loading-' + Date.now();
+        const msgDiv = document.createElement('div');
+        msgDiv.id = id;
+        msgDiv.className = 'chat-msg system';
+        msgDiv.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Pensando...';
+        container.appendChild(msgDiv);
+        container.scrollTop = container.scrollHeight;
+        return id;
+    }
+
+    function removeLoadingIndicator(id) {
+        const el = document.getElementById(id);
+        if (el) el.remove();
     }
 
     async function generarTituloAutomatico(contenido) {

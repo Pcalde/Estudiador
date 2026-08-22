@@ -924,13 +924,25 @@ document.addEventListener('DOMContentLoaded', () => {
         if (typeof UISettings !== 'undefined' && UISettings.actualizarPanelProveedor) {
             UISettings.actualizarPanelProveedor(proveedor);
         }
+        // Guardar proveedor en State
+        if (typeof State !== 'undefined') {
+            State.set('iaProveedor', proveedor);
+        }
         // Cargar modelos OpenRouter si se selecciona
         if (proveedor === 'openrouter') {
+            const apiKey = document.getElementById('set-openrouter-key')?.value.trim();
+            console.log('[DEBUG] Cambiando a OpenRouter. API Key presente:', !!apiKey);
+            if (apiKey && typeof State !== 'undefined') {
+                State.set('openRouterApiKey', apiKey);
+            }
             if (typeof AI !== 'undefined' && AI.cargarModelosOpenRouter) {
-                AI.cargarModelosOpenRouter().then(() => {
+                AI.cargarModelosOpenRouter().then((modelos) => {
+                    console.log('[DEBUG] Modelos OpenRouter cargados:', modelos.length);
                     if (typeof UISettings !== 'undefined' && UISettings.renderModelosOpenRouter) {
                         UISettings.renderModelosOpenRouter();
                     }
+                }).catch(err => {
+                    console.error('[DEBUG] Error cargando modelos OpenRouter:', err);
                 });
             }
         }

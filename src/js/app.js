@@ -258,6 +258,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         EventBus.on('EXAMEN_COMPLETADO', (payload) => {
             if (typeof window.registrarExamen === 'function') window.registrarExamen(payload);
         });
+        EventBus.on('QUIZ_COMPLETADO', (payload) => {
+            Logger.info('Tipo Test completado:', payload);
+            // Opcional: registrar en historial de estadísticas
+        });
     }
 
     // 1. Arranque asíncrono (DB + migración)
@@ -809,6 +813,7 @@ document.addEventListener('DOMContentLoaded', () => {
     on('#btn-crearproyecto',           'click',  crearProyecto);
     on('#btn-modoimportar',            'click',  modoImportar);
     on('#btn-abrirexamen',             'click',  abrirExamen);
+    on('#btn-quiz',                    'click',  () => UI_Quiz.abrir());
     on('#btn-togglepizarra',           'click',  () => Pizarra.toggle());
 
     // Edición

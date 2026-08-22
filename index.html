@@ -157,9 +157,12 @@
             </div>
         </button>
 
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 100%;">
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; width: 100%;">
             <button id="btn-abrirexamen" class="btn-modern btn-sidebar btn-icon-sm" title="Modo Examen" style="width: 100%; display: flex; justify-content: center;">
                 <i class="fa-solid fa-skull-crossbones"></i>
+            </button>
+            <button id="btn-quiz" class="btn-modern btn-sidebar btn-icon-sm" title="Tipo Test" style="width: 100%; display: flex; justify-content: center;">
+                <i class="fa-solid fa-list-check"></i>
             </button>
             <button id="btn-togglepizarra" class="btn-modern btn-sidebar btn-icon-sm" title="Activar Pizarra" style="width: 100%; display: flex; justify-content: center;">
                 <i class="fa-solid fa-chalkboard-user"></i>
@@ -1684,6 +1687,35 @@
     </div>
 </div>
 
+<!-- ════════════════════════════════════════════════════════════════
+     MODAL: TIPO TEST CON IA
+     ════════════════════════════════════════════════════════════════ -->
+<div id="quiz-modal" style="display:none; position:fixed; inset:0; z-index:10001; background:rgba(0,0,0,0.88); backdrop-filter:blur(6px); align-items:center; justify-content:center;">
+    
+    <!-- PANTALLA: Configuración -->
+    <div id="quiz-config" style="
+        background:#1e1e1e; border:1px solid #444; border-radius:14px;
+        padding:28px 32px; max-width:500px; width:100%; margin:auto;
+        animation: popIn 0.3s cubic-bezier(0.34,1.56,0.64,1);">
+    </div>
+
+    <!-- PANTALLA: Preguntas -->
+    <div id="quiz-pregunta" style="display:none;
+        background:#1e1e1e; border:1px solid #444; border-radius:14px;
+        padding:28px 32px; max-width:600px; width:100%; margin:auto;
+        animation: popIn 0.3s cubic-bezier(0.34,1.56,0.64,1);">
+        
+        <div id="quiz-pregunta-container"></div>
+    </div>
+
+    <!-- PANTALLA: Resultados -->
+    <div id="quiz-resultados" style="display:none;
+        background:#1e1e1e; border:1px solid #444; border-radius:14px;
+        padding:28px 32px; max-width:550px; width:100%; margin:auto;
+        animation: popIn 0.3s cubic-bezier(0.34,1.56,0.64,1);">
+    </div>
+</div>
+
 
 <canvas id="pizarra-canvas" class="hidden" style="position: fixed; top: 0; left: 0; z-index: 9000; cursor: crosshair; touch-action: none;"></canvas>
 <div id="pizarra-controls" style="position: fixed; bottom: 20px; right: 20px; z-index: 9001; display: flex; gap: 10px; flex-direction: column; align-items: flex-end;">
@@ -2009,6 +2041,8 @@
 <script src="src/js/ui.js" defer></script>
 <script src="src/js/telemetry.js" defer></script>
 <script src="src/js/exam.js" defer></script> 
+<script src="src/js/quiz.js" defer></script>
+<script src="src/js/ui-quiz.js" defer></script>
 <script src="src/js/timer.js" defer></script>
 <script src="src/js/tasks.js" defer></script>
 <script src="src/js/pdf-manager.js" defer></script> 

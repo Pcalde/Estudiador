@@ -30,8 +30,16 @@ const UISettings = (() => {
         const selGroqModel = f('set-groq-modelo');
         if (selGroqModel) selGroqModel.value = currentModel || 'llama-3.3-70b-versatile';
         
-        // Cargar modelos OpenRouter si está seleccionado
-        if (proveedorActivo === 'openrouter') {
+        // Configuración OpenRouter
+        const openRouterKey = State.get('openRouterApiKey') || '';
+        if (f('set-openrouter-key')) f('set-openrouter-key').value = openRouterKey;
+        
+        // Cargar modelos OpenRouter si está seleccionado o si hay API key guardada
+        if (proveedorActivo === 'openrouter' || openRouterKey) {
+            // Primero aseguramos que la API key esté en el DOM
+            if (f('set-openrouter-key') && !State.get('openRouterApiKey')) {
+                State.set('openRouterApiKey', f('set-openrouter-key').value.trim());
+            }
             if (typeof AI !== 'undefined' && AI.cargarModelosOpenRouter) {
                 AI.cargarModelosOpenRouter().then(() => {
                     renderModelosOpenRouter();

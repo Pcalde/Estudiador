@@ -917,6 +917,38 @@ document.addEventListener('DOMContentLoaded', () => {
     on('#set-click-effect',     'change', guardarApariencia);
     on('#btn-guardarajustes',   'click',  guardarAjustes);
     on('#set-privacy-stats',    'change', togglePrivacidadUI);
+    
+    // Ajustes IA - Selector de proveedor
+    on('#set-ia-proveedor', 'change', (e) => {
+        const proveedor = e.target.value;
+        if (typeof UISettings !== 'undefined' && UISettings.actualizarPanelProveedor) {
+            UISettings.actualizarPanelProveedor(proveedor);
+        }
+        // Cargar modelos OpenRouter si se selecciona
+        if (proveedor === 'openrouter') {
+            if (typeof AI !== 'undefined' && AI.cargarModelosOpenRouter) {
+                AI.cargarModelosOpenRouter().then(() => {
+                    if (typeof UISettings !== 'undefined' && UISettings.renderModelosOpenRouter) {
+                        UISettings.renderModelosOpenRouter();
+                    }
+                });
+            }
+        }
+    });
+    
+    // Botón recargar modelos OpenRouter
+    on('#btn-cargar-modelos-openrouter', 'click', () => {
+        if (typeof AI !== 'undefined' && AI.cargarModelosOpenRouter) {
+            AI.cargarModelosOpenRouter().then(() => {
+                if (typeof UISettings !== 'undefined' && UISettings.renderModelosOpenRouter) {
+                    UISettings.renderModelosOpenRouter();
+                    Toast.show('Modelos actualizados', 'success', 2000);
+                }
+            }).catch(err => {
+                Toast.show('Error al cargar modelos: ' + err.message, 'error', 4000);
+            });
+        }
+    });
 
     // Auth y nube
     on('#btn-login',           'click', procesarLogin);
@@ -1045,3 +1077,11 @@ window.abrirAjustes = function() {
 };
 
 window.cambiarPestanaAjustes = (...args) => { if (typeof UI !== 'undefined' && UI.cambiarPestanaAjustes) return UI.cambiarPestanaAjustes(...args); };
+
+// Cargar modelos OpenRouter al inicio si hay API key guardada
+document.addEventListener('DOMContentLoaded', () => {
+    const openRouterKey = localStorage.getItem('estudiador_openrouter_key');
+    if (openRouterKey && typeof AI !== 'undefined' && AI.cargarModelosOpenRouter) {
+        AI.cargarModelosOpenRouter();
+    }
+});

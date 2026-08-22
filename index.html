@@ -132,7 +132,7 @@
     <div class="sidebar-header-row">
         <span class="sidebar-label">ASIGNATURAS</span>
         <div style="display:flex;gap:4px;">
-            <button id="btn-crearcarpeta" class="btn-header-add" title="Crear carpeta" style="font-size:0.9em;padding:2px 6px;">📁</button>
+            <button id="btn-crearcarpeta" class="btn-header-add" title="Crear carpeta" style="font-size:0.9em;padding:2px 6px;"><i class="fa-solid fa-folder-plus"></i></button>
             <button id="btn-gestionarnuevaasignatura" class="btn-header-add" title="Nueva Asignatura / Importar JSON">+</button>
         </div>
     </div>
@@ -1136,21 +1136,72 @@
              TAB: IA
         ══════════════════════════════════════════════ -->
         <div id="tab-ia" class="stab-panel hidden">
-            <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center;">
-                <label>API Key de Groq:</label>
-                <input type="password" id="set-groq-key" placeholder="gsk_..." style="padding:5px; width: 60%;">
+            
+            <!-- Selector de Proveedor -->
+            <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px;">
+                <label style="font-weight: bold; color: var(--accent);">Proveedor de IA:</label>
+                <select id="set-ia-proveedor" style="padding:8px; background: #1a1a1a; border: 1px solid #333; color: #eee; border-radius: 4px; min-width: 150px;">
+                    <option value="groq">Groq (Rápido)</option>
+                    <option value="openrouter">OpenRouter (Modelos Gratis)</option>
+                </select>
             </div>
-            <div class="setting-row">
-                <label style="margin:0; cursor:pointer;" for="set-groq-session-only">Guardar solo en sesión (recomendado)</label>
-                <input type="checkbox" id="set-groq-session-only" checked style="width: 20px;">
-            </div>
-            <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center;">
-                <label>Proxy backend (opcional):</label>
-                <input type="url" id="set-groq-proxy-url" placeholder="https://tu-backend/chat" style="padding:5px; width: 60%;">
-            </div>
-            <p style="font-size:0.7em; color:#888; margin-top:8px;">La API Key se guarda en sesión por defecto. Para mayor seguridad, usa un proxy backend.</p>
 
+            <!-- Configuración Groq -->
+            <div id="config-groq" class="ia-config-panel">
+                <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center;">
+                    <label>API Key de Groq:</label>
+                    <input type="password" id="set-groq-key" placeholder="gsk_..." style="padding:5px; width: 60%;">
+                </div>
+                <div class="setting-row">
+                    <label style="margin:0; cursor:pointer;" for="set-groq-session-only">Guardar solo en sesión (recomendado)</label>
+                    <input type="checkbox" id="set-groq-session-only" checked style="width: 20px;">
+                </div>
+                <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center;">
+                    <label>Proxy backend (opcional):</label>
+                    <input type="url" id="set-groq-proxy-url" placeholder="https://tu-backend/chat" style="padding:5px; width: 60%;">
+                </div>
+                
+                <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; margin-top: 10px;">
+                    <label>Modelo Groq:</label>
+                    <select id="set-groq-modelo" style="padding:8px; background: #1a1a1a; border: 1px solid #333; color: #eee; border-radius: 4px; min-width: 200px;">
+                        <option value="llama-3.3-70b-versatile">Llama 3.3 70B (Complejo)</option>
+                        <option value="llama-3.1-8b-instant">Llama 3.1 8B Instant (Rápido)</option>
+                        <option value="gemma2-9b-it">Gemma 2 9B</option>
+                    </select>
+                </div>
+            </div>
 
+            <!-- Configuración OpenRouter -->
+            <div id="config-openrouter" class="ia-config-panel hidden">
+                <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center;">
+                    <label>API Key de OpenRouter:</label>
+                    <input type="password" id="set-openrouter-key" placeholder="sk-or-..." style="padding:5px; width: 60%;">
+                </div>
+                <div class="setting-row">
+                    <p style="font-size:0.75em; color:#888; margin: 5px 0 0 0;">
+                        <i class="fa-solid fa-circle-info"></i> 
+                        Consigue tu API key gratis en 
+                        <a href="https://openrouter.ai/keys" target="_blank" style="color: #4CAF50; text-decoration: underline;">openrouter.ai/keys</a>.
+                        Acceso a modelos gratuitos como Gemma, Llama 3, y más.
+                    </p>
+                </div>
+                
+                <div class="setting-row" style="display:flex; justify-content:space-between; align-items-center; margin-top: 10px;">
+                    <label>Modelo OpenRouter:</label>
+                    <select id="set-openrouter-modelo" style="padding:8px; background: #1a1a1a; border: 1px solid #333; color: #eee; border-radius: 4px; min-width: 200px;">
+                        <option value="">Cargando modelos...</option>
+                    </select>
+                    <button id="btn-cargar-modelos-openrouter" class="btn-modern btn-reveal" style="padding: 6px 12px; font-size: 0.8em;" title="Recargar lista de modelos">
+                        <i class="fa-solid fa-rotate"></i>
+                    </button>
+                </div>
+                <p id="openrouter-modelos-info" style="font-size:0.7em; color:#666; margin-top:5px;"></p>
+            </div>
+
+            <p style="font-size:0.7em; color:#888; margin-top:15px;">
+                <i class="fa-solid fa-lightbulb"></i> 
+                Groq ofrece inferencia ultra-rápida. OpenRouter proporciona acceso a múltiples modelos, incluyendo versiones gratuitas.
+            </p>
         </div>
 
         <!-- ══════════════════════════════════════════════

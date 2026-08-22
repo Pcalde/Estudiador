@@ -57,6 +57,8 @@ const State = (() => {
         isPomoProcessing: false,
         sessionData:     { tarjetas: 0, faciles: 0, dificiles: 0, criticas: 0, deudaInicial: 0 },
         iaModel:         'llama-3.3-70b-versatile',
+        iaProveedor:     'groq',
+        openRouterApiKey: null,
 
         // Calendario & Horario
         fechasClave:          null, 
@@ -129,6 +131,8 @@ const State = (() => {
         groqApiKey:   () => sessionStorage.getItem('estudiador_groq_key_session')
                             || localStorage.getItem('estudiador_groq_key') || '',
         groqProxyUrl: () => localStorage.getItem('estudiador_groq_proxy_url') || '',
+        openRouterApiKey: () => localStorage.getItem('estudiador_openrouter_key') || '',
+        iaProveedor:  () => localStorage.getItem('estudiador_ia_proveedor') || 'groq',
         widgetConfig: () => JSON.parse(localStorage.getItem('estudiador_widget_config') || 'null'),
         ambientTrack: () => localStorage.getItem('estudiador_ambient_track') || 'brownian',
         rewardTrack:  () => localStorage.getItem('estudiador_reward_track') || 'warning',

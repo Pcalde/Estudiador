@@ -11,13 +11,80 @@ const UISettings = (() => {
         modal.classList.remove('hidden');
 
         const f = (id) => document.getElementById(id);
+        
+        // Cargar configuración de proveedor
+        const proveedorActivo = State.get('iaProveedor') || 'groq';
+        const selProveedor = f('set-ia-proveedor');
+        if (selProveedor) selProveedor.value = proveedorActivo;
+        
+        // Mostrar/ocultar paneles según proveedor
+        actualizarPanelProveedor(proveedorActivo);
+        
+        // Configuración Groq
         if (f('set-groq-key'))        f('set-groq-key').value        = apiKey   || '';
         if (f('set-groq-session-only')) f('set-groq-session-only').checked = !isLocal;
         if (f('set-groq-proxy-url'))  f('set-groq-proxy-url').value  = proxyUrl || '';
         if (f('set-firebase-config')) f('set-firebase-config').value  = fbConfig || '';
 
-        const selModel = f('selector-modelo-ia');
-        if (selModel) selModel.value = currentModel || 'llama-3.3-70b-versatile';
+        // Modelo Groq
+        const selGroqModel = f('set-groq-modelo');
+        if (selGroqModel) selGroqModel.value = currentModel || 'llama-3.3-70b-versatile';
+        
+        // Cargar modelos OpenRouter si está seleccionado
+        if (proveedorActivo === 'openrouter') {
+            if (typeof AI !== 'undefined' && AI.cargarModelosOpenRouter) {
+                AI.cargarModelosOpenRouter().then(() => {
+                    renderModelosOpenRouter();
+                });
+            }
+        }
+    }
+    
+    function actualizarPanelProveedor(proveedor) {
+        const panelGroq = document.getElementById('config-groq');
+        const panelOpenRouter = document.getElementById('config-openrouter');
+        
+        if (panelGroq && panelOpenRouter) {
+            if (proveedor === 'openrouter') {
+                panelGroq.classList.add('hidden');
+                panelOpenRouter.classList.remove('hidden');
+            } else {
+                panelGroq.classList.remove('hidden');
+                panelOpenRouter.classList.add('hidden');
+            }
+        }
+    }
+    
+    function renderModelosOpenRouter() {
+        const select = document.getElementById('set-openrouter-modelo');
+        const info = document.getElementById('openrouter-modelos-info');
+        if (!select) return;
+        
+        const modelos = AI.getModelosDisponibles();
+        const modeloActual = State.get('iaModel');
+        
+        select.innerHTML = '';
+        
+        if (modelos.length === 0) {
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = 'Sin modelos disponibles (añade API key)';
+            select.appendChild(opt);
+            if (info) info.textContent = '';
+            return;
+        }
+        
+        modelos.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.id;
+            opt.textContent = m.nombre;
+            if (m.id === modeloActual) opt.selected = true;
+            select.appendChild(opt);
+        });
+        
+        if (info) {
+            info.textContent = `${modelos.length} modelos gratuitos disponibles`;
+        }
     }
 
     function cerrarAjustes() {
@@ -43,6 +110,26 @@ const UISettings = (() => {
 
     function getAjustesData(clavesAsignaturas = []) {
         const f = (id) => document.getElementById(id);
+        
+        // Obtener proveedor seleccionado
+        const proveedorSeleccionado = f('set-ia-proveedor')?.value || 'groq';
+        
+        // Obtener modelo seleccionado según proveedor
+        let modeloSeleccionado;
+        if (proveedorSeleccionado === 'openrouter') {
+            modeloSeleccionado = f('set-openrouter-modelo')?.value || '';
+        } else {
+            modeloSeleccionado = f('set-groq-modelo')?.value || 'llama-3.3-70b-versatile';
+        }
+        
+        // Guardar modelo en localStorage
+        if (modeloSeleccionado) {
+            localStorage.setItem('estudiador_ia_model', modeloSeleccionado);
+        }
+        
+        // Guardar proveedor en localStorage
+        localStorage.setItem('estudiador_ia_proveedor', proveedorSeleccionado);
+        
         const formData = {
             pomo: {
                 work:             parseInt(f('set-work')?.value)   || 35,
@@ -54,7 +141,10 @@ const UISettings = (() => {
             ia: {
                 apiKey:      f('set-groq-key')?.value.trim()      || '',
                 sessionOnly: !!f('set-groq-session-only')?.checked,
-                proxyUrl:    f('set-groq-proxy-url')?.value.trim() || ''
+                proxyUrl:    f('set-groq-proxy-url')?.value.trim() || '',
+                openRouterKey: f('set-openrouter-key')?.value.trim() || '',
+                proveedor:   proveedorSeleccionado,
+                modelo:      modeloSeleccionado
             },
             firebase: {
                 configStr: f('set-firebase-config')?.value.trim() || ''
@@ -223,5 +313,7 @@ const UISettings = (() => {
         renderApariencia,
         renderPrivacidadUI,
         renderSelectorDia,
+        actualizarPanelProveedor,
+        renderModelosOpenRouter,
     };
 })();

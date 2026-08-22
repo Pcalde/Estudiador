@@ -180,8 +180,22 @@ function guardarAjustes() {
         State.set('pomoSettings', pomoSettings);
         
         if (formData.ia) {
+            // Guardar configuración de Groq
             State.set('groqApiKey',   formData.ia.apiKey);
             State.set('groqProxyUrl', formData.ia.proxyUrl);
+            
+            // Guardar configuración de OpenRouter
+            if (formData.ia.openRouterKey) {
+                State.set('openRouterApiKey', formData.ia.openRouterKey);
+            }
+            
+            // Guardar proveedor y modelo seleccionados
+            if (formData.ia.proveedor) {
+                State.set('iaProveedor', formData.ia.proveedor);
+            }
+            if (formData.ia.modelo) {
+                State.set('iaModel', formData.ia.modelo);
+            }
         }
         
         const userColors = { ...State.get('userColors'), ...(formData.colores || {}) };
@@ -194,11 +208,14 @@ function guardarAjustes() {
 
     _persistirAjustesStorage(formData);
 
-    const modoIA = State.get('groqProxyUrl')
-        ? 'PROXY'
-        : (State.get('groqApiKey') ? 'DIRECTO' : 'INACTIVO');
+    const proveedorActivo = State.get('iaProveedor') || 'groq';
+    const modoIA = proveedorActivo === 'openrouter' 
+        ? 'OPENROUTER'
+        : (State.get('groqProxyUrl')
+            ? 'PROXY'
+            : (State.get('groqApiKey') ? 'DIRECTO' : 'INACTIVO'));
 
-    EventBus.emit('AJUSTES_GUARDADOS', { modoIA });
+    EventBus.emit('AJUSTES_GUARDADOS', { modoIA, proveedor: proveedorActivo });
 }
 
 /** Persistencia pura en storage. Sin efectos secundarios de UI. */
@@ -210,6 +227,7 @@ function _persistirAjustesStorage(formData) {
     localStorage.setItem('estudiador_alarm_track', State.get('alarmTrack') || 'custom');
 
     if (formData.ia) {
+        // Guardar API Key de Groq (sesión o permanente)
         if (formData.ia.sessionOnly) {
             sessionStorage.setItem('estudiador_groq_key_session', formData.ia.apiKey);
             localStorage.removeItem('estudiador_groq_key');
@@ -218,8 +236,14 @@ function _persistirAjustesStorage(formData) {
             sessionStorage.removeItem('estudiador_groq_key_session');
         }
 
+        // Guardar proxy de Groq
         if (formData.ia.proxyUrl) localStorage.setItem('estudiador_groq_proxy_url', formData.ia.proxyUrl);
         else                       localStorage.removeItem('estudiador_groq_proxy_url');
+        
+        // Guardar API Key de OpenRouter
+        if (formData.ia.openRouterKey) {
+            localStorage.setItem('estudiador_openrouter_key', formData.ia.openRouterKey);
+        }
     }
 
     if (formData.firebase && formData.firebase.configStr) {

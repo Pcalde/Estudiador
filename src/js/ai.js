@@ -1,23 +1,100 @@
 // ════════════════════════════════════════════════════════════════
-// AI.JS — Módulo Tutor IA (Groq API)
+// AI.JS — Módulo Tutor IA (Groq + OpenRouter)
 // Encapsula la lógica de red, orquestación de prompts y chat.
 // Arquitectura: Lee credenciales y modelo del State. Cero mutaciones DOM.
 // ════════════════════════════════════════════════════════════════
 
 const AI = (() => {
     
-    const MODELOS = {
-        COMPLEJO: "llama-3.3-70b-versatile",
-        RAPIDO:   "llama-3.1-8b-instant"
+    const PROVEEDORES = {
+        GROQ: 'groq',
+        OPENROUTER: 'openrouter'
     };
+
+    const MODELOS_GROQ = [
+        { id: "llama-3.3-70b-versatile", nombre: "Llama 3.3 70B (Complejo)" },
+        { id: "llama-3.1-8b-instant", nombre: "Llama 3.1 8B Instant (Rápido)" },
+        { id: "gemma2-9b-it", nombre: "Gemma 2 9B" }
+    ];
+
+    let modelosOpenRouter = [];
+
+    async function cargarModelosOpenRouter() {
+        const apiKey = State.get('openRouterApiKey');
+        if (!apiKey) {
+            console.log('OpenRouter: sin API key');
+            modelosOpenRouter = [];
+            return [];
+        }
+
+        try {
+            const response = await fetch("https://openrouter.ai/api/v1/models", {
+                method: "GET",
+                headers: {
+                    "Authorization": `Bearer ${apiKey}`,
+                    "Content-Type": "application/json"
+                }
+            });
+
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.error?.message || `Error HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+            // Filtrar solo modelos gratuitos
+            modelosOpenRouter = data.data
+                .filter(m => {
+                    const isFree = m.pricing?.prompt === "0" || m.id.includes(':free');
+                    // También incluir algunos modelos populares aunque no sean estrictamente free
+                    const popularFree = [
+                        'google/gemma-2-9b-it:free',
+                        'meta-llama/llama-3-8b-instruct:free',
+                        'mistralai/mistral-7b-instruct:free'
+                    ].some(id => m.id.includes(id.split('/')[1]?.split(':')[0] || ''));
+                    return isFree || popularFree;
+                })
+                .map(m => ({
+                    id: m.id,
+                    nombre: m.name || m.id.split('/').pop().replace(':free', '')
+                }))
+                .sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+            console.log(`OpenRouter: ${modelosOpenRouter.length} modelos gratuitos cargados`);
+            return modelosOpenRouter;
+        } catch (error) {
+            console.error("Error cargando modelos OpenRouter:", error.message);
+            modelosOpenRouter = [];
+            return [];
+        }
+    }
+
+    function getModelosDisponibles() {
+        const proveedor = State.get('iaProveedor') || PROVEEDORES.GROQ;
+        if (proveedor === PROVEEDORES.GROQ) {
+            return MODELOS_GROQ;
+        } else {
+            return modelosOpenRouter.length > 0 ? modelosOpenRouter : [];
+        }
+    }
+
+    async function _llamarIA(systemMsg, userMsg, modeloOverride = null) {
+        const proveedor = State.get('iaProveedor') || PROVEEDORES.GROQ;
+        
+        if (proveedor === PROVEEDORES.OPENROUTER) {
+            return _llamarOpenRouter(systemMsg, userMsg, modeloOverride);
+        } else {
+            return _llamarGroq(systemMsg, userMsg, modeloOverride);
+        }
+    }
 
     async function _llamarGroq(systemMsg, userMsg, modeloOverride = null) {
         const apiKey = State.get('groqApiKey');
         const proxyUrl = State.get('groqProxyUrl');
         
-        if (!apiKey && !proxyUrl) throw new Error("Faltan credenciales de IA.");
+        if (!apiKey && !proxyUrl) throw new Error("Faltan credenciales de Groq.");
 
-        const modeloActivo = modeloOverride || State.get('iaModel') || MODELOS.COMPLEJO;
+        const modeloActivo = modeloOverride || State.get('iaModel') || MODELOS_GROQ[0].id;
 
         const payload = {
             model: modeloActivo,
@@ -36,7 +113,45 @@ const AI = (() => {
         const response = await fetch(url, { method: "POST", headers, body: JSON.stringify(payload) });
         if (!response.ok) {
             const err = await response.json().catch(() => ({}));
-            throw new Error(err.error?.message || `Error en red IA (Status: ${response.status})`);
+            throw new Error(err.error?.message || `Error en red Groq (Status: ${response.status})`);
+        }
+
+        const data = await response.json();
+        return data.choices[0].message.content;
+    }
+
+    async function _llamarOpenRouter(systemMsg, userMsg, modeloOverride = null) {
+        const apiKey = State.get('openRouterApiKey');
+        
+        if (!apiKey) throw new Error("Faltan credenciales de OpenRouter.");
+
+        const modeloActivo = modeloOverride || State.get('iaModel');
+        if (!modeloActivo) throw new Error("No hay modelo seleccionado de OpenRouter.");
+
+        const payload = {
+            model: modeloActivo,
+            messages: [
+                { role: "system", content: systemMsg },
+                { role: "user", content: userMsg }
+            ],
+            temperature: 0.3,
+            max_tokens: 1024
+        };
+
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${apiKey}`,
+                "Content-Type": "application/json",
+                "HTTP-Referer": window.location.origin,
+                "X-Title": "Estudiador"
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error?.message || `Error en red OpenRouter (Status: ${response.status})`);
         }
 
         const data = await response.json();
@@ -82,7 +197,7 @@ const AI = (() => {
         try {
             const context = _construirContexto();
             const prompt = `Eres un profesor experto. Contexto:\n${context}\nResponde breve con LaTeX ($).`;
-            const respuesta = await _llamarGroq(prompt, texto);
+            const respuesta = await _llamarIA(prompt, texto);
             
             const container = document.getElementById('chat-messages');
             if (container && container.lastElementChild) container.removeChild(container.lastElementChild);
@@ -105,7 +220,7 @@ const AI = (() => {
         Responde ÚNICAMENTE con el título envuelto en 4 llaves y los comandos de latex con dos \\\\ y envueltos en dólares $.`;
         
         // Cero delegación de errores. El error debe subir al orquestador para no silenciar Rate Limits.
-        const respuesta = await _llamarGroq(prompt, contenido, MODELOS.RAPIDO);
+        const respuesta = await _llamarIA(prompt, contenido, "llama-3.1-8b-instant");
         const match = respuesta.match(/\{{2,4}(.*?)\}{2,4}/);
         if (match) return `${match[1].trim()} (Auto)`;
         
@@ -219,7 +334,10 @@ const AI = (() => {
         enviarMensajeIA, 
         generarTituloAutomatico, 
         procesarTitulosEnLote,
-        setModeloActivo: (m) => { State.set('iaModel', m); localStorage.setItem('estudiador_ia_model', m); }
+        cargarModelosOpenRouter,
+        getModelosDisponibles,
+        setModeloActivo: (m) => { State.set('iaModel', m); localStorage.setItem('estudiador_ia_model', m); },
+        setProveedor: (p) => { State.set('iaProveedor', p); localStorage.setItem('estudiador_ia_proveedor', p); }
     };
 })();
 
@@ -228,3 +346,6 @@ window.toggleChat = AI.toggleChat;
 window.checkEnterIA = AI.checkEnterIA;
 window.enviarMensajeIA = AI.enviarMensajeIA;
 window.cambiarModeloIA = AI.setModeloActivo;
+window.cambiarProveedorIA = AI.setProveedor;
+window.cargarModelosOpenRouter = AI.cargarModelosOpenRouter;
+window.getModelosDisponibles = AI.getModelosDisponibles;

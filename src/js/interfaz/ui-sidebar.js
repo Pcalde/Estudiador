@@ -54,7 +54,7 @@ const UISidebar = (() => {
                         <span style="font-size:0.75em;color:var(--text-subtle);">(${asignaturasFiltradas.length})</span>
                         <div style="margin-left:auto;display:flex;gap:4px;">
                             <button class="btn-mini" data-action="editarCarpeta" data-carpeta="${escapeHtml(nombreCarpeta)}" title="Editar carpeta"><i class="fa-regular fa-pen-to-square"></i></button>
-                            <button class="btn-mini" data-action="borrarCarpeta" data-carpeta="${escapeHtml(nombreCarpeta)}" title="Eliminar carpeta">✕</button>
+                            <button class="btn-mini" data-action="borrarCarpeta" data-carpeta="${escapeHtml(nombreCarpeta)}" title="Eliminar carpeta"><i class="fa-solid fa-trash"></i></button>
                         </div>
                     </div>
                     <ul class="carpeta-content" style="list-style:none;padding-left:20px;margin:0;${tieneContenido ? '' : 'display:none;'}">
@@ -63,18 +63,30 @@ const UISidebar = (() => {
                 `;
                 
                 const header = carpetaLi.querySelector('.carpeta-header');
+                const content = carpetaLi.querySelector('.carpeta-content');
+                
                 header.addEventListener('click', (e) => {
                     if (e.target.closest('button')) return;
-                    const content = carpetaLi.querySelector('.carpeta-content');
                     const icon = header.querySelector('.folder-icon');
-                    if (content.style.display === 'none') {
+                    if (content.classList.contains('collapsed')) {
+                        content.classList.remove('collapsed');
                         content.style.display = 'block';
                         icon.classList.replace('fa-folder', 'fa-folder-open');
                     } else {
-                        content.style.display = 'none';
+                        content.classList.add('collapsed');
+                        setTimeout(() => {
+                            if (content.classList.contains('collapsed')) {
+                                content.style.display = 'none';
+                            }
+                        }, 400);
                         icon.classList.replace('fa-folder-open', 'fa-folder');
                     }
                 });
+                
+                // Inicializar estado collapsed si no tiene contenido
+                if (!tieneContenido) {
+                    content.classList.add('collapsed');
+                }
                 
                 fragment.appendChild(carpetaLi);
             });
@@ -96,7 +108,7 @@ const UISidebar = (() => {
         if (asignaturasArchivadas.length > 0) {
             const separador = document.createElement('li');
             separador.className = 'separador-archivadas';
-            separador.innerHTML = '<span style="font-size:0.75em;color:var(--text-subtle);padding:8px 0;display:block;border-top:1px solid var(--border-subtle);margin:8px 0;">ARCHIVADAS</span>';
+            separador.innerHTML = `<span><i class="fa-solid fa-box-archive" style="margin-right:6px;"></i>ARCHIVADAS (${asignaturasArchivadas.length})</span>`;
             fragment.appendChild(separador);
 
             asignaturasArchivadas.forEach(nombre => {
@@ -108,40 +120,55 @@ const UISidebar = (() => {
         lista.appendChild(fragment);
     }
 
-    function crearItemAsignaturaHTML(nombre, asigActual, isArchived = false) {
-        const color = getColorAsignatura(nombre);
-        const archivedStyle = isArchived ? 'opacity:0.6;' : '';
-        return `
-            <li class="asig-item${nombre === asigActual ? ' active' : ''}" 
-                style="--dynamic-color:${color};${archivedStyle}">
-                <span style="flex-grow:1;display:flex;align-items:center;gap:8px;">${isArchived ? '📦' : ''}${escapeHtml(nombre)}</span>
-                <div class="asig-actions">
-                    <button class="btn-mini" data-action="renombrarAsignatura" data-nombre="${escapeHtml(nombre)}" title="Renombrar"><i class="fa-regular fa-pen-to-square"></i></button>
-                    <button class="btn-mini" data-action="${isArchived ? 'desarchivarAsignatura' : 'archivarAsignatura'}" data-nombre="${escapeHtml(nombre)}" title="${isArchived ? 'Desarchivar' : 'Archivar'}">${isArchived ? '📤' : '📥'}</button>
-                    <button class="btn-mini" data-action="organizarAsignatura" data-nombre="${escapeHtml(nombre)}" title="Organizar en carpeta"><i class="fa-solid fa-folder-plus"></i></button>
-                    <button class="btn-mini" data-action="borrarAsignatura" data-nombre="${escapeHtml(nombre)}" title="Borrar">✕</button>
-                </div>
-            </li>
-        `;
-    }
-
     function crearItemAsignatura(nombre, asigActual, isArchived = false) {
         const li = document.createElement('li');
         li.className = 'asig-item' + (nombre === asigActual ? ' active' : '');
         li.style.setProperty('--dynamic-color', getColorAsignatura(nombre));
         if (isArchived) li.style.opacity = '0.6';
         
+        const archivedIcon = isArchived 
+            ? '<i class="fa-solid fa-box-archive" style="color:var(--text-subtle);"></i>' 
+            : '';
+        
         li.innerHTML = `
-            <span style="flex-grow:1;display:flex;align-items:center;gap:8px;">${isArchived ? '📦' : ''}${escapeHtml(nombre)}</span>
+            <span style="flex-grow:1;display:flex;align-items:center;gap:8px;">${archivedIcon}${escapeHtml(nombre)}</span>
             <div class="asig-actions">
                 <button class="btn-mini" data-action="renombrarAsignatura" data-nombre="${escapeHtml(nombre)}" title="Renombrar"><i class="fa-regular fa-pen-to-square"></i></button>
-                <button class="btn-mini" data-action="${isArchived ? 'desarchivarAsignatura' : 'archivarAsignatura'}" data-nombre="${escapeHtml(nombre)}" title="${isArchived ? 'Desarchivar' : 'Archivar'}">${isArchived ? '📤' : '📥'}</button>
+                <button class="btn-mini" data-action="${isArchived ? 'desarchivarAsignatura' : 'archivarAsignatura'}" data-nombre="${escapeHtml(nombre)}" title="${isArchived ? 'Desarchivar' : 'Archivar'}">
+                    <i class="fa-solid ${isArchived ? 'fa-box-open' : 'fa-box-archive'}"></i>
+                </button>
                 <button class="btn-mini" data-action="organizarAsignatura" data-nombre="${escapeHtml(nombre)}" title="Organizar en carpeta"><i class="fa-solid fa-folder-plus"></i></button>
-                <button class="btn-mini" data-action="borrarAsignatura" data-nombre="${escapeHtml(nombre)}" title="Borrar">✕</button>
+                <button class="btn-mini" data-action="borrarAsignatura" data-nombre="${escapeHtml(nombre)}" title="Borrar"><i class="fa-solid fa-trash"></i></button>
             </div>`;
         
-        li.onclick = () => { if (typeof cargarAsignatura === 'function') cargarAsignatura(nombre); };
+        li.onclick = (e) => { 
+            if (e.target.closest('.asig-actions')) return;
+            if (typeof cargarAsignatura === 'function') cargarAsignatura(nombre); 
+        };
         return li;
+    }
+
+    function crearItemAsignaturaHTML(nombre, asigActual, isArchived = false) {
+        const color = getColorAsignatura(nombre);
+        const archivedStyle = isArchived ? 'opacity:0.6;' : '';
+        const archivedIcon = isArchived 
+            ? '<i class="fa-solid fa-box-archive" style="color:var(--text-subtle);"></i>' 
+            : '';
+        
+        return `
+            <li class="asig-item${nombre === asigActual ? ' active' : ''}" 
+                style="--dynamic-color:${color};${archivedStyle}">
+                <span style="flex-grow:1;display:flex;align-items:center;gap:8px;">${archivedIcon}${escapeHtml(nombre)}</span>
+                <div class="asig-actions">
+                    <button class="btn-mini" data-action="renombrarAsignatura" data-nombre="${escapeHtml(nombre)}" title="Renombrar"><i class="fa-regular fa-pen-to-square"></i></button>
+                    <button class="btn-mini" data-action="${isArchived ? 'desarchivarAsignatura' : 'archivarAsignatura'}" data-nombre="${escapeHtml(nombre)}" title="${isArchived ? 'Desarchivar' : 'Archivar'}">
+                        <i class="fa-solid ${isArchived ? 'fa-box-open' : 'fa-box-archive'}"></i>
+                    </button>
+                    <button class="btn-mini" data-action="organizarAsignatura" data-nombre="${escapeHtml(nombre)}" title="Organizar en carpeta"><i class="fa-solid fa-folder-plus"></i></button>
+                    <button class="btn-mini" data-action="borrarAsignatura" data-nombre="${escapeHtml(nombre)}" title="Borrar"><i class="fa-solid fa-trash"></i></button>
+                </div>
+            </li>
+        `;
     }
 
     function actualizarMenuLateral(bib, asigActual) {

@@ -142,3 +142,14 @@ function actualizarDesplegableMini() {
         UI.actualizarDesplegableMini(State.get('taskList') || [], State.get('userColors') || {});
     }
 }
+
+// Registrar comandos para las nuevas acciones de la sidebar
+if (typeof CommandRegistry !== 'undefined') {
+    CommandRegistry.register('renombrarAsignatura', ({nombre}) => renombrarAsignatura(nombre));
+    CommandRegistry.register('borrarAsignatura', ({nombre}) => borrarAsignatura(nombre));
+    CommandRegistry.register('archivarAsignatura', ({nombre}) => UI.archivarAsignatura(nombre));
+    CommandRegistry.register('desarchivarAsignatura', ({nombre}) => UI.desarchivarAsignatura(nombre));
+    CommandRegistry.register('organizarAsignatura', ({nombre}) => UI.organizarAsignatura(nombre));
+    CommandRegistry.register('editarCarpeta', ({carpeta}) => UI.editarCarpeta(carpeta));
+    CommandRegistry.register('borrarCarpeta', ({carpeta}) => UI.borrarCarpeta(carpeta));
+}

@@ -18,6 +18,13 @@ const UISidebar = (() => {
         if (typeof EventBus !== 'undefined') EventBus.emit('DATA_REQUIRES_SAVE');
     }
 
+    // Función pública para obtener tarjetas de una asignatura (incluyendo carpetas)
+    function obtenerTarjetasPorAsignatura(nombreAsignatura) {
+        const { bib } = obtenerEstructuraBiblioteca();
+        if (!bib[nombreAsignatura]) return [];
+        return bib[nombreAsignatura];
+    }
+
     function renderizarArbolAsignaturas(bib, config, asigActual) {
         const lista = document.getElementById('lista-asignaturas');
         if (!lista) return;
@@ -378,5 +385,6 @@ const UISidebar = (() => {
         archivarAsignatura,
         desarchivarAsignatura,
         organizarAsignatura,
+        obtenerTarjetasPorAsignatura,
     };
 })();

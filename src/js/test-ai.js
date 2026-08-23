@@ -158,15 +158,17 @@ Devuelve ÚNICAMENTE las preguntas reparadas en el formato DSL especificado, sin
 
     // ── Selección de batch de conceptos para contexto ────────────
 
-    function _seleccionarBatchConceptos(biblioteca, asig, numConceptos) {
+    function _seleccionarBatchConceptos(asig, numConceptos) {
         let cardsDisponibles = [];
         
         if (asig === 'ALL') {
+            const biblioteca = State.get('biblioteca') || {};
             Object.values(biblioteca).forEach(asignatura => {
                 cardsDisponibles.push(...asignatura);
             });
-        } else if (biblioteca[asig]) {
-            cardsDisponibles = [...biblioteca[asig]];
+        } else {
+            // Usar la función pública que maneja carpetas
+            cardsDisponibles = UISidebar.obtenerTarjetasPorAsignatura(asig);
         }
         
         // Filtrar cards con contenido relevante
@@ -200,14 +202,13 @@ Devuelve ÚNICAMENTE las preguntas reparadas en el formato DSL especificado, sin
 
     async function generarPreguntasParaTest(asig, numPreguntas, dificultad, temperaturaKey) {
         const temperatura = TEMPERATURAS[temperaturaKey] || TEMPERATURAS.equilibrado;
-        const biblioteca = State.get('biblioteca') || {};
         
         // Factor de sobregeneración: pedir 25% más para tener margen de descarte
         const factorSobreGeneracion = 1.25;
         const numPreguntasAGenerar = Math.ceil(numPreguntas * factorSobreGeneracion);
         
         // Seleccionar batch de conceptos aleatorios como contexto
-        const contexto = _seleccionarBatchConceptos(biblioteca, asig, numPreguntasAGenerar * 2);
+        const contexto = _seleccionarBatchConceptos(asig, numPreguntasAGenerar * 2);
         
         if (contexto.trim().length === 0) {
             throw new Error('No hay contenido disponible en los apuntes para generar preguntas');

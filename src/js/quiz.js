@@ -26,18 +26,19 @@ const Quiz = (() => {
         _respuestas = [];
         _idxActual = 0;
 
-        // Obtener contenido de los apuntes
-        const biblioteca = State.get('biblioteca') || {};
+        // Obtener contenido de los apuntes usando la función pública que maneja carpetas
+        const tarjetas = UISidebar.obtenerTarjetasPorAsignatura(asig);
         let contenidoParaIA = '';
 
         if (asig === 'ALL') {
+            const biblioteca = State.get('biblioteca') || {};
             Object.values(biblioteca).forEach(asignatura => {
                 asignatura.forEach(c => {
                     contenidoParaIA += `Tema: ${c.Titulo}\n${c.Contenido}\n\n`;
                 });
             });
-        } else if (biblioteca[asig]) {
-            biblioteca[asig].forEach(c => {
+        } else if (tarjetas.length > 0) {
+            tarjetas.forEach(c => {
                 contenidoParaIA += `Tema: ${c.Titulo}\n${c.Contenido}\n\n`;
             });
         }
@@ -178,14 +179,16 @@ const Quiz = (() => {
     }
 
     function _actualizarFSRS(concepto, acierto) {
-        // Buscar tarjeta relacionada en la biblioteca actual
-        const biblioteca = State.get('biblioteca') || {};
+        // Buscar tarjeta relacionada usando la función pública que maneja carpetas
         const asig = _config.asig;
         
-        if (!biblioteca[asig]) return;
+        if (asig === 'ALL') return; // No actualizar FSRS en modo todas las asignaturas
+        
+        const tarjetas = UISidebar.obtenerTarjetasPorAsignatura(asig);
+        if (tarjetas.length === 0) return;
 
         // Búsqueda heurística por similitud de texto
-        const tarjetaRelacionada = biblioteca[asig].find(t => 
+        const tarjetaRelacionada = tarjetas.find(t => 
             t.Titulo.toLowerCase().includes(concepto.substring(0, 30).toLowerCase()) ||
             concepto.toLowerCase().includes(t.Titulo.toLowerCase().substring(0, 30))
         );
@@ -205,6 +208,7 @@ const Quiz = (() => {
             Logger.info(`FSRS actualizado para "${tarjetaRelacionada.Titulo}": ${acierto ? 'acierto' : 'fallo'} → intervalo: ${fsrs.interval}`);
             
             // Guardar cambios
+            const biblioteca = State.get('biblioteca') || {};
             State.set('biblioteca', biblioteca);
             persistirDatosLocales('biblioteca', biblioteca);
         }

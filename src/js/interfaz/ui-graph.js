@@ -515,6 +515,15 @@ const UIGraph = (() => {
             });
         });
 
+        // NUEVO: Botón de generación de mapa con IA
+        document.getElementById('graph-btn-ia')?.addEventListener('click', () => {
+            if (typeof GraphAI !== 'undefined') {
+                GraphAI.generarMapaConIA();
+            } else {
+                Toast.show('Módulo de IA no disponible', 'error');
+            }
+        });
+
         document.addEventListener('keydown', (e) => {
             const modal = document.getElementById('modal-graph');
             if (!modal || modal.classList.contains('hidden')) return; 

@@ -1080,7 +1080,7 @@ window.abrirAjustes = function() {
         const apiKey   = State.get('groqApiKey')  || "";
         const proxyUrl = State.get('groqProxyUrl') || "";
         const fbConfig = localStorage.getItem('firebase_config') || "";
-        const iaModel  = State.get('iaModel') || "llama-3.3-70b-versatile";
+        const iaModel  = State.get('iaModel') || "openai/gpt-oss-120b";
 
         if (typeof UI === 'undefined' || !UI.abrirAjustes) throw new Error("UI.abrirAjustes no disponible.");
         UI.abrirAjustes(apiKey, isLocal, proxyUrl, fbConfig, iaModel);

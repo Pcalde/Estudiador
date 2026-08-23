@@ -208,9 +208,9 @@ const AI = (() => {
             } else {
                 // Groq
                 modelos = [
-                    { id: 'llama-3.3-70b-versatile', nombre: 'Llama 3.3 70B' },
-                    { id: 'llama-3.1-8b-instant', nombre: 'Llama 3.1 8B' },
-                    { id: 'gemma2-9b-it', nombre: 'Gemma 2 9B' }
+                    { id: "openai/gpt-oss-120b", nombre: "gpt-oss-120b (Complejo)" },
+                    { id: "qwen/qwen3.6-27b", nombre: "Qwen 3.6 27b (Rápido)" },
+                    { id: "openai/gpt-oss-20b", nombre: "gpt-oss-20b (Comodín)" },
                 ];
             }
             
@@ -266,7 +266,7 @@ const AI = (() => {
         if (!texto) return;
 
         const select = document.getElementById('selector-modelo-ia');
-        const modelo = select ? select.value : (State.get('iaModel') || 'llama-3.3-70b-versatile');
+        const modelo = select ? select.value : (State.get('iaModel') || 'openai/gpt-oss-120b');
         
         if (!modelo) {
             agregarMensajeChatDirecto('system', 'Por favor, selecciona un modelo primero.');

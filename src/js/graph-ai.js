@@ -136,18 +136,23 @@ const GraphAI = (() => {
 
     // ── Función principal de generación ───────────────────────────
     
-    async function generarMapaConIA() {
+    async function generarMapaConIA(cardsSeleccionadas = null) {
         const asig = State.get('nombreAsignaturaActual');
         if (!asig) {
             Toast.show('Selecciona una asignatura primero', 'warning');
             return;
         }
 
-        const cardsDisponibles = (State.get('biblioteca') || {})[asig] || [];
-        if (cardsDisponibles.length === 0) {
+        const todasCards = (State.get('biblioteca') || {})[asig] || [];
+        if (todasCards.length === 0) {
             Toast.show('No hay tarjetas en esta asignatura', 'warning');
             return;
         }
+
+        // Si se pasan cards seleccionadas, usar solo esas; si no, todas
+        const cardsDisponibles = cardsSeleccionadas && cardsSeleccionadas.length > 0 
+            ? cardsSeleccionadas 
+            : todasCards;
 
         const apiKey = State.get('groqApiKey');
         const proxyUrl = State.get('groqProxyUrl');
@@ -158,8 +163,9 @@ const GraphAI = (() => {
 
         // Preparar lista de títulos para el prompt
         const listaTitulos = cardsDisponibles.map(c => `- ${c.Titulo}`).join('\n');
+        const esBatch = cardsSeleccionadas && cardsSeleccionadas.length > 0;
         
-        const prompt = `Tienes esta lista de conceptos matemáticos:
+        const prompt = `Tienes esta lista de conceptos matemáticos:${esBatch ? ' (subconjunto seleccionado)' : ''}:
 ${listaTitulos}
 
 Genera las relaciones lógicas entre ellos (depende_de, demuestra, generaliza, aplica_a, es_caso_de, etc.)
@@ -172,7 +178,7 @@ Prioriza relaciones significativas (máximo 2-3 por concepto).`;
 
         // Mostrar estado de carga
         if (typeof Toast !== 'undefined') {
-            Toast.show('Generando mapa con IA...', 'info');
+            Toast.show(`Generando mapa con IA${esBatch ? ' (lote seleccionado)' : ''}...`, 'info');
         }
 
         try {

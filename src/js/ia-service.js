@@ -95,7 +95,7 @@ Título original: ${tarjeta.Titulo}
 Contenido:
 ${tarjeta.Contenido}`;
 
-    const model    = State.get('iaModel') || 'llama-3.3-70b-versatile';
+    const model    = State.get('iaModel') || 'openai/gpt-oss-120b';
     const endpoint = proxyUrl || "https://api.groq.com/openai/v1/chat/completions";
     const headers  = { "Content-Type": "application/json" };
     if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;

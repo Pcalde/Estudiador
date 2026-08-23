@@ -52,6 +52,7 @@ const Quiz = (() => {
 
     async function _generarPreguntasConIA(contenido, num, dificultad) {
         const temperaturaKey = document.getElementById('quiz-temperatura')?.value || 'equilibrado';
+        const asig = document.getElementById('quiz-asig')?.value;
         
         const modalContainer = document.getElementById('quiz-config');
         
@@ -68,30 +69,36 @@ const Quiz = (() => {
         `;
 
         try {
-            const resultado = await TestAI.generarPreguntas(contenido, num, dificultad, temperaturaKey);
+            // Generación tipo "caja negra": no se muestra el contenido al usuario
+            const resultado = await TestAI.generarPreguntasParaTest(asig, num, dificultad, temperaturaKey);
             
             if (resultado.preguntas.length === 0) {
                 throw new Error('No se generaron preguntas válidas');
             }
 
-            // Construir texto DSL para revisión
-            const textoDSL = TestAI._construirTextoDSL(resultado.preguntas);
-            
-            // Añadir comentarios sobre preguntas inválidas si las hay
-            let textoRevision = textoDSL;
-            if (resultado.invalidas && resultado.invalidas.length > 0) {
-                textoRevision += '\n\n# PREGUNTAS CON ERRORES (revisar o borrar):\n';
-                resultado.invalidas.forEach(inv => {
-                    textoRevision += `# ${inv.tipo}: ${inv.contenido}\n`;
-                });
-            }
-
-            // Abrir modal de revisión
-            TestAI._abrirRevisionTextoPlano(textoRevision, num, (preguntasValidas) => {
-                _preguntas = preguntasValidas.slice(0, num);
+            // Verificar si tenemos suficientes preguntas
+            if (resultado.totalGeneradas < num) {
+                // No hay suficientes preguntas válidas
+                TestAI._abrirAdvertenciaPreguntasInsuficientes(
+                    num,
+                    resultado.totalGeneradas,
+                    // Callback: continuar con las disponibles
+                    (numDisponibles) => {
+                        _preguntas = resultado.preguntas.slice(0, numDisponibles);
+                        State.set('quizEstado', { respuestas: [], idxActual: 0 });
+                        _mostrarPregunta(0);
+                    },
+                    // Callback: reintentar
+                    () => {
+                        _generarPreguntasConIA(contenido, num, dificultad);
+                    }
+                );
+            } else {
+                // Hay suficientes o más de las necesarias - coger exactamente las solicitadas
+                _preguntas = resultado.preguntas.slice(0, num);
                 State.set('quizEstado', { respuestas: [], idxActual: 0 });
                 _mostrarPregunta(0);
-            });
+            }
 
         } catch (error) {
             Logger.error('Error generando preguntas:', error);

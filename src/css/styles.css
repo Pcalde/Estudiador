@@ -1523,8 +1523,12 @@ iframe#pdf-frame { width: 100%; height: 100%; border: none; display: none; }
 #btn-open-chat:hover i { filter: drop-shadow(0 0 15px #ffdd00); }
 
 #ai-chat-widget {
-    position: fixed; bottom: 90px; right: 80px;
-    width: 400px; height: 550px; background: var(--card-bg);
+    position: fixed;
+    bottom: 90px; right: 80px;
+    width: min(400px, 92vw);
+    height: min(550px, 80vh);
+    max-height: calc(100dvh - 100px);
+    background: var(--card-bg);
     border: 1px solid var(--border-light); border-radius: var(--r-lg);
     display: flex; flex-direction: column;
     box-shadow: var(--shadow-lg); z-index: var(--z-top); overflow: hidden;
@@ -1754,7 +1758,11 @@ iframe#pdf-frame { width: 100%; height: 100%; border: none; display: none; }
     .controls { flex-direction: column; gap: 8px; margin-top: 20px; }
     .btn-dif   { margin: 0; width: 100%; }
 
-    #ai-chat-widget { width: 100%; height: 50%; bottom: 0; right: 0; border-radius: var(--r-lg) var(--r-lg) 0 0; }
+    #ai-chat-widget {
+        width: 100%; height: 70dvh;
+        bottom: 0; right: 0;
+        border-radius: var(--r-lg) var(--r-lg) 0 0;
+    }
 }
 
 /* Botones mínimos 48px táctiles */

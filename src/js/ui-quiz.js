@@ -45,9 +45,18 @@ const UI_Quiz = (() => {
             </div>
         `).join('');
 
+        const htmlTemperaturas = Object.entries(TestAI.TEMPERATURAS).map(([key, data]) => `
+            <div class="temp-option" data-temp="${key}" onclick="UI_Quiz._api.selectTemperatura('${key}')" 
+                 style="border: 2px solid #333; background: rgba(0,0,0,0.2); cursor:pointer;">
+                <i class="fa-solid ${data.icon}" style="color: var(--accent); font-size: 1.3em;"></i>
+                <span style="font-weight: bold; color: var(--accent);">${data.label}</span>
+                <small style="display:block; color:#888; margin-top:4px;">${data.desc}</small>
+            </div>
+        `).join('');
+
         container.innerHTML = `
             <div style="display:flex; justify-content:flex-end; margin-bottom:-10px;">
-                <button onclick="UI_Quiz.cerrar()" style="background:none; border:none; color:#888; cursor:pointer; font-size:1.3em;" title="Cerrar">✕</button>
+                <button onclick="UI_Quiz.cerrar()" style="background:none; border:none; color:#888; cursor:pointer; font-size:1.3em;" title="Cerrar"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div style="text-align:center; margin-bottom:20px;">
                 <h3 style="color:#fff; margin:0 0 10px 0;"><i class="fa-solid fa-list-check"></i> Configurar Tipo Test</h3>
@@ -68,6 +77,14 @@ const UI_Quiz = (() => {
                     ${htmlDificultades}
                 </div>
                 <input type="hidden" id="quiz-dificultad" value="">
+            </div>
+
+            <div style="margin-bottom:20px;">
+                <label style="display:block; color:#aaa; font-size:0.85em; margin-bottom:10px;">CREATIVIDAD IA</label>
+                <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:10px;">
+                    ${htmlTemperaturas}
+                </div>
+                <input type="hidden" id="quiz-temperatura" value="equilibrado">
             </div>
 
             <div style="margin-bottom:20px;">
@@ -96,6 +113,21 @@ const UI_Quiz = (() => {
         }
         
         document.getElementById('quiz-dificultad').value = key;
+    }
+
+    function selectTemperatura(key) {
+        document.querySelectorAll('.temp-option').forEach(el => {
+            el.style.borderColor = '#333';
+            el.style.background = 'rgba(0,0,0,0.2)';
+        });
+        
+        const selected = document.querySelector(`.temp-option[data-temp="${key}"]`);
+        if (selected) {
+            selected.style.borderColor = 'var(--accent)';
+            selected.style.background = 'rgba(76,175,80,0.1)';
+        }
+        
+        document.getElementById('quiz-temperatura').value = key;
     }
 
     function renderPregunta(pregunta, idx, total) {
@@ -230,8 +262,10 @@ const UI_Quiz = (() => {
         renderPregunta,
         renderResultados,
         selectDificultad,
+        selectTemperatura,
         _api: {
             selectDificultad,
+            selectTemperatura,
             iniciar: () => Quiz.iniciar(),
             seleccionarOpcion: (idx) => Quiz.seleccionarOpcion(idx),
             siguiente: () => Quiz.siguiente(),

@@ -256,6 +256,89 @@ const AI = (() => {
         return await _llamarIA("Eres un profesor universitario experto.", fullPrompt);
     }
 
+    /**
+     * Genera una respuesta con temperatura específica para tipo test
+     * @param {string} prompt - El prompt a enviar
+     * @param {number} temperatura - Valor de temperatura (0.0 a 1.0)
+     */
+    async function generarRespuestaConTemperatura(prompt, temperatura = 0.5) {
+        const context = _construirContexto();
+        const fullPrompt = `Eres un profesor experto. Contexto:\n${context}\n${prompt}`;
+        
+        const proveedor = State.get('iaProveedor') || PROVEEDORES.GROQ;
+        const modelo = State.get('iaModel') || MODELOS_GROQ[0].id;
+        
+        if (proveedor === PROVEEDORES.OPENROUTER) {
+            return _llamarOpenRouterConTemperatura("Eres un profesor universitario experto.", fullPrompt, modelo, temperatura);
+        } else {
+            return _llamarGroqConTemperatura("Eres un profesor universitario experto.", fullPrompt, modelo, temperatura);
+        }
+    }
+
+    async function _llamarGroqConTemperatura(systemMsg, userMsg, modelo, temperatura) {
+        const apiKey = State.get('groqApiKey');
+        const proxyUrl = State.get('groqProxyUrl');
+        
+        if (!apiKey && !proxyUrl) throw new Error("Faltan credenciales de Groq.");
+
+        const payload = {
+            model: modelo,
+            messages: [
+                { role: "system", content: systemMsg },
+                { role: "user", content: userMsg }
+            ],
+            temperature: temperatura,
+        };
+
+        const url = proxyUrl || "https://api.groq.com/openai/v1/chat/completions";
+        const headers = { "Content-Type": "application/json" };
+        if (!proxyUrl) headers["Authorization"] = `Bearer ${apiKey}`;
+
+        const response = await fetch(url, { method: "POST", headers, body: JSON.stringify(payload) });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error?.message || `Error en red Groq (Status: ${response.status})`);
+        }
+
+        const data = await response.json();
+        return data.choices[0].message.content;
+    }
+
+    async function _llamarOpenRouterConTemperatura(systemMsg, userMsg, modelo, temperatura) {
+        const apiKey = State.get('openRouterApiKey');
+        
+        if (!apiKey) throw new Error("Faltan credenciales de OpenRouter.");
+
+        const payload = {
+            model: modelo,
+            messages: [
+                { role: "system", content: systemMsg },
+                { role: "user", content: userMsg }
+            ],
+            temperature: temperatura,
+        };
+
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${apiKey}`,
+                "Content-Type": "application/json",
+                "HTTP-Referer": window.location.origin,
+                "X-Title": "Estudiador"
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error?.message || `Error en red OpenRouter (Status: ${response.status})`);
+        }
+
+        const data = await response.json();
+        return data.choices[0].message.content;
+    }
+
+
     async function enviarMensajeIA() {
         const input = document.getElementById('ai-user-input');
         const texto = input.value.trim();
@@ -451,6 +534,7 @@ const AI = (() => {
         generarTituloAutomatico, 
         procesarTitulosEnLote,
         generarRespuesta,
+        generarRespuestaConTemperatura,
         cargarModelosOpenRouter,
         getModelosDisponibles,
         MODELOS_GROQ,
@@ -468,3 +552,4 @@ window.cambiarProveedorIA = AI.setProveedor;
 window.cargarModelosOpenRouter = AI.cargarModelosOpenRouter;
 window.getModelosDisponibles = AI.getModelosDisponibles;
 window.generarRespuestaIA = AI.generarRespuesta;
+window.generarRespuestaIAConTemperatura = AI.generarRespuestaConTemperatura;

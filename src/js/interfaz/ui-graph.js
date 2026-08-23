@@ -496,6 +496,51 @@ const UIGraph = (() => {
         };
     }
 
+    // ── Prompt para selección de lote con IA ───────────────────────
+    
+    function _promptBatchForIA(callback) {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:absolute; inset:0; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; z-index:9999; backdrop-filter:blur(3px);';
+        
+        const box = document.createElement('div');
+        box.style.cssText = 'background:var(--bg-color); padding:24px; border-radius:8px; border:1px solid var(--border-light); width:340px; box-shadow:0 12px 32px rgba(0,0,0,0.8); display:flex; flex-direction:column; gap:14px; font-family:inherit; color:var(--text-main);';
+        
+        box.innerHTML = `
+            <h4 style="margin:0 0 5px 0; color:var(--accent); font-size:1.1em;"><i class="fa-solid fa-wand-magic-sparkles"></i> Generar Relaciones por Lote</h4>
+            <p style="font-size:0.75em; color:var(--text-muted); margin:0 0 10px 0; line-height:1.4;">La IA generará relaciones solo para las tarjetas del tema seleccionado.</p>
+            
+            <label style="font-size:0.85em; color:var(--text-muted);">Tema a procesar</label>
+            <input type="number" id="ia-batch-tema" placeholder="Ej: 1" style="padding:10px; background:var(--surface-1); border:1px solid var(--border); color:#fff; border-radius:4px; outline:none;">
+            
+            <label style="font-size:0.85em; color:var(--text-muted);">Filtrar por tipo (opcional)</label>
+            <select id="ia-batch-tipo" style="padding:10px; background:var(--surface-1); border:1px solid var(--border); color:#fff; border-radius:4px; outline:none;">
+                <option value="">Todos los tipos</option>
+                <option value="Definición">Solo Definiciones</option>
+                <option value="Teorema">Solo Teoremas</option>
+                <option value="Proposición">Solo Proposiciones</option>
+            </select>
+
+            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:15px;">
+                <button id="ia-batch-cancel" style="padding:8px 14px; background:transparent; border:1px solid var(--border); color:var(--text-muted); border-radius:6px; cursor:pointer; transition:all 0.2s;">Cancelar</button>
+                <button id="ia-batch-ok" style="padding:8px 14px; background:var(--accent); border:none; color:#000; border-radius:6px; cursor:pointer; font-weight:bold;">Generar con IA</button>
+            </div>
+        `;
+        
+        overlay.appendChild(box);
+        document.getElementById('modal-graph').appendChild(overlay);
+        document.getElementById('ia-batch-tema').focus();
+
+        const close = () => overlay.remove();
+        document.getElementById('ia-batch-cancel').onclick = close;
+        
+        document.getElementById('ia-batch-ok').onclick = () => {
+            const t = document.getElementById('ia-batch-tema').value;
+            const tipo = document.getElementById('ia-batch-tipo').value;
+            close();
+            callback(t ? parseInt(t) : null, tipo);
+        };
+    }
+
 
 
     // ── Event listeners estáticos (toolbar) ──────────────────────
@@ -515,14 +560,83 @@ const UIGraph = (() => {
             });
         });
 
-        // NUEVO: Botón de generación de mapa con IA
-        document.getElementById('graph-btn-ia')?.addEventListener('click', () => {
-            if (typeof GraphAI !== 'undefined') {
-                GraphAI.generarMapaConIA();
-            } else {
-                Toast.show('Módulo de IA no disponible', 'error');
-            }
-        });
+        // NUEVO: Botón de generación de mapa con IA (menú contextual)
+        const btnIA = document.getElementById('graph-btn-ia');
+        if (btnIA) {
+            btnIA.onclick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                // Crear menú contextual si no existe
+                let menu = document.getElementById('graph-ia-menu');
+                if (!menu) {
+                    menu = document.createElement('div');
+                    menu.id = 'graph-ia-menu';
+                    menu.style.cssText = 'position:absolute; background:var(--card-bg); border:1px solid var(--border); border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.5); z-index:10000; display:none; flex-direction:column; overflow:hidden; min-width:180px;';
+                    menu.innerHTML = `
+                        <div style="padding:10px 14px; font-size:0.75em; color:var(--text-muted); border-bottom:1px solid var(--border);">Generar relaciones</div>
+                        <button id="ia-menu-full" style="padding:10px 14px; background:transparent; border:none; color:var(--text-main); text-align:left; cursor:pointer; font-size:0.85em; transition:background 0.2s;"><i class="fa-solid fa-network-wired" style="width:20px;"></i> Todo el mapa</button>
+                        <button id="ia-menu-batch" style="padding:10px 14px; background:transparent; border:none; color:var(--text-main); text-align:left; cursor:pointer; font-size:0.85em; transition:background 0.2s;"><i class="fa-solid fa-layer-group" style="width:20px;"></i> Por lote (tema)</button>
+                    `;
+                    document.body.appendChild(menu);
+                    
+                    // Cerrar menú al hacer clic fuera
+                    document.addEventListener('click', function closeMenu(ev) {
+                        if (!menu.contains(ev.target) && !btnIA.contains(ev.target)) {
+                            menu.style.display = 'none';
+                            document.removeEventListener('click', closeMenu);
+                        }
+                    });
+                }
+                
+                // Posicionar y mostrar/ocultar menú
+                const rect = btnIA.getBoundingClientRect();
+                menu.style.top = (rect.bottom + window.scrollY + 5) + 'px';
+                menu.style.left = (rect.left + window.scrollX) + 'px';
+                menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
+                
+                // Handlers de opciones
+                document.getElementById('ia-menu-full').onclick = () => {
+                    menu.style.display = 'none';
+                    if (typeof GraphAI !== 'undefined') {
+                        GraphAI.generarMapaConIA();
+                    } else {
+                        Toast.show('Módulo de IA no disponible', 'error');
+                    }
+                };
+                
+                document.getElementById('ia-menu-batch').onclick = () => {
+                    menu.style.display = 'none';
+                    _promptBatchForIA((tema, tipo) => {
+                        if (!tema) {
+                            Toast.show('Tema no válido', 'warning');
+                            return;
+                        }
+                        
+                        const asig = State.get('nombreAsignaturaActual');
+                        if (!asig) return;
+                        
+                        const todasCards = (State.get('biblioteca') || {})[asig] || [];
+                        const filtradas = todasCards.filter(c => {
+                            const matchTema = c.Tema === tema;
+                            const matchTipo = !tipo || c.Apartado === tipo;
+                            return matchTema && matchTipo;
+                        });
+                        
+                        if (filtradas.length === 0) {
+                            Toast.show(`No hay tarjetas${tipo ? ' de tipo "' + tipo + '"' : ''} en el tema ${tema}`, 'warning');
+                            return;
+                        }
+                        
+                        if (typeof GraphAI !== 'undefined') {
+                            GraphAI.generarMapaConIA(filtradas);
+                        } else {
+                            Toast.show('Módulo de IA no disponible', 'error');
+                        }
+                    });
+                };
+            };
+        }
 
         document.addEventListener('keydown', (e) => {
             const modal = document.getElementById('modal-graph');

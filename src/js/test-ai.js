@@ -254,6 +254,7 @@ Explicación: ${p.explicacion || ''}
         generarPreguntas,
         _parsearPreguntasTexto,
         _construirTextoDSL,
+        _abrirRevisionTextoPlano,
         TEMPERATURAS
     };
 })();

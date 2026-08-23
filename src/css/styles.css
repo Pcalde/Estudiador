@@ -1849,3 +1849,8 @@ iframe#pdf-frame { width: 100%; height: 100%; border: none; display: none; }
 #check-modo-lectura:checked ~ label[for="check-modo-lectura"] strong {
     color: var(--accent) !important;
 }
+
+#quiz-config, #quiz-pregunta, #quiz-resultados {
+    max-height: 90vh;
+    overflow-y: auto;
+}

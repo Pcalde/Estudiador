@@ -2,6 +2,7 @@
 // TEST-AI.JS — Generación de Tipo Test con IA
 // Formato DSL lineal robusto para evitar problemas con LaTeX
 // Control de temperatura semántico: Conservador, Equilibrado, Innovador
+// Generación tipo "caja negra": usuario no ve preguntas hasta empezar
 // ════════════════════════════════════════════════════════════════
 
 const TestAI = (() => {
@@ -123,46 +124,97 @@ Devuelve ÚNICAMENTE las preguntas reparadas en el formato DSL especificado, sin
         }
     }
 
-    // ── Modal de revisión en texto plano ─────────────────────────
+    // ── Modal de advertencia cuando no hay suficientes preguntas ─
 
-    function _abrirRevisionTextoPlano(textoInicial, numEsperado, onApply) {
+    function _abrirAdvertenciaPreguntasInsuficientes(numEsperado, numDisponibles, onContinuar, onReintentar) {
         const overlay = document.createElement('div');
         overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:9999999; display:flex; align-items:center; justify-content:center;';
 
         overlay.innerHTML = `
-            <div style="background:var(--card-bg); width:700px; max-width:90vw; border-radius:12px; border:1px solid var(--border); padding:20px; display:flex; flex-direction:column; gap:12px;">
-                <h4 style="margin:0; color:var(--accent);"><i class="fa-solid fa-clipboard-check"></i> Revisa las preguntas antes de comenzar</h4>
-                <p style="font-size:0.8em; color:var(--text-muted); margin:0;">
-                    Formato: <code>Pregunta:</code>, <code>A)</code>, <code>B)</code>, <code>C)</code>, <code>D)</code> (marca ✓ en la correcta), <code>---</code> entre preguntas.
-                    Las líneas con <code>#</code> se ignorarán.
+            <div style="background:var(--card-bg); width:500px; max-width:90vw; border-radius:12px; border:1px solid var(--border); padding:20px; display:flex; flex-direction:column; gap:12px;">
+                <h4 style="margin:0; color:var(--accent);"><i class="fa-solid fa-triangle-exclamation"></i> Preguntas insuficientes</h4>
+                <p style="font-size:0.9em; color:var(--text-main); margin:0;">
+                    Se solicitaron <strong>${numEsperado}</strong> preguntas, pero solo <strong>${numDisponibles}</strong> superaron la validación de sintaxis.
                 </p>
-                <textarea id="test-ia-review" style="height:400px; font-family:monospace; font-size:0.85em; background:var(--bg-color); color:var(--text-main); border:1px solid var(--border); border-radius:6px; padding:10px; resize:vertical;">${textoInicial}</textarea>
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span style="color:var(--text-muted); font-size:0.85em;"><i class="fa-solid fa-circle-info"></i> Se generarán ${numEsperado} preguntas</span>
-                    <div style="display:flex; gap:10px;">
-                        <button id="test-ia-cancel" style="padding:8px 16px; background:transparent; border:1px solid var(--border); color:var(--text-muted); border-radius:6px; cursor:pointer;"><i class="fa-solid fa-xmark"></i> Cancelar</button>
-                        <button id="test-ia-apply" style="padding:8px 16px; background:var(--accent); border:none; color:#000; border-radius:6px; font-weight:bold; cursor:pointer;"><i class="fa-solid fa-play"></i> Comenzar Test</button>
-                    </div>
+                <p style="font-size:0.85em; color:var(--text-muted); margin:0;">
+                    Las preguntas inválidas se descartan automáticamente para mantener la calidad del test.
+                </p>
+                <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:10px;">
+                    <button id="test-reintentar" style="padding:8px 16px; background:transparent; border:1px solid var(--border); color:var(--text-muted); border-radius:6px; cursor:pointer;"><i class="fa-solid fa-rotate-right"></i> Reintentar generación</button>
+                    <button id="test-continuar" style="padding:8px 16px; background:var(--accent); border:none; color:#000; border-radius:6px; font-weight:bold; cursor:pointer;"><i class="fa-solid fa-play"></i> Continuar con ${numDisponibles}</button>
                 </div>
             </div>`;
         document.body.appendChild(overlay);
 
-        overlay.querySelector('#test-ia-cancel').onclick = () => overlay.remove();
-        overlay.querySelector('#test-ia-apply').onclick = () => {
-            const textoFinal = overlay.querySelector('#test-ia-review').value;
-            const { validas } = _parsearPreguntasTexto(textoFinal);
-            onApply(validas);
+        overlay.querySelector('#test-reintentar').onclick = () => {
             overlay.remove();
+            onReintentar();
+        };
+        overlay.querySelector('#test-continuar').onclick = () => {
+            overlay.remove();
+            onContinuar(numDisponibles);
         };
     }
 
-    // ── Generación de preguntas con IA ───────────────────────────
+    // ── Selección de batch de conceptos para contexto ────────────
 
-    async function generarPreguntas(contenido, numPreguntas, dificultad, temperaturaKey) {
+    function _seleccionarBatchConceptos(biblioteca, asig, numConceptos) {
+        let cardsDisponibles = [];
+        
+        if (asig === 'ALL') {
+            Object.values(biblioteca).forEach(asignatura => {
+                cardsDisponibles.push(...asignatura);
+            });
+        } else if (biblioteca[asig]) {
+            cardsDisponibles = [...biblioteca[asig]];
+        }
+        
+        // Filtrar cards con contenido relevante
+        cardsDisponibles = cardsDisponibles.filter(c => 
+            c.Contenido && c.Contenido.trim().length > 50 &&
+            c.Titulo && c.Titulo.trim().length > 0
+        );
+        
+        if (cardsDisponibles.length === 0) {
+            return '';
+        }
+        
+        // Seleccionar batch aleatorio (sobredimensionado para tener margen)
+        const batchSize = Math.min(numConceptos, cardsDisponibles.length);
+        const seleccion = [];
+        const indicesUsados = new Set();
+        
+        while (seleccion.length < batchSize && indicesUsados.size < cardsDisponibles.length) {
+            const idx = Math.floor(Math.random() * cardsDisponibles.length);
+            if (!indicesUsados.has(idx)) {
+                indicesUsados.add(idx);
+                seleccion.push(cardsDisponibles[idx]);
+            }
+        }
+        
+        // Construir texto de contexto
+        return seleccion.map(c => `Concepto: ${c.Titulo}\n${c.Contenido}`).join('\n\n');
+    }
+
+    // ── Generación de preguntas con IA (caja negra) ──────────────
+
+    async function generarPreguntasParaTest(asig, numPreguntas, dificultad, temperaturaKey) {
         const temperatura = TEMPERATURAS[temperaturaKey] || TEMPERATURAS.equilibrado;
+        const biblioteca = State.get('biblioteca') || {};
+        
+        // Factor de sobregeneración: pedir 25% más para tener margen de descarte
+        const factorSobreGeneracion = 1.25;
+        const numPreguntasAGenerar = Math.ceil(numPreguntas * factorSobreGeneracion);
+        
+        // Seleccionar batch de conceptos aleatorios como contexto
+        const contexto = _seleccionarBatchConceptos(biblioteca, asig, numPreguntasAGenerar * 2);
+        
+        if (contexto.trim().length === 0) {
+            throw new Error('No hay contenido disponible en los apuntes para generar preguntas');
+        }
         
         const prompt = `Eres un profesor universitario experto en crear exámenes tipo test sobre matemáticas.
-Genera EXACTAMENTE ${numPreguntas} preguntas de opción múltiple basadas en el siguiente contenido académico.
+Genera EXACTAMENTE ${numPreguntasAGenerar} preguntas de opción múltiple basadas ÚNICAMENTE en el siguiente contexto académico.
 
 NIVEL DE DIFICULTAD: ${dificultad.toUpperCase()}
 - RECLUTA: Preguntas directas sobre conceptos básicos y definiciones
@@ -175,7 +227,7 @@ TEMPERATURA DE CREATIVIDAD: ${temperatura.label} (${temperatura.value})
 FORMATO DE SALIDA OBLIGATORIO (DSL LINEAL):
 Debes responder ÚNICAMENTE con preguntas en este formato exacto, sin JSON ni texto adicional:
 
-Pregunta: [Texto de la pregunta. Usa LaTeX si es necesario: $\\\\int_0^1 x^2 dx$]
+Pregunta: [Texto de la pregunta. Usa LaTeX si es necesario: $\\int_0^1 x^2 dx$]
 A) [Opción A con LaTeX si corresponde]
 B) [Opción B con LaTeX si corresponde] ✓
 C) [Opción C con LaTeX si corresponde]
@@ -196,33 +248,27 @@ REQUISITOS CRÍTICOS:
 3. La posición de la correcta debe ser aleatoria (no siempre la misma)
 4. Las opciones incorrectas deben ser plausibles pero claramente erróneas
 5. USA LaTeX SIEMPRE QUE SEA NECESARIO ($...$ para inline, $$...$$ para display)
-6. Basa las preguntas estrictamente en el contenido proporcionado
+6. Basa las preguntas estrictamente en el contexto proporcionado
 7. Separa cada pregunta con una línea que contenga solo "---"
 
-CONTENIDO ACADÉMICO:
-${contenido.substring(0, 8000)}`;
+CONTEXTO ACADÉMICO:
+${contexto.substring(0, 8000)}`;
 
         try {
             const respuestaIA = await AI.generarRespuestaConTemperatura(prompt, temperatura.value);
             const { validas, invalidas } = _parsearPreguntasTexto(respuestaIA);
             
-            // Intentar recuperar preguntas inválidas con fallback
+            // Intentar recuperar preguntas inválidas con fallback (solo si necesitamos más)
             if (invalidas.length > 0 && validas.length < numPreguntas) {
                 Logger.info(`Intentando recuperar ${invalidas.length} preguntas inválidas...`);
-                const recuperadas = await _reintentarPreguntasInvalidas(invalidas, contenido, temperatura);
+                const recuperadas = await _reintentarPreguntasInvalidas(invalidas, contexto, temperatura);
                 validas.push(...recuperadas);
             }
             
-            // Limitar al número solicitado
-            const preguntasFinales = validas.slice(0, numPreguntas);
-            
-            if (preguntasFinales.length === 0) {
-                throw new Error('No se generaron preguntas válidas');
-            }
-            
+            // Retornar TODAS las válidas (el caller decide cuántas usar)
             return {
-                preguntas: preguntasFinales,
-                invalidas: invalidas,
+                preguntas: validas,
+                numEsperado: numPreguntas,
                 totalGeneradas: validas.length
             };
             
@@ -251,17 +297,17 @@ Explicación: ${p.explicacion || ''}
     // ── API pública ───────────────────────────────────────────────
 
     return {
-        generarPreguntas,
+        generarPreguntasParaTest,
         _parsearPreguntasTexto,
         _construirTextoDSL,
-        _abrirRevisionTextoPlano,
+        _abrirAdvertenciaPreguntasInsuficientes,
         TEMPERATURAS
     };
 })();
 
 // Registrar comando para acceso desde consola/tests
 if (typeof CommandRegistry !== 'undefined') {
-    CommandRegistry.register('generarPreguntasTestIA', (contenido, num, dif, temp) => {
-        return TestAI.generarPreguntas(contenido, num, dif, temp);
+    CommandRegistry.register('generarPreguntasTestIA', (asig, num, dif, temp) => {
+        return TestAI.generarPreguntasParaTest(asig, num, dif, temp);
     });
 }

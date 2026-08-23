@@ -5,48 +5,40 @@
 const UISettings = (() => {
 
     function abrirAjustes(apiKey, isLocal, proxyUrl, fbConfig, currentModel) {
-        if (typeof UI !== 'undefined' && UI.ocultarTodo) UI.ocultarTodo();
-        const modal = document.getElementById('ajustes-modal');
-        if (!modal) return;
-        modal.classList.remove('hidden');
+    if (typeof UI !== 'undefined' && UI.ocultarTodo) UI.ocultarTodo();
+    const modal = document.getElementById('ajustes-modal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
 
-        const f = (id) => document.getElementById(id);
-        
-        // Cargar configuración de proveedor
-        const proveedorActivo = State.get('iaProveedor') || 'groq';
-        const selProveedor = f('set-ia-proveedor');
-        if (selProveedor) selProveedor.value = proveedorActivo;
-        
-        // Mostrar/ocultar paneles según proveedor
-        actualizarPanelProveedor(proveedorActivo);
-        
-        // Configuración Groq
-        if (f('set-groq-key'))        f('set-groq-key').value        = apiKey   || '';
-        if (f('set-groq-session-only')) f('set-groq-session-only').checked = !isLocal;
-        if (f('set-groq-proxy-url'))  f('set-groq-proxy-url').value  = proxyUrl || '';
-        if (f('set-firebase-config')) f('set-firebase-config').value  = fbConfig || '';
-
-        // Modelo Groq
-        const selGroqModel = f('set-groq-modelo');
-        if (selGroqModel) selGroqModel.value = currentModel || 'llama-3.3-70b-versatile';
-        
-        // Configuración OpenRouter
-        const openRouterKey = State.get('openRouterApiKey') || '';
-        if (f('set-openrouter-key')) f('set-openrouter-key').value = openRouterKey;
-        
-        // Cargar modelos OpenRouter si está seleccionado o si hay API key guardada
-        if (proveedorActivo === 'openrouter' || openRouterKey) {
-            // Primero aseguramos que la API key esté en el DOM
-            if (f('set-openrouter-key') && !State.get('openRouterApiKey')) {
-                State.set('openRouterApiKey', f('set-openrouter-key').value.trim());
-            }
-            if (typeof AI !== 'undefined' && AI.cargarModelosOpenRouter) {
-                AI.cargarModelosOpenRouter().then(() => {
-                    renderModelosOpenRouter();
-                });
-            }
+    const f = (id) => document.getElementById(id);
+    
+    const proveedorActivo = State.get('iaProveedor') || 'groq';
+    const selProveedor = f('set-ia-proveedor');
+    if (selProveedor) selProveedor.value = proveedorActivo;
+    
+    actualizarPanelProveedor(proveedorActivo);
+    
+    if (f('set-groq-key'))        f('set-groq-key').value        = apiKey   || '';
+    if (f('set-groq-session-only')) f('set-groq-session-only').checked = !isLocal;
+    if (f('set-groq-proxy-url'))  f('set-groq-proxy-url').value  = proxyUrl || '';
+    if (f('set-firebase-config')) f('set-firebase-config').value  = fbConfig || '';
+    
+    renderModelosGroq();   // ← nueva llamada, llama al modelo de forma dinámica
+    
+    const openRouterKey = State.get('openRouterApiKey') || '';
+    if (f('set-openrouter-key')) f('set-openrouter-key').value = openRouterKey;
+    
+    if (proveedorActivo === 'openrouter' || openRouterKey) {
+        if (f('set-openrouter-key') && !State.get('openRouterApiKey')) {
+            State.set('openRouterApiKey', f('set-openrouter-key').value.trim());
+        }
+        if (typeof AI !== 'undefined' && AI.cargarModelosOpenRouter) {
+            AI.cargarModelosOpenRouter().then(() => {
+                renderModelosOpenRouter();
+            });
         }
     }
+}
     
     function actualizarPanelProveedor(proveedor) {
         const panelGroq = document.getElementById('config-groq');
@@ -97,6 +89,20 @@ const UISettings = (() => {
 
     function cerrarAjustes() {
         document.getElementById('ajustes-modal')?.classList.add('hidden');
+    }
+
+    function renderModelosGroq() {
+        const select = document.getElementById('set-groq-modelo');
+        if (!select) return;
+        const modeloActual = State.get('iaModel');
+        select.innerHTML = '';
+        AI.MODELOS_GROQ.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.id;
+            opt.textContent = m.nombre;
+            if (m.id === modeloActual) opt.selected = true;
+            select.appendChild(opt);
+        });
     }
 
     function cambiarPestanaAjustes(tabId) {
@@ -312,16 +318,17 @@ const UISettings = (() => {
     }
 
     return {
-        abrirAjustes,
-        cerrarAjustes,
-        cambiarPestanaAjustes,
-        getAjustesData,
-        renderHorarioGrid,
-        renderColorSettings,
-        renderApariencia,
-        renderPrivacidadUI,
-        renderSelectorDia,
-        actualizarPanelProveedor,
-        renderModelosOpenRouter,
+    abrirAjustes,
+    cerrarAjustes,
+    cambiarPestanaAjustes,
+    getAjustesData,
+    renderHorarioGrid,
+    renderColorSettings,
+    renderApariencia,
+    renderPrivacidadUI,
+    renderSelectorDia,
+    actualizarPanelProveedor,
+    renderModelosOpenRouter,
+    renderModelosGroq,
     };
 })();

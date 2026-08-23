@@ -195,6 +195,9 @@ const UI_Quiz = (() => {
         `).join('');
 
         container.innerHTML = `
+            <div style="display:flex; justify-content:flex-end; margin-bottom:-15px;">
+                <button onclick="UI_Quiz.cerrar()" style="background:none; border:none; color:#888; cursor:pointer; font-size:1.3em;" title="Cerrar">✕</button>
+            </div>
             <div style="text-align:center; margin-bottom:25px;">
                 <div style="font-size:3em; color:${colorNota}; margin-bottom:10px;">
                     <i class="fa-solid ${porcentaje >= 80 ? 'fa-trophy' : porcentaje >= 50 ? 'fa-medal' : 'fa-circle-exclamation'}"></i>

@@ -51,12 +51,14 @@ const Quiz = (() => {
     }
 
     async function _generarPreguntasConIA(contenido, num, dificultad) {
+        const temperaturaKey = document.getElementById('quiz-temperatura')?.value || 'equilibrado';
+        
         const modalContainer = document.getElementById('quiz-config');
         
         modalContainer.innerHTML = `
             <div style="text-align:center; padding:60px 20px;">
                 <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
-                    <button onclick="UI_Quiz.cerrar()" style="background:none; border:none; color:#888; cursor:pointer; font-size:1.2em;" title="Cancelar">✕</button>
+                    <button onclick="UI_Quiz.cerrar()" style="background:none; border:none; color:#888; cursor:pointer; font-size:1.2em;" title="Cancelar"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <i class="fa-solid fa-brain fa-pulse fa-3x" style="color:var(--accent); margin-bottom:20px;"></i>
                 <h3 style="color:#fff; margin:0 0 10px 0;">Generando preguntas...</h3>
@@ -65,66 +67,35 @@ const Quiz = (() => {
             </div>
         `;
 
-        const prompt = `Eres un profesor universitario experto en crear exámenes tipo test.
-Genera EXACTAMENTE ${num} preguntas de opción múltiple basadas en el siguiente contenido académico.
-
-NIVEL DE DIFICULTAD: ${dificultad.toUpperCase()}
-- RECLUTA: Preguntas directas sobre conceptos básicos y definiciones
-- CURTIDO: Preguntas que requieren aplicación práctica y análisis
-- VETERANO: Preguntas complejas sobre casos excepcionales, relaciones entre conceptos y detalles sutiles
-
-FORMATO DE SALIDA OBLIGATORIO:
-Debes responder ÚNICAMENTE con un JSON válido con esta estructura exacta, sin texto adicional:
-[
-  {
-    "pregunta": "Texto de la pregunta",
-    "opciones": ["Opción A", "Opción B", "Opción C", "Opción D"],
-    "correcta": 0,
-    "explicacion": "Breve explicación de por qué es correcta"
-  }
-]
-
-REQUISITOS:
-- 4 opciones por pregunta (A, B, C, D)
-- La opción correcta debe estar en posición aleatoria (0-3)
-- Las opciones incorrectas deben ser plausibles pero claramente erróneas
-- Usa notación LaTeX si es necesario ($...$)
-- Basa las preguntas estrictamente en el contenido proporcionado
-
-CONTENIDO ACADÉMICO:
-${contenido.substring(0, 8000)}
-`;
-
         try {
-            const respuestaIA = await window.generarRespuestaIA(prompt);
+            const resultado = await TestAI.generarPreguntas(contenido, num, dificultad, temperaturaKey);
             
-            // Parsear JSON de la respuesta
-            let preguntas;
-            try {
-                // Intentar extraer JSON si viene envuelto en texto
-                const jsonMatch = respuestaIA.match(/\[[\s\S]*\]/);
-                if (jsonMatch) {
-                    preguntas = JSON.parse(jsonMatch[0]);
-                } else {
-                    preguntas = JSON.parse(respuestaIA);
-                }
-            } catch (parseError) {
-                Logger.error('Error parseando JSON de IA:', parseError);
-                throw new Error('La IA no devolvió un formato JSON válido');
-            }
-
-            if (!Array.isArray(preguntas) || preguntas.length === 0) {
+            if (resultado.preguntas.length === 0) {
                 throw new Error('No se generaron preguntas válidas');
             }
 
-            _preguntas = preguntas.slice(0, num);
-            State.set('quizEstado', { respuestas: [], idxActual: 0 });
+            // Construir texto DSL para revisión
+            const textoDSL = TestAI._construirTextoDSL(resultado.preguntas);
             
-            _mostrarPregunta(0);
+            // Añadir comentarios sobre preguntas inválidas si las hay
+            let textoRevision = textoDSL;
+            if (resultado.invalidas && resultado.invalidas.length > 0) {
+                textoRevision += '\n\n# PREGUNTAS CON ERRORES (revisar o borrar):\n';
+                resultado.invalidas.forEach(inv => {
+                    textoRevision += `# ${inv.tipo}: ${inv.contenido}\n`;
+                });
+            }
+
+            // Abrir modal de revisión
+            TestAI._abrirRevisionTextoPlano(textoRevision, num, (preguntasValidas) => {
+                _preguntas = preguntasValidas.slice(0, num);
+                State.set('quizEstado', { respuestas: [], idxActual: 0 });
+                _mostrarPregunta(0);
+            });
 
         } catch (error) {
             Logger.error('Error generando preguntas:', error);
-            alert('Error al generar preguntas: ' + error.message + '\\n\\nAsegúrate de tener configurada una API Key en Ajustes.');
+            alert('Error al generar preguntas: ' + error.message + '\n\nAsegúrate de tener configurada una API Key en Ajustes.');
             UI_Quiz.cerrar();
         }
     }

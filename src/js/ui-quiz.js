@@ -27,7 +27,8 @@ const UI_Quiz = (() => {
     function _renderConfig() {
         const container = document.getElementById('quiz-config');
         if (!container) return;
-
+        _mostrarVista('quiz-config');
+        
         const biblioteca = State.get('biblioteca') || {};
         const asigActual = State.get('nombreAsignaturaActual');
 
@@ -100,7 +101,8 @@ const UI_Quiz = (() => {
     function renderPregunta(pregunta, idx, total) {
         const container = document.getElementById('quiz-pregunta-container');
         if (!container) return;
-
+        _mostrarVista('quiz-pregunta');
+        
         const opcionesHtml = pregunta.opciones.map((opt, i) => `
             <div class="quiz-opcion" data-idx="${i}" onclick="UI_Quiz._api.seleccionarOpcion(${i})"
                  style="padding:12px; border:2px solid #333; border-radius:8px; cursor:pointer; transition:all 0.2s; background:#1a1a1a;">
@@ -153,10 +155,18 @@ const UI_Quiz = (() => {
         }
     }
 
+    function _mostrarVista(id) {
+        ['quiz-config', 'quiz-pregunta', 'quiz-resultados'].forEach(vId => {
+            const el = document.getElementById(vId);
+            if (el) el.style.display = (vId === id) ? 'block' : 'none';
+        });
+    }
+
     function renderResultados(resultados) {
         const container = document.getElementById('quiz-resultados');
         if (!container) return;
-
+        _mostrarVista('quiz-resultados');
+        
         const aciertos = resultados.filter(r => r.correcta).length;
         const porcentaje = Math.round((aciertos / resultados.length) * 100);
         

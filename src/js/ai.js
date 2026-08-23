@@ -207,11 +207,7 @@ const AI = (() => {
                     .map(m => ({ id: m.id, nombre: m.name || m.id.split('/').pop() }));
             } else {
                 // Groq
-                modelos = [
-                    { id: "openai/gpt-oss-120b", nombre: "gpt-oss-120b (Complejo)" },
-                    { id: "qwen/qwen3.6-27b", nombre: "Qwen 3.6 27b (Rápido)" },
-                    { id: "openai/gpt-oss-20b", nombre: "gpt-oss-20b (Comodín)" },
-                ];
+                modelos = MODELOS_GROQ;
             }
             
             select.innerHTML = '';
@@ -457,6 +453,7 @@ const AI = (() => {
         generarRespuesta,
         cargarModelosOpenRouter,
         getModelosDisponibles,
+        MODELOS_GROQ,
         setModeloActivo: (m) => { State.set('iaModel', m); localStorage.setItem('estudiador_ia_model', m); },
         setProveedor: (p) => { State.set('iaProveedor', p); localStorage.setItem('estudiador_ia_proveedor', p); }
     };

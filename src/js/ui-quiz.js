@@ -45,6 +45,9 @@ const UI_Quiz = (() => {
         `).join('');
 
         container.innerHTML = `
+            <div style="display:flex; justify-content:flex-end; margin-bottom:-10px;">
+                <button onclick="UI_Quiz.cerrar()" style="background:none; border:none; color:#888; cursor:pointer; font-size:1.3em;" title="Cerrar">✕</button>
+            </div>
             <div style="text-align:center; margin-bottom:20px;">
                 <h3 style="color:#fff; margin:0 0 10px 0;"><i class="fa-solid fa-list-check"></i> Configurar Tipo Test</h3>
                 <p style="color:#888; font-size:0.9em;">Genera preguntas automáticas con IA basadas en tus apuntes</p>
@@ -112,6 +115,7 @@ const UI_Quiz = (() => {
                 <div style="height:6px; width:150px; background:#333; border-radius:3px; overflow:hidden;">
                     <div style="height:100%; width:${((idx+1)/total)*100}%; background:var(--accent); transition:width 0.3s;"></div>
                 </div>
+                <button onclick="UI_Quiz.cerrar()" style="background:none; border:none; color:#888; cursor:pointer; font-size:1.2em;" title="Abandonar test">✕</button>
             </div>
             
             <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin-bottom:20px; border-left:4px solid var(--accent);">
@@ -194,7 +198,7 @@ const UI_Quiz = (() => {
             </div>
 
             <div style="margin-top:20px; display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                <button onclick="location.reload(); UI_Quiz._api.cerrar()" 
+                <button onclick="UI_Quiz._api.cerrar()" 
                         style="padding:12px; background:#333; color:#fff; border:none; border-radius:6px; cursor:pointer;">
                     <i class="fa-solid fa-xmark"></i> Cerrar
                 </button>

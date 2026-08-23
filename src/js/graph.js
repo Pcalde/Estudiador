@@ -355,6 +355,7 @@ const Graph = (() => {
         abrirTarjetaReal,
         calificarTarjetaDesdeMapa,
         addMassiveNodes,
+        _cardId,  // Expuesto para uso en ui-graph.js (generación IA)
     };
 })();
 

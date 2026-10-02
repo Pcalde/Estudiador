@@ -210,29 +210,30 @@ function setImportMode(mode) {
     try {
         const pJson  = document.getElementById('panel-import-json');
         const pLatex = document.getElementById('panel-import-latex');
+        const pMed   = document.getElementById('panel-import-medios');
         const tJson  = document.getElementById('tab-import-json');
         const tLatex = document.getElementById('tab-import-latex');
+        const tMed   = document.getElementById('tab-import-medios');
 
         if (!pJson || !pLatex || !tJson || !tLatex) {
             Logger.warn("UI: Faltan nodos DOM en la vista de importación.");
             return;
         }
 
-        if (mode === 'json') {
-            pJson.classList.remove('hidden');
-            pLatex.classList.add('hidden');
-            tJson.style.color        = "var(--accent)";
-            tJson.style.borderBottom = "2px solid var(--accent)";
-            tLatex.style.color        = "#666";
-            tLatex.style.borderBottom = "none";
-        } else {
-            pJson.classList.add('hidden');
-            pLatex.classList.remove('hidden');
-            tLatex.style.color        = "var(--accent)";
-            tLatex.style.borderBottom = "2px solid var(--accent)";
-            tJson.style.color        = "#666";
-            tJson.style.borderBottom = "none";
+        const _desactivar = (tab) => { tab.style.color = "#666"; tab.style.borderBottom = "none"; };
+        const _activar    = (tab) => { tab.style.color = "var(--accent)"; tab.style.borderBottom = "2px solid var(--accent)"; };
+        [tJson, tLatex].forEach(_desactivar);
+        if (tMed) _desactivar(tMed);
+        pJson.classList.add('hidden');
+        pLatex.classList.add('hidden');
+        if (pMed) pMed.classList.add('hidden');
+
+        if (mode === 'json')      { pJson.classList.remove('hidden');  _activar(tJson); }
+        else if (mode === 'medios') {
+            if (!pMed || !tMed) { Logger.warn("UI: Faltan nodos DOM del panel de medios."); return; }
+            pMed.classList.remove('hidden'); _activar(tMed);
         }
+        else                      { pLatex.classList.remove('hidden'); _activar(tLatex); }
     } catch (error) {
         Logger.error("Error mutando DOM en setImportMode:", error);
     }

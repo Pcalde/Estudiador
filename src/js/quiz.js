@@ -10,6 +10,11 @@ const Quiz = (() => {
     let _respuestas = [];
     let _config = {};
 
+    // Tarjetas de música (pasajes .mid) no generan contenido para tipo test
+    function _esTarjetaMusica(c) {
+        return (c?.Tipo || '').toLowerCase() === 'musica';
+    }
+
     function iniciar() {
         const asig = document.getElementById('quiz-asig')?.value;
         const dificultad = document.getElementById('quiz-dificultad')?.value;
@@ -33,11 +38,13 @@ const Quiz = (() => {
         if (asig === 'ALL') {
             Object.values(biblioteca).forEach(asignatura => {
                 asignatura.forEach(c => {
+                    if (_esTarjetaMusica(c)) return;   // pasajes de piano: fuera del tipo test
                     contenidoParaIA += `Tema: ${c.Titulo}\n${c.Contenido}\n\n`;
                 });
             });
         } else if (biblioteca[asig]) {
             biblioteca[asig].forEach(c => {
+                if (_esTarjetaMusica(c)) return;
                 contenidoParaIA += `Tema: ${c.Titulo}\n${c.Contenido}\n\n`;
             });
         }

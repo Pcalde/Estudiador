@@ -149,6 +149,8 @@ const EXAM = (() => {
         }
 
         let pool = rawPool.filter(c => {
+            // Excluir tarjetas multimedia (piano): no tienen sentido en examen escrito
+            if (typeof CardRenderers !== 'undefined' && CardRenderers.tiene(c) && (c.Tipo || '').toLowerCase() === 'musica') return false;
             const tipoOk = tiposChecked.length === 0 || tiposChecked.includes(c.Apartado);
             const temaOk = temasFiltro.length === 0  || temasFiltro.includes(Number(c.Tema));
             return tipoOk && temaOk;

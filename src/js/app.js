@@ -838,8 +838,66 @@ document.addEventListener('DOMContentLoaded', () => {
     on('#btn-volver-visual',              'click',  abrirEditorAmigable);
     on('#tab-import-json',                'click',  () => setImportMode('json'));
     on('#tab-import-latex',               'click',  () => setImportMode('latex'));
+    on('#tab-import-medios',              'click',  () => setImportMode('medios'));
+    on('#btn-cancelaredicion-5',          'click',  cancelarEdicion);
+
+    // ── Importación de saberes no textuales (Idiomas / Piano) ────
+    on('#input-csv-idiomas', 'change', async (e) => {
+        const f = e.target.files?.[0];
+        if (!f) return;
+        try { await window.MediaStudy.importarCsv(f); }
+        catch (err) { Logger.error('Import CSV idiomas:', err); Toast.show('Error leyendo el CSV.', 'error'); }
+        e.target.value = '';
+    });
+    on('#input-midi', 'change', async (e) => {
+        const f = e.target.files?.[0];
+        if (!f) return;
+        const compases = parseInt(document.getElementById('midi-compases-pasaje')?.value, 10) || 8;
+        const mano     = document.getElementById('midi-mano')?.value || 'ambas';
+        try { await window.MediaStudy.importarMidi(f, { compasesPorPasaje: compases, mano }); }
+        catch (err) { Logger.error('Import MIDI:', err); Toast.show('Error procesando el .mid.', 'error'); }
+        e.target.value = '';
+    });
     on('#btn-procesarimportacion',        'click',  procesarImportacion);
     on('#btn-procesarimportacionlatex',   'click',  procesarImportacionLatex);
+
+    on('#btn-pedir-seccion', 'click', () => {
+        // Rellenar el desplegable con las piezas musicales de la asignatura activa
+        const sel = document.getElementById('seccion-pieza');
+        if (sel) {
+            const asig  = State.get('nombreAsignaturaActual');
+            const lista = (State.get('biblioteca') || {})[asig] || [];
+            const piezas = [...new Map(
+                lista.filter(c => (c.Tipo || '').toLowerCase() === 'musica' && c.MediaId)
+                     .map(c => [c.MediaId, c.Pieza || 'Pieza'])
+            ).entries()];
+            sel.innerHTML = '<option value="">— Todas las piezas —</option>'
+                + piezas.map(([id, nombre]) => `<option value="${escapeHtml(id)}">${escapeHtml(nombre)}</option>`).join('');
+        }
+        document.getElementById('modal-pedir-seccion')?.classList.remove('hidden');
+    });
+    on('#btn-cerrar-pedir-seccion', 'click', () => document.getElementById('modal-pedir-seccion')?.classList.add('hidden'));
+
+    on('#btn-seccion-aplicar', 'click', () => {
+        const mediaId = document.getElementById('seccion-pieza')?.value || null;
+        const desde   = parseInt(document.getElementById('seccion-desde')?.value, 10);
+        const hasta   = parseInt(document.getElementById('seccion-hasta')?.value, 10);
+        const n = window.MediaStudy.filtrarPorPasaje({
+            mediaId:   mediaId || null,
+            compasIni: Number.isFinite(desde) ? desde : null,
+            compasFin: Number.isFinite(hasta) ? hasta : null
+        });
+        if (n) {
+            Toast.show(`Modo sección: ${n} pasajes en cola. (Filtros → Resetear para salir)`, 'success');
+            document.getElementById('modal-pedir-seccion')?.classList.add('hidden');
+            if (typeof window.aplicarFiltros === 'function') window.aplicarFiltros(false);
+        }
+    });
+    on('#btn-seccion-toda', 'click', () => {
+        const d = document.getElementById('seccion-desde'); if (d) d.value = '1';
+        const h = document.getElementById('seccion-hasta'); if (h) h.value = '';
+        document.getElementById('btn-seccion-aplicar')?.click();
+    });
 
     // Tarjeta de estudio
     on('#btn-main-revelar', 'click', () => { if (typeof UI !== 'undefined' && UI.revelar) UI.revelar(); });

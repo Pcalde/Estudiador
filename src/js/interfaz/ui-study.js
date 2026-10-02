@@ -4,6 +4,9 @@
 
 const UIStudy = (() => {
 
+    // Última tarjeta renderizada: permite avisar al renderer saliente (onUnmount)
+    let _ultimaTarjeta = null;
+
     function getEstadoFiltros() {
         return {
             hoy:               document.getElementById('check-filtro-hoy')?.checked,
@@ -46,6 +49,11 @@ const UIStudy = (() => {
     function renderizarConceptoActual(tarjeta, modoLec, tiposConfig = {}) {
         if (!tarjeta) return;
 
+        // Aviso al renderer de la tarjeta saliente (detener audio/piano, timers…)
+        if (typeof CardRenderers !== 'undefined' && _ultimaTarjeta && _ultimaTarjeta !== tarjeta) {
+            CardRenderers.notificar('onUnmount', _ultimaTarjeta);
+        }
+
         const tipo      = tarjeta.Apartado || 'Concepto';
         const colorTipo = tiposConfig[tipo]?.color || 'var(--accent)';
         const tit       = document.getElementById('concepto-titulo');
@@ -56,11 +64,27 @@ const UIStudy = (() => {
         }
 
         const cont = document.getElementById('concepto-contenido');
+
+        // Criterio anverso/reverso idéntico al histórico: el contenido del div
+        // solo es visible cuando está revelado (area-revelar oculto) o en modo lectura.
+        const areaRevelar  = document.getElementById('area-revelar');
+        const estaRevelado = modoLec || !areaRevelar || areaRevelar.classList.contains('hidden');
+
         if (cont) {
-            cont.innerHTML = typeof Parser !== 'undefined'
-                ? Parser.sanearLatex(tarjeta.Contenido)
-                : tarjeta.Contenido;
+            // Despacho por renderer registrado (texto / idioma / musica…).
+            // El renderer 'texto' replica exactamente el comportamiento histórico.
+            if (typeof CardRenderers !== 'undefined') {
+                const r = CardRenderers.get(tarjeta);
+                cont.innerHTML = estaRevelado ? r.back(tarjeta) : r.front(tarjeta);
+                CardRenderers.notificar('onMount', tarjeta, cont);
+            } else {
+                cont.innerHTML = typeof Parser !== 'undefined'
+                    ? Parser.sanearLatex(tarjeta.Contenido)
+                    : tarjeta.Contenido;
+            }
         }
+
+        _ultimaTarjeta = tarjeta;
 
         const metaTema = document.getElementById('meta-tema');
         if (metaTema) metaTema.innerText = `Tema ${tarjeta.Tema}`;

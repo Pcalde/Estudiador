@@ -1862,3 +1862,110 @@ iframe#pdf-frame { width: 100%; height: 100%; border: none; display: none; }
     max-height: 90vh;
     overflow-y: auto;
 }
+
+/* ════════════════════════════════════════════════════════════════
+   SABERES NO TEXTUALES — renderers de tarjeta (idioma / música)
+   Mismas variables y estética que el resto de la app.
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── Idiomas: cara ES/EN + botón de pronunciación ── */
+.lang-face {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.lang-tag {
+    font-size: 0.65em;
+    font-weight: bold;
+    letter-spacing: 1px;
+    color: var(--accent);
+    background: rgba(76, 175, 80, 0.12);
+    border: 1px solid rgba(76, 175, 80, 0.35);
+    border-radius: 4px;
+    padding: 2px 7px;
+    flex-shrink: 0;
+}
+
+.lang-text {
+    flex: 1 1 100%;
+    line-height: 1.5;
+}
+
+.btn-audio {
+    background: transparent;
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    color: var(--text-main);
+    font-size: 1em;
+    padding: 2px 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+.btn-audio:hover {
+    border-color: var(--accent);
+    background: rgba(76, 175, 80, 0.1);
+}
+
+/* Huecos cloze: ocultos hasta clic/revelado */
+.cloze-slot {
+    display: inline-block;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px dashed var(--border-light);
+    border-radius: 4px;
+    padding: 0 8px;
+    margin: 0 2px;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-family: monospace;
+    transition: all 0.2s;
+    user-select: none;
+}
+.cloze-slot:hover { border-color: var(--accent); }
+.cloze-slot.cloze-open {
+    border-style: solid;
+    border-color: var(--accent);
+    color: var(--text-main);
+    background: rgba(76, 175, 80, 0.08);
+    font-family: inherit;
+}
+
+/* ── Música: pasajes de piano ── */
+.music-front strong { color: var(--text-main); }
+
+.music-back .music-controls {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+.music-back .music-controls button {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    font-size: 0.82em;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.music-back .music-controls button:hover {
+    border-color: var(--accent);
+    background: rgba(76, 175, 80, 0.08);
+}
+
+.music-roll {
+    background: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 10px;
+    min-height: 60px;
+    overflow-x: auto;
+}
+.music-roll em {
+    color: var(--text-subtle);
+    font-size: 0.8em;
+    font-style: normal;
+}

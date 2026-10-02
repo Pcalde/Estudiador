@@ -240,6 +240,9 @@
                     </div>
 
                     <div style="display:flex; align-items:center; gap:8px;">
+                        <button id="btn-pedir-seccion" title="Pídeme una sección (estudio por pasajes de piano)" style="background:transparent; border:1px solid var(--border-light); color:var(--text-muted); padding:5px 12px; border-radius:6px; cursor:pointer; font-size:0.82em; transition:all 0.2s;">
+                            🎼 Sección
+                        </button>
                         <button id="btn-filtros-dropdown" class="btn-filtros-dropdown">
                             <i id="filtros-icon" class="fa-solid fa-filter filtros-icon"></i>
                             Filtros
@@ -493,6 +496,7 @@
                 <div style="display:flex; gap:10px; margin-bottom:15px; border-bottom:1px solid #333; padding-bottom:10px;">
                     <button id="tab-import-json" style="background:none; border:none; color:var(--accent); font-weight:bold; cursor:pointer; border-bottom: 2px solid var(--accent);">JSON</button>
                     <button id="tab-import-latex" style="background:none; border:none; color:#666; cursor:pointer;">LaTeX</button>
+                    <button id="tab-import-medios" style="background:none; border:none; color:#666; cursor:pointer;">Idiomas / Piano</button>
                 </div>
 
                 <div id="panel-import-json">
@@ -518,6 +522,37 @@
                     <div style="margin-top:15px; text-align:right;">
                         <button id="btn-cancelaredicion-4" class="btn-cancel">Cancelar</button>
                         <button id="btn-procesarimportacionlatex" class="btn-save-latex">Traducir LaTex</button>
+                    </div>
+                </div>
+
+                <div id="panel-import-medios" class="hidden">
+                    <p style="font-size:0.8em; color:#888; margin-top:0;">
+                        <b>Idiomas:</b> CSV/TSV compatible con Anki → <code>delante, detrás[, src, dst]</code>.<br/>
+                        Cada fila genera una pareja bidireccional (ES→EN y EN→ES) con FSRS independiente.<br/>
+                        Soporta cloze <code>{{c1::texto}}</code> y pronunciación 🔊 (Web Speech API).
+                    </p>
+                    <input type="file" id="input-csv-idiomas" accept=".csv,.tsv,text/csv" style="margin-bottom:12px; font-size:0.85em;">
+                    <div style="border-top:1px solid #333; padding-top:12px; margin-top:6px;">
+                        <p style="font-size:0.8em; color:#888; margin-top:0;">
+                            <b>Piano:</b> sube un <code>.mid</code> y se auto-trocea en pasajes de N compases
+                            (tarjetas tipo <code>música</code> con reproducción aislada). Requiere Tone.js + @tonejs/midi.
+                        </p>
+                        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                            <input type="file" id="input-midi" accept=".mid,.midi,audio/midi" style="font-size:0.85em;">
+                            <label style="font-size:0.75em; color:#888;">Compases/pasaje
+                                <input type="number" id="midi-compases-pasaje" value="8" min="1" max="64" style="width:52px;">
+                            </label>
+                            <label style="font-size:0.75em; color:#888;">Mano
+                                <select id="midi-mano" style="font-size:1em;">
+                                    <option value="ambas">Ambas</option>
+                                    <option value="der">Derecha</option>
+                                    <option value="izq">Izquierda</option>
+                                </select>
+                            </label>
+                        </div>
+                    </div>
+                    <div style="margin-top:15px; text-align:right;">
+                        <button id="btn-cancelaredicion-5" class="btn-cancel">Cancelar</button>
                     </div>
                 </div>
             </div>
@@ -2046,6 +2081,32 @@
         </div>
     </div>
 </div>
+<div id="modal-pedir-seccion" class="modal-overlay hidden">
+    <div class="modal-content glass-card" style="max-width: 420px; width: 95%;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px;">
+            <h2 style="margin:0; color:var(--accent); font-size:1.1rem;">🎼 Pídeme una sección</h2>
+            <button id="btn-cerrar-pedir-seccion" style="background:transparent; border:none; color:var(--text-muted); font-size:1.4rem; cursor:pointer;">✕</button>
+        </div>
+        <p style="font-size:0.8em; color:#888; margin-top:0;">Filtra temporalmente la cola de estudio a los pasajes que elijas (no altera el scheduler FSRS).</p>
+        <label style="font-size:0.78em; color:#aaa; display:block; margin-bottom:4px;">Pieza</label>
+        <select id="seccion-pieza" class="form-input" style="width:100%; margin-bottom:12px;"></select>
+        <div style="display:flex; gap:10px; margin-bottom:15px;">
+            <div style="flex:1;">
+                <label style="font-size:0.78em; color:#aaa; display:block; margin-bottom:4px;">Desde compás</label>
+                <input type="number" id="seccion-desde" class="form-input" min="1" value="1" style="width:100%;">
+            </div>
+            <div style="flex:1;">
+                <label style="font-size:0.78em; color:#aaa; display:block; margin-bottom:4px;">Hasta compás</label>
+                <input type="number" id="seccion-hasta" class="form-input" min="1" placeholder="∞" style="width:100%;">
+            </div>
+        </div>
+        <div style="text-align:right; display:flex; gap:10px; justify-content:flex-end;">
+            <button id="btn-seccion-toda" class="btn-cancel" style="padding:8px 14px;">Toda la pieza</button>
+            <button id="btn-seccion-aplicar" class="btn-save-latex">Estudiar esa sección</button>
+        </div>
+    </div>
+</div>
+
 <div id="modal-montecarlo" class="modal-overlay"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.9/standalone/umd/vis-network.min.js"></script>
@@ -2066,6 +2127,10 @@
 <script src="src/js/tasks.js" defer></script>
 <script src="src/js/pdf-manager.js" defer></script> 
 <script src="src/js/toast.js"></script>
+<!-- Saberes no textuales: renderizadores de tarjeta + importación (CSV idiomas / .mid piano)
+     DEPUES de toast.js: card-renderers captura la referencia de CommandRegistry al cargarse. -->
+<script src="src/js/card-renderers.js" defer></script>
+<script src="src/js/media-study.js" defer></script>
 <script src="src/js/interfaz/ui-core.js"></script>
 <script src="src/js/interfaz/ui-study.js"></script>
 <script src="src/js/interfaz/ui-dashboard.js"></script>

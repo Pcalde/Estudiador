@@ -5,7 +5,8 @@
 
 const DB = (() => {
     const DB_NAME = 'EstudiadorProDB';
-    const DB_VERSION = 1;
+    // v2: almacén 'media' para blobs de audio/MIDI (tarjetas tipo 'musica')
+    const DB_VERSION = 2;
     let dbInstance = null;
 
     // 1. Inicialización y control de Esquema
@@ -30,6 +31,11 @@ const DB = (() => {
             // Almacén 2: Key-Value Genérico (Para futura migración de localStorage)
             if (!db.objectStoreNames.contains('keyval')) {
                 db.createObjectStore('keyval', { keyPath: 'key' });
+            }
+
+            // Almacén 3: Media binaria (.mid, .pdf, imágenes…) indexada por id
+            if (!db.objectStoreNames.contains('media')) {
+                db.createObjectStore('media', { keyPath: 'id' });
             }
         };
 
@@ -126,8 +132,46 @@ const DB = (() => {
         });
     };
 
-    return { 
-        init, addRevlog, getUnsyncedRevlogs, markRevlogsAsSynced, setVar, getVar, 
-        getAll // <--- Añadir aquí
+    // 4. Operaciones Media (blobs .mid / audio para tarjetas tipo 'musica')
+    const putMedia = async ({ id, blob, nombre = '', tipo = '' }) => {
+        if (!id) throw new Error('putMedia: falta id');
+        const db = await init();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction('media', 'readwrite');
+            tx.objectStore('media').put({ id, blob, nombre, tipo, ts: Date.now() });
+            tx.oncomplete = () => resolve(id);
+            tx.onerror = (e) => reject(e.target.error);
+        });
+    };
+
+    const getMedia = async (id) => {
+        if (!id) return null;
+        try {
+            const db = await init();
+            return await new Promise((resolve, reject) => {
+                const tx = db.transaction('media', 'readonly');
+                const req = tx.objectStore('media').get(id);
+                req.onsuccess = () => resolve(req.result ? req.result.blob : null);
+                req.onerror = (e) => reject(e.target.error);
+            });
+        } catch (e) {
+            Logger.error('DB.getMedia:', e);
+            return null;
+        }
+    };
+
+    const deleteMedia = async (id) => {
+        const db = await init();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction('media', 'readwrite');
+            tx.objectStore('media').delete(id);
+            tx.oncomplete = () => resolve();
+            tx.onerror = (e) => reject(e.target.error);
+        });
+    };
+
+    return {
+        init, addRevlog, getUnsyncedRevlogs, markRevlogsAsSynced, setVar, getVar,
+        getAll, putMedia, getMedia, deleteMedia
     };
 })();

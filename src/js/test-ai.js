@@ -158,7 +158,7 @@ Devuelve ÚNICAMENTE las preguntas reparadas en el formato DSL especificado, sin
 
     // ── Selección de batch de conceptos para contexto ────────────
 
-    function _seleccionarBatchConceptos(biblioteca, asig, numConceptos) {
+    function conceptosDisponibles(biblioteca, asig, filtros = {}) {
         let cardsDisponibles = [];
         
         if (asig === 'ALL') {
@@ -166,7 +166,7 @@ Devuelve ÚNICAMENTE las preguntas reparadas en el formato DSL especificado, sin
                 cardsDisponibles.push(...asignatura);
             });
         } else if (biblioteca[asig]) {
-            cardsDisponibles = [...biblioteca[asig]];
+            cardsDisponibles = biblioteca[asig].slice(filtros.desde ?? 0, filtros.hasta == null ? undefined : filtros.hasta + 1);
         }
         
         // Filtrar cards con contenido relevante
@@ -174,6 +174,18 @@ Devuelve ÚNICAMENTE las preguntas reparadas en el formato DSL especificado, sin
             c.Contenido && c.Contenido.trim().length > 50 &&
             c.Titulo && c.Titulo.trim().length > 0
         );
+        const temas = new Set((filtros.temas || []).map(String));
+        const apartados = new Set((filtros.apartados || []).map(String));
+        if (temas.size) cardsDisponibles = cardsDisponibles.filter(c => temas.has(String(c.Tema)));
+        if (apartados.size) cardsDisponibles = cardsDisponibles.filter(c => apartados.has(String(c.Apartado)));
+        const tipos = new Set((filtros.tipos || []).map(String));
+        if (tipos.size) cardsDisponibles = cardsDisponibles.filter(c => tipos.has(String(c.Tipo)));
+        if (filtros.repaso) cardsDisponibles = cardsDisponibles.filter(c => Number(c.Dificultad) >= 3 || Number(c.fsrs_lapses) > 0);
+        return cardsDisponibles;
+    }
+
+    function _seleccionarBatchConceptos(biblioteca, asig, numConceptos, filtros = {}) {
+        const cardsDisponibles = conceptosDisponibles(biblioteca, asig, filtros);
         
         if (cardsDisponibles.length === 0) {
             return '';
@@ -198,7 +210,7 @@ Devuelve ÚNICAMENTE las preguntas reparadas en el formato DSL especificado, sin
 
     // ── Generación de preguntas con IA (caja negra) ──────────────
 
-    async function generarPreguntasParaTest(asig, numPreguntas, dificultad, temperaturaKey) {
+    async function generarPreguntasParaTest(asig, numPreguntas, dificultad, temperaturaKey, filtros = {}) {
         const temperatura = TEMPERATURAS[temperaturaKey] || TEMPERATURAS.equilibrado;
         const biblioteca = State.get('biblioteca') || {};
         
@@ -207,7 +219,7 @@ Devuelve ÚNICAMENTE las preguntas reparadas en el formato DSL especificado, sin
         const numPreguntasAGenerar = Math.ceil(numPreguntas * factorSobreGeneracion);
         
         // Seleccionar batch de conceptos aleatorios como contexto
-        const contexto = _seleccionarBatchConceptos(biblioteca, asig, numPreguntasAGenerar * 2);
+        const contexto = _seleccionarBatchConceptos(biblioteca, asig, numPreguntasAGenerar * 2, filtros);
         
         if (contexto.trim().length === 0) {
             throw new Error('No hay contenido disponible en los apuntes para generar preguntas');
@@ -298,6 +310,7 @@ Explicación: ${p.explicacion || ''}
 
     return {
         generarPreguntasParaTest,
+        conceptosDisponibles,
         _parsearPreguntasTexto,
         _construirTextoDSL,
         _abrirAdvertenciaPreguntasInsuficientes,

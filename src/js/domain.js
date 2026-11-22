@@ -365,6 +365,10 @@ const Scheduler = {
                 g:      G,          
                 elap:   elapsed,    
                 sched:  intervalDias,
+                reviewTime: Date.now(),
+                lastReviewTime: tarjeta.UltimoRepaso ? parseDateSafe(tarjeta.UltimoRepaso)?.getTime() : Date.now(),
+                grade: calidad,
+                stability: tarjeta.fsrs_stability ?? t.fsrs_stability,
                 st:     t.fsrs_state === 'new' ? 0 : (t.fsrs_state === 'learning' ? 1 : 2)
             }).catch(e => console.error("Fallo guardando Revlog local:", e));
         }

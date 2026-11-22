@@ -97,6 +97,7 @@ const State = (() => {
         audioMuted: false,
         ambientTrack: null,  // Se carga lazily desde localStorage
         rewardTrack: null,   // Se carga lazily desde localStorage
+        hardTrack: null,
         alarmTrack: null,    // Se carga lazily desde localStorage
         soundSettings: null,  // Se carga lazily desde localStorage via _lazyInits
 
@@ -138,6 +139,7 @@ const State = (() => {
         widgetConfig: () => JSON.parse(localStorage.getItem('estudiador_widget_config') || 'null'),
         ambientTrack: () => localStorage.getItem('estudiador_ambient_track') || 'brownian',
         rewardTrack:  () => localStorage.getItem('estudiador_reward_track') || 'warning',
+        hardTrack:    () => localStorage.getItem('estudiador_hard_track') || 'bump',
         alarmTrack:   () => localStorage.getItem('estudiador_alarm_track') || 'custom',
         soundSettings: () => JSON.parse(localStorage.getItem('estudiador_sound_settings') || '{"alarm":{"enabled":true,"volume":100,"pitch":0},"reward":{"enabled":true,"volume":100,"pitch":0},"ambient":{"enabled":true,"volume":80,"pitch":0,"continuous":false},"study":{"enabled":false,"volume":100,"pitch":0}}'),
     };

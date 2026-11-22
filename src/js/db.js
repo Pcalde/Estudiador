@@ -96,13 +96,37 @@ const DB = (() => {
     };
 
     // 3. Operaciones Key-Value (Preparación para migraciones)
-    const setVar = async (key, value) => {
+    const setVars = async (values, repasos) => {
+        const snapshot = structuredClone(values);
         const db = await init();
         return new Promise((resolve, reject) => {
-            const tx = db.transaction('keyval', 'readwrite');
-            tx.objectStore('keyval').put({ key, value });
+            const tx = db.transaction(repasos === undefined ? ['keyval'] : ['keyval', 'fsrs_logs'], 'readwrite');
             tx.oncomplete = () => resolve();
-            tx.onerror = (e) => reject(e.target.error);
+            tx.onabort = () => reject(tx.error || new Error('Guardado cancelado.'));
+            const store = tx.objectStore('keyval');
+            try {
+                Object.entries(snapshot).forEach(([key, value]) => store.put({ key, value }));
+                if (repasos !== undefined) {
+                    const logs = tx.objectStore('fsrs_logs');
+                    logs.clear();
+                    repasos.forEach(log => logs.add(log));
+                }
+            } catch (error) {
+                tx.abort();
+                reject(error);
+            }
+        });
+    };
+    const setVar = (key, value) => setVars({ [key]: value });
+
+    const clearLocalData = async () => {
+        const db = await init();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(['keyval', 'fsrs_logs'], 'readwrite');
+            tx.oncomplete = () => resolve();
+            tx.onabort = () => reject(tx.error || new Error('No se pudo restablecer la base local.'));
+            tx.objectStore('keyval').clear();
+            tx.objectStore('fsrs_logs').clear();
         });
     };
 
@@ -127,7 +151,7 @@ const DB = (() => {
     };
 
     return { 
-        init, addRevlog, getUnsyncedRevlogs, markRevlogsAsSynced, setVar, getVar, 
+        init, addRevlog, getUnsyncedRevlogs, markRevlogsAsSynced, setVar, setVars, getVar, clearLocalData,
         getAll // <--- Añadir aquí
     };
 })();

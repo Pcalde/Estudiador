@@ -13,7 +13,7 @@ const AI = (() => {
 
     const MODELOS_GROQ = [
         { id: "openai/gpt-oss-120b", nombre: "gpt-oss-120b (Complejo)" },
-        { id: "qwen/qwen3.6-27b", nombre: "Qwen 3.6 27b (Rápido)" },
+        { id: "qwen/qwen3.8-27b", nombre: "Qwen 3.8 27b (Rápido)" },
         { id: "groq/compound", nombre: "Groq Compound (ilimitado)" }
     ];
 

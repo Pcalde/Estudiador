@@ -6,6 +6,7 @@ let _syncTimeout     = null;
 let _autoSaveInterval = null;
 let _auth            = null;
 let _db              = null;
+let _cuentaAutoguardado = null;
 
 const FIREBASE_CONFIG_EMBEBIDA = {
     apiKey: "AIzaSyBZJar5Z82Fb8lvPaYc2BOMpjGMF2PM0jY",
@@ -52,7 +53,8 @@ window.addEventListener('load', () => {
 // ─────────────────────────────────────────────────────────────
 function _manejarCambioAuth(user) {
     if (user) {
-        const esNuevoLogin = !State.get('currentUser');
+        const esNuevoLogin = State.get('currentUser')?.uid !== user.uid;
+        if (esNuevoLogin) _cuentaAutoguardado = null;
 
         const pureUser = {
             uid: user.uid,
@@ -68,16 +70,18 @@ function _manejarCambioAuth(user) {
             UI.renderAuthEstado(pureUser);
         }
         
-        if (typeof sincronizarTelemetriaFSRS === 'function') sincronizarTelemetriaFSRS();
-        
         if (!_autoSaveInterval) {
-            _autoSaveInterval = setInterval(guardarDatosUsuario, INTERVALO_AUTOSAVE_MS);
+            _autoSaveInterval = setInterval(() => {
+                if (_cuentaAutoguardado !== State.get('currentUser')?.uid) return;
+                guardarDatosUsuario().catch(error => Logger.error('Error en guardado automático:', error));
+            }, INTERVALO_AUTOSAVE_MS);
         }
         if (esNuevoLogin && typeof comprobarNubeAlIniciar === 'function') {
             comprobarNubeAlIniciar();
         }
 
     } else {
+        _cuentaAutoguardado = null;
         State.set('currentUser', null);
         
         if (typeof UI !== 'undefined' && typeof UI.renderAuthEstado === 'function') {
@@ -100,12 +104,12 @@ async function comprobarNubeAlIniciar() {
 
     try {
         const doc = await _db.collection('users').doc(currentUser.uid).get();
+        if (State.get('currentUser')?.uid !== currentUser.uid) return;
         if (doc.exists) {
             Toast.ask(
                 'Se ha detectado una copia en la nube. ¿Deseas sobreescribir tus datos locales?',
                 async () => {
-                    await cargarDatosUsuario();
-                    Toast.show('Sincronización inicial completada', 'success');
+                    if (State.get('currentUser')?.uid === currentUser.uid) await restaurarCopiaNube();
                 }
             );
         }
@@ -142,6 +146,7 @@ async function guardarDatosUsuario() {
             lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
         Logger.info('Datos guardados en Firebase');
+        if (State.get('currentUser')?.uid === currentUser.uid) _cuentaAutoguardado = currentUser.uid;
     } catch (error) {
         Logger.error('Error al guardar en Firebase:', error);
         throw error;
@@ -153,54 +158,74 @@ async function guardarDatosUsuario() {
 // ─────────────────────────────────────────────────────────────
 async function cargarDatosUsuario() {
     const currentUser = State.get('currentUser');
-    if (!currentUser || !_db) return;
-
+    if (!currentUser || !_db) throw new Error('Inicia sesion para cargar la copia.');
+    const doc = await _db.collection('users').doc(currentUser.uid).get();
+    if (State.get('currentUser')?.uid !== currentUser.uid) throw new Error('La cuenta ha cambiado.');
+    if (!doc.exists) throw new Error('No hay una copia guardada.');
+    const data = doc.data();
+    const original = data.biblioteca ?? {};
+    const biblioteca = DataIO.normalizarBiblioteca(original);
+    Domain.normalizarBibliotecaFechas(biblioteca);
+    const bibliotecaConfig = data.bibliotecaConfig || { carpetas: {}, archivadas: [] };
+    const graphData = DataIO.migrarIdsMapa(data.graphData || {}, original, biblioteca);
+    const horarioGlobal = data.horarioGlobal || {};
+    const fechasClave = Domain.normalizarFechasClave(data.fechasClave || []);
+    const values = { biblioteca, bibliotecaConfig, graphData, horarioGlobal, fechasClave };
+    const storage = {
+        estudiador_biblioteca_config: bibliotecaConfig,
+        estudiador_proyectos: data.projects || [],
+        estudiador_colores: data.userColors || {},
+        pomo_settings: data.pomoSettings || State.get('pomoSettings'),
+        pomo_tasks: data.taskList || []
+    };
+    const anteriores = Object.keys(storage).map(key => [key, localStorage.getItem(key)]);
     try {
-        const doc = await _db.collection('users').doc(currentUser.uid).get();
-
-        if (doc.exists) {
-            const data = doc.data();
-
-            State.batch(() => {
-                const biblio = data.biblioteca || {};
-                if (typeof window.normalizarBibliotecaFechas === 'function') window.normalizarBibliotecaFechas(biblio);
-                State.set('biblioteca', biblio);
-                
-                const bibConfig = data.bibliotecaConfig || { carpetas: {}, archivadas: [] };
-                State.set('bibliotecaConfig', bibConfig);
-
-                State.set('projects',      data.projects      || []);
-                State.set('horarioGlobal', data.horarioGlobal || {});
-                State.set('userColors',    data.userColors    || {});
-                State.set('pomoSettings',  data.pomoSettings  || State.get('pomoSettings'));
-                State.set('taskList',      data.taskList      || []);
-                State.set('graphData', data.graphData || {});
-
-                if (typeof window.normalizarFechasClave === 'function') {
-                    const fechasSaneadas = window.normalizarFechasClave(data.fechasClave || []);
-                    State.set('fechasClave', fechasSaneadas);
-                }
-            });
-
-            EventBus.emit('DATA_REQUIRES_SAVE');
-            EventBus.emit('DATOS_NUBE_CARGADOS', { asigActual: State.get('nombreAsignaturaActual') });
-
-            Logger.info('Datos cargados desde Firebase y volcados al estado local.');
-        } else {
-            await guardarDatosUsuario();
+        Object.entries(storage).forEach(([key, value]) => localStorage.setItem(key, JSON.stringify(value)));
+        await DB.setVars(values);
+    } catch (error) {
+        anteriores.forEach(([key, value]) => value === null ? localStorage.removeItem(key) : localStorage.setItem(key, value));
+        throw error;
+    }
+    State.batch(() => {
+        Object.entries(values).forEach(([key, value]) => State.set(key, value));
+        State.set('projects', storage.estudiador_proyectos);
+        State.set('userColors', storage.estudiador_colores);
+        State.set('pomoSettings', storage.pomo_settings);
+        State.set('taskList', storage.pomo_tasks);
+        const actual = State.get('nombreAsignaturaActual');
+        if (!Object.hasOwn(biblioteca, actual)) {
+            State.set('nombreAsignaturaActual', null);
+            State.set('colaEstudio', []);
+            State.set('conceptoActual', null);
+            localStorage.removeItem('estudiador_asig_actual');
         }
+    });
+    actualizarListaProyectos();
+    EventBus.emit('DATOS_NUBE_CARGADOS', { asigActual: State.get('nombreAsignaturaActual') });
+}
+
+async function restaurarCopiaNube() {
+    const uid = State.get('currentUser')?.uid;
+    _cuentaAutoguardado = null;
+    try {
+        await cargarDatosUsuario();
+        if (State.get('currentUser')?.uid === uid) _cuentaAutoguardado = uid;
+        Toast.show('Datos recargados desde Firebase.', 'success');
     } catch (error) {
         Logger.error('Error al cargar desde Firebase:', error);
+        Toast.show('No se pudo cargar la copia: ' + error.message, 'error');
     }
 }
 
-// ─────────────────────────────────────────────────────────────
+// ------------------------------------------------------------
 // SINCRONIZACIÓN
 // ─────────────────────────────────────────────────────────────
 function sincronizar() {
-    if (!State.get('currentUser')) return;
+    const uid = State.get('currentUser')?.uid;
+    if (!uid || _cuentaAutoguardado !== uid) return;
     if (_syncTimeout) clearTimeout(_syncTimeout);
     _syncTimeout = setTimeout(() => {
+        if (_cuentaAutoguardado !== uid || State.get('currentUser')?.uid !== uid) return;
         guardarDatosUsuario().catch(e => Logger.error("Fallo sincro silenciosa:", e));
     }, 1500);
 }
@@ -225,11 +250,7 @@ function forzarBajada() {
     if (!State.get('currentUser')) return;
     Toast.ask(
         "¿Recargar desde la nube? Perderás los cambios locales no guardados.",
-        () => {
-            cargarDatosUsuario().then(() => {
-                Toast.show('Datos recargados desde Firebase', 'success');
-            });
-        }
+        restaurarCopiaNube
     );
 }
 
@@ -238,7 +259,7 @@ function forzarBajada() {
 // ─────────────────────────────────────────────────────────────
 async function sincronizarTelemetriaFSRS() {
     const currentUser = State.get('currentUser');
-    if (!_db || !currentUser || typeof DB === 'undefined') return;
+    if (!_db || !currentUser || _cuentaAutoguardado !== currentUser.uid || typeof DB === 'undefined') return;
 
     try {
         const pendientes = await DB.getUnsyncedRevlogs();

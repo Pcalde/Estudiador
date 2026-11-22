@@ -9,69 +9,50 @@ const Quiz = (() => {
     let _idxActual = 0;
     let _respuestas = [];
     let _config = {};
+    let _generacion = 0;
 
     function iniciar() {
-        const asig = document.getElementById('quiz-asig')?.value;
-        const dificultad = document.getElementById('quiz-dificultad')?.value;
-        const numPreguntas = parseInt(document.getElementById('quiz-num')?.value) || 5;
-
-        if (!dificultad) {
-            alert('Selecciona una dificultad (Recluta, Curtido o Veterano)');
-            return;
-        }
-
-        Logger.info(`Iniciando Tipo Test: ${asig}, ${dificultad}, ${numPreguntas} preguntas`);
-
-        _config = { asig, dificultad, numPreguntas };
-        _respuestas = [];
-        _idxActual = 0;
-
-        // Obtener contenido de los apuntes
+        const asig = document.getElementById('ex-asig').value;
+        const dificultad = document.querySelector('input[name="quiz-dificultad"]:checked')?.value || 'recluta';
+        const numPreguntas = Math.min(20, Math.max(1, Number(document.getElementById('ex-num').value) || 5));
+        const temperatura = document.querySelector('input[name="quiz-temperatura"]:checked')?.value || 'equilibrado';
+        const filtros = EXAM.leerFiltros();
+        if (filtros.hasta != null && filtros.desde != null && filtros.desde > filtros.hasta) return alert('Elige un final posterior al inicio.');
         const biblioteca = State.get('biblioteca') || {};
-        let contenidoParaIA = '';
-
-        if (asig === 'ALL') {
-            Object.values(biblioteca).forEach(asignatura => {
-                asignatura.forEach(c => {
-                    contenidoParaIA += `Tema: ${c.Titulo}\n${c.Contenido}\n\n`;
-                });
-            });
-        } else if (biblioteca[asig]) {
-            biblioteca[asig].forEach(c => {
-                contenidoParaIA += `Tema: ${c.Titulo}\n${c.Contenido}\n\n`;
-            });
-        }
-
-        if (contenidoParaIA.trim().length === 0) {
-            alert('No hay contenido en los apuntes seleccionados para generar preguntas.');
-            return;
-        }
-
-        _generarPreguntasConIA(contenidoParaIA, numPreguntas, dificultad);
+        if (!TestAI.conceptosDisponibles(biblioteca, asig, filtros).length) return alert('No hay contenido suficiente para generar el test con estos filtros.');
+        _config = { asig, dificultad, numPreguntas, demo: false };
+        _respuestas = []; _idxActual = 0;
+        State.set('currentContext', 'quiz');
+        Logger.info(`Tipo Test: ${asig}, ${dificultad}, ${numPreguntas} preguntas`);
+        _generarPreguntasConIA(asig, numPreguntas, dificultad, temperatura, filtros);
     }
 
-    async function _generarPreguntasConIA(contenido, num, dificultad) {
-        const temperaturaKey = document.getElementById('quiz-temperatura')?.value || 'equilibrado';
-        const asig = document.getElementById('quiz-asig')?.value;
-        
-        const modalContainer = document.getElementById('quiz-config');
-        
-        modalContainer.innerHTML = `
-            <div style="text-align:center; padding:60px 20px;">
-                <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
-                    <button onclick="UI_Quiz.cerrar()" style="background:none; border:none; color:#888; cursor:pointer; font-size:1.2em;" title="Cancelar"><i class="fa-solid fa-xmark"></i></button>
-                </div>
-                <i class="fa-solid fa-brain fa-pulse fa-3x" style="color:var(--accent); margin-bottom:20px;"></i>
-                <h3 style="color:#fff; margin:0 0 10px 0;">Generando preguntas...</h3>
-                <p style="color:#888;">La IA está creando ${num} preguntas nivel ${dificultad.toUpperCase()}</p>
-                <p style="color:#666; font-size:0.85em; margin-top:15px;">Puedes cerrar esta ventana si prefieres. El proceso continuará en segundo plano.</p>
-            </div>
-        `;
+    function iniciarDemo() {
+        cancelarGeneracion();
+        _config = {asig:'Demostración', dificultad:'recluta', numPreguntas:3, demo:true};
+        _preguntas = [
+            {pregunta:'¿Cuál de estas funciones es inyectiva en los números reales?',opciones:['f(x)=x²','f(x)=2x+1','f(x)=|x|','f(x)=0'],correcta:1,explicacion:'La función afín con pendiente no nula es inyectiva.'},
+            {pregunta:'¿Cuánto es 2 + 3?',opciones:['4','6','5','8'],correcta:2,explicacion:'La suma de dos y tres es cinco.'},
+            {pregunta:'¿Qué propiedad cumple una aplicación biyectiva?',opciones:['Es inyectiva y sobreyectiva','Es siempre continua','Es siempre lineal','Su dominio es vacío'],correcta:0,explicacion:'Biyectiva significa simultáneamente inyectiva y sobreyectiva.'}
+        ];
+        _respuestas=[]; _idxActual=0;
+        State.set('currentContext', 'quiz');
+        State.set('quizEstado', {respuestas:[],idxActual:0});
+        _mostrarPregunta(0);
+    }
+
+    function cancelarGeneracion() { _generacion++; }
+
+    async function _generarPreguntasConIA(asig, num, dificultad, temperaturaKey, filtros = {}) {
+        const generacion = ++_generacion;
+        const sigueActiva = () => generacion === _generacion && State.get('currentContext') === 'quiz';
+        UI_Quiz.renderCarga();
 
         try {
             // Generación tipo "caja negra": no se muestra el contenido al usuario
-            const resultado = await TestAI.generarPreguntasParaTest(asig, num, dificultad, temperaturaKey);
+            const resultado = await TestAI.generarPreguntasParaTest(asig, num, dificultad, temperaturaKey, filtros);
             
+            if (!sigueActiva()) return;
             if (resultado.preguntas.length === 0) {
                 throw new Error('No se generaron preguntas válidas');
             }
@@ -79,7 +60,7 @@ const Quiz = (() => {
             // Verificar si tenemos suficientes preguntas
             if (resultado.totalGeneradas < num) {
                 // No hay suficientes preguntas válidas
-                TestAI._abrirAdvertenciaPreguntasInsuficientes(
+                UI_Quiz.renderPreguntasInsuficientes(
                     num,
                     resultado.totalGeneradas,
                     // Callback: continuar con las disponibles
@@ -90,7 +71,7 @@ const Quiz = (() => {
                     },
                     // Callback: reintentar
                     () => {
-                        _generarPreguntasConIA(contenido, num, dificultad);
+                        _generarPreguntasConIA(asig, num, dificultad, temperaturaKey, filtros);
                     }
                 );
             } else {
@@ -101,9 +82,11 @@ const Quiz = (() => {
             }
 
         } catch (error) {
+            if (!sigueActiva()) return;
             Logger.error('Error generando preguntas:', error);
             alert('Error al generar preguntas: ' + error.message + '\n\nAsegúrate de tener configurada una API Key en Ajustes.');
-            UI_Quiz.cerrar();
+            EXAM.abrir();
+            EXAM.setModo('quiz');
         }
     }
 
@@ -119,16 +102,14 @@ const Quiz = (() => {
             idxActual: _idxActual 
         });
         
-        // Re-renderizar para mostrar selección
-        UI_Quiz.renderPregunta(_preguntas[_idxActual], _idxActual, _preguntas.length);
+
+    }
+
+    function irA(idx) {
+        if (idx >= 0 && idx < _preguntas.length) _mostrarPregunta(idx);
     }
 
     function siguiente() {
-        if (_respuestas[_idxActual] === undefined) {
-            alert('Selecciona una respuesta antes de continuar');
-            return;
-        }
-
         if (_idxActual < _preguntas.length - 1) {
             _mostrarPregunta(_idxActual + 1);
         } else {
@@ -150,9 +131,9 @@ const Quiz = (() => {
             const esCorrecta = opcionElegidaIdx === p.correcta;
 
             // Actualizar FSRS si estamos en una asignatura específica
-            if (esCorrecta && _config.asig !== 'ALL') {
+            if (!_config.demo && esCorrecta && _config.asig !== 'ALL') {
                 _actualizarFSRS(p.pregunta, true);
-            } else if (!esCorrecta && _config.asig !== 'ALL') {
+            } else if (!_config.demo && !esCorrecta && _config.asig !== 'ALL') {
                 _actualizarFSRS(p.pregunta, false);
             }
 
@@ -166,7 +147,7 @@ const Quiz = (() => {
         });
 
         // Emitir evento para registro en app.js
-        EventBus.emit('QUIZ_COMPLETADO', {
+        if (!_config.demo) EventBus.emit('QUIZ_COMPLETADO', {
             asignatura: _config.asig,
             dificultad: _config.dificultad,
             aciertos: resultados.filter(r => r.correcta).length,
@@ -214,14 +195,18 @@ const Quiz = (() => {
         _preguntas = [];
         _respuestas = [];
         _idxActual = 0;
-        UI_Quiz.abrir();
+        EXAM.abrir();
+        EXAM.setModo('quiz');
     }
 
     return {
         iniciar,
+        cancelarGeneracion,
+        iniciarDemo,
         seleccionarOpcion,
         siguiente,
         anterior,
+        irA,
         finalizar: _finalizar,
         repetir
     };

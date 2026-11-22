@@ -8,7 +8,7 @@
 //   → ui.js → app.js  ← este archivo
 // ════════════════════════════════════════════════════════════════
 
-const APP_VERSION = "2.2.4";
+const APP_VERSION = "2.3.7";
 
 // ────────────────────────────────────────────────────────────────
 // UTIL — helpers privados reutilizables
@@ -52,8 +52,15 @@ function persistirDatosLocales(key, data) {
     }
 }
 
-function borrarTodoLocal() {
-    if (confirm("¿Reset total?")) { localStorage.clear(); location.reload(); }
+async function borrarTodoLocal() {
+    if (!confirm('¿Eliminar los datos de Estudiador de este navegador? La copia en la nube se conserva.')) return;
+    try {
+        await DB.clearLocalData();
+        localStorage.clear();
+        location.reload();
+    } catch (error) {
+        Toast.show('No se pudo completar el restablecimiento: ' + error.message, 'error');
+    }
 }
 
 function abrirModalPomodoro()  { Util.toggleModal('pomodoro-modal', true);  renderTasks(); }
@@ -77,14 +84,12 @@ EventBus.on('DATA_REQUIRES_SAVE', async () => {
     const graphData  = State.get('graphData');
     const planificador = State.get('planificador');
     try {
-        await DB.setVar('biblioteca', biblioteca);
-        await DB.setVar('bibliotecaConfig', bibliotecaConfig);
-        await DB.setVar('graphData',  graphData);
-        if (planificador) await DB.setVar('planificador_pro', planificador);
+        await DB.setVars({ biblioteca, bibliotecaConfig, graphData, ...(planificador && { planificador_pro: planificador }) });
         if (asigActual) localStorage.setItem('estudiador_asig_actual', asigActual);
         localStorage.removeItem('estudiador_biblioteca');
     } catch (error) {
         Logger.error("Error guardando en IndexedDB:", error);
+        Toast.show("No se pudieron guardar los cambios en este dispositivo.", "error");
     }
 });
 EventBus.on('DATOS_NUBE_CARGADOS', ({ asigActual }) => {
@@ -193,7 +198,7 @@ EventBus.on('STATE_BATCH_CHANGED', (payload) => procesarMutacionesEstado(payload
 // ────────────────────────────────────────────────────────────────
 const MigrationEngine = (() => {
     async function migrarBiblioteca(biblioActual) {
-        if (biblioActual && Object.keys(biblioActual).length > 0) return biblioActual;
+        if (biblioActual !== null) return biblioActual;
         Logger.info("Migración: Buscando datos heredados (Legacy)...");
 
         const legacyV2 = localStorage.getItem('estudiador_db_v2');
@@ -201,12 +206,14 @@ const MigrationEngine = (() => {
         const localDB  = await DB.getVar('biblioteca_local');
 
         let recoveredDB = {};
-        if      (legacyV2) { recoveredDB = JSON.parse(legacyV2); localStorage.removeItem('estudiador_db_v2'); }
-        else if (legacyV1) { recoveredDB = JSON.parse(legacyV1); localStorage.removeItem('estudiador_biblioteca'); }
+        if      (legacyV2) { recoveredDB = JSON.parse(legacyV2); }
+        else if (legacyV1) { recoveredDB = JSON.parse(legacyV1); }
         else if (localDB)  { recoveredDB = localDB; }
 
         if (Object.keys(recoveredDB).length > 0) {
             await DB.setVar('biblioteca', recoveredDB);
+            localStorage.removeItem('estudiador_db_v2');
+            localStorage.removeItem('estudiador_biblioteca');
             Logger.info("Migración completada: Biblioteca transferida a IndexedDB.");
         }
         return recoveredDB;
@@ -231,12 +238,19 @@ async function arrancarAplicacion() {
 
         let biblioDB = await DB.getVar('biblioteca');
         biblioDB     = await MigrationEngine.migrarBiblioteca(biblioDB);
+        const normalizada = DataIO.normalizarBiblioteca(biblioDB, false);
+        let graphData = await DB.getVar('graphData') || {};
+        if (Object.keys(biblioDB).some(nombre => biblioDB[nombre].some((card, i) => card !== normalizada[nombre][i]))) {
+            graphData = DataIO.migrarIdsMapa(graphData, biblioDB, normalizada);
+            await DB.setVars({ biblioteca: normalizada, graphData });
+        }
+        biblioDB = normalizada;
         await MigrationEngine.migrarConfiguracionesSecundarias();
 
         State.set('biblioteca',    biblioDB);
         State.set('fechasClave',   await DB.getVar('fechasClave')   || []);
         State.set('horarioGlobal', await DB.getVar('horarioGlobal') || {});
-        State.set('graphData', await DB.getVar('graphData') || {});
+        State.set('graphData', graphData);
         State.set('planificador', await DB.getVar('planificador_pro') || {});   
 
         const ultimaAsig = localStorage.getItem('estudiador_asig_actual');
@@ -488,6 +502,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         localStorage.setItem('estudiador_sound_settings', JSON.stringify(soundSettings));
         localStorage.setItem('estudiador_ambient_track', ambientTrack || 'brownian');
         localStorage.setItem('estudiador_reward_track', rewardTrack || 'warning');
+        localStorage.setItem('estudiador_hard_track', State.get('hardTrack'));
         localStorage.setItem('estudiador_alarm_track', alarmTrack || 'custom');
     }
     
@@ -495,7 +510,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (typeof EventBus !== 'undefined') {
         EventBus.on('STATE_CHANGED', (data) => {
             if (data.keys.includes('soundSettings') || data.keys.includes('audioMuted') || 
-                data.keys.includes('ambientTrack') || data.keys.includes('rewardTrack') || data.keys.includes('alarmTrack')) {
+                data.keys.includes('ambientTrack') || data.keys.includes('rewardTrack') ||
+                data.keys.includes('alarmTrack') || data.keys.includes('hardTrack')) {
                 syncSoundControls();
                 saveAudioSettingsToStorage();
             }
@@ -520,8 +536,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     
 
     // 6. Cierre automático sidebar móvil al seleccionar asignatura
-    document.getElementById('lista-asignaturas')?.addEventListener('click', () => {
-        if (window.innerWidth < 950) setTimeout(cerrarPanelesMoviles, 150);
+    document.getElementById('lista-asignaturas')?.addEventListener('click', (event) => {
+        if (event.target.closest('.sidebar-subject') && window.innerWidth <= 950) cerrarPanelesMoviles();
     });
     document.getElementById('mc-btn-simular')?.addEventListener('click', () => {
         if (typeof window.lanzarSimulacionMonteCarlo === 'function') {
@@ -532,24 +548,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 7. Importación masiva de JSON
     document.getElementById('file-input-unified')?.addEventListener('change', async (e) => {
         if (e.target.files.length === 0) return;
-        let importados = 0;
-        for (const f of e.target.files) {
+        for (const file of e.target.files) {
             try {
-                const nombreArchivo = f.name.replace('.json', '');
-                const contenido     = JSON.parse(await f.text());
-                if (Array.isArray(contenido)) {
-                    const biblio = State.get('biblioteca');
-                    if (biblio[nombreArchivo] && !confirm(`La asignatura "${nombreArchivo}" ya existe. ¿Sobreescribir?`)) continue;
-                    biblio[nombreArchivo] = contenido;
-                    State.set('biblioteca', biblio);
-                    importados++;
-                }
-            } catch (err) { Logger.error("Error leyendo archivo:", err); }
-        }
-        if (importados > 0) {
-            EventBus.emit('DATA_REQUIRES_SAVE');
-            actualizarMenuLateral();
-            alert(`${importados} asignaturas importadas correctamente.`);
+                const nombre = file.name.replace(/\.json$/i, '').trim();
+                if (!nombre) throw new Error('Falta el nombre de la asignatura.');
+                const cards = JSON.parse(await file.text());
+                const biblioteca = State.get('biblioteca');
+                if (Object.hasOwn(biblioteca, nombre) && !confirm('Reemplazar la asignatura ' + nombre + '?')) continue;
+                const ids = new Set(Object.entries(biblioteca).filter(([asig]) => asig !== nombre)
+                    .flatMap(([, tarjetas]) => tarjetas.map(card => card.id)));
+                await DataIO.guardarBiblioteca({ ...biblioteca, [nombre]: DataIO.normalizarTarjetas(cards, ids) });
+                actualizarMenuLateral();
+                if (State.get('nombreAsignaturaActual') === nombre) cargarAsignatura(nombre);
+                Toast.show(nombre + ' importada.', 'success');
+            } catch (error) {
+                Toast.show(file.name + ': ' + error.message, 'error');
+            }
         }
         e.target.value = "";
     });
@@ -560,6 +574,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 document.addEventListener('keydown', (e) => {
     if (!e.key) return;
+    if (e.target.closest?.('#sidebar, #sidebar-folder-dialog')) return;
     const key     = e.key.toLowerCase();
     const tag     = e.target.tagName;
     const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable || tag === 'SELECT';
@@ -568,6 +583,7 @@ document.addEventListener('keydown', (e) => {
     const context = State.get('currentContext');
 
     // ── Contexto: Examen ──────────────────────────────────────
+    if (context === 'quiz') return;
     if (context === 'exam') {
         const isFlash = document.getElementById('examen-flash')?.style.display === 'block';
         if (!isFlash || isInput) return;
@@ -613,7 +629,7 @@ document.addEventListener('keydown', (e) => {
     // ── Global: L / S → modos lectura/secuencial ─────────────
     if (key === 'l' || key === 's') {
         e.preventDefault();
-        const id  = key === 'l' ? 'check-lectura' : 'check-secuencial';
+        const id  = key === 'l' ? 'check-modo-lectura' : 'check-secuencial';
         const chk = document.getElementById(id);
         if (chk) { 
             chk.checked = !chk.checked; 
@@ -630,6 +646,7 @@ document.addEventListener('keydown', (e) => {
         if (!State.get('conceptoActual')) return; 
 
         if (key === 'enter') {
+            if (State.get('modoLectura')) return;
             e.preventDefault();
             const elm = document.getElementById('concepto-contenido');
             if (!elm) return;
@@ -658,7 +675,7 @@ document.addEventListener('keydown', (e) => {
             }
             return;
         }
-        if (['1','2','3','4'].includes(key)) {
+        if (!e.repeat && ['1','2','3','4'].includes(key)) {
             const controles = document.getElementById('controles-respuesta');
             if (controles && !controles.classList.contains('hidden')) {
                 e.preventDefault();
@@ -766,6 +783,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         picker.addEventListener('change', () => guardarColoresGlobales());
     });
+    on('#check-lectura', 'change', event => StudyEngine.toggleModoLectura(event.target.checked));
+    on('#check-modo-lectura', 'change', event => {
+        StudyEngine.toggleModoLectura(event.target.checked);
+        const label = document.querySelector('label[for="check-modo-lectura"]');
+        if (label) label.classList.toggle('modo-card-activo', event.target.checked);
+    });
     // Evento al cambiar un radio del modal
     document.querySelectorAll('input[name="radio-modo-estudio"]').forEach(radio => {
         radio.addEventListener('change', (e) => {
@@ -776,7 +799,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 'aleatorio': 'Aleatorio',
                 'secuencial_retraso': 'Sec. Retraso',
                 'secuencial_puro': 'Sec. Puro',
-                'lectura': 'Lectura',
                 'anki': 'Anki'
             };
             document.getElementById('label-modo-estudio').textContent = etiquetas[e.target.value];
@@ -818,7 +840,6 @@ document.addEventListener('DOMContentLoaded', () => {
     on('#btn-crearproyecto',           'click',  crearProyecto);
     on('#btn-modoimportar',            'click',  modoImportar);
     on('#btn-abrirexamen',             'click',  abrirExamen);
-    on('#btn-quiz',                    'click',  () => UI_Quiz.abrir());
     on('#btn-togglepizarra',           'click',  () => Pizarra.toggle());
 
     // Edición
@@ -853,6 +874,8 @@ document.addEventListener('DOMContentLoaded', () => {
     on('#btn-filtros-dropdown','click',  abrirModalFiltros);
     on('#btn-modal-modo-estudio', 'click', () => {
         const modoActual = State.get('modoEstudio') || 'aleatorio';
+        const lectura = document.getElementById('check-modo-lectura');
+        if (lectura) lectura.checked = !!State.get('modoLectura');
         const radio = document.querySelector(`input[name="radio-modo-estudio"][value="${modoActual}"]`);
         if (radio) radio.checked = true;
         
@@ -876,6 +899,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const strong = selectedLabel.querySelector('strong');
             if (icon) icon.style.color = 'var(--accent)';
             if (strong) strong.style.color = 'var(--accent)';
+        }
+        const lecturaLabel = document.querySelector('label[for="check-modo-lectura"]');
+        if (lecturaLabel && State.get('modoLectura')) {
+            lecturaLabel.style.borderColor = 'var(--accent)';
+            lecturaLabel.style.background = 'rgba(76, 175, 80, 0.1)';
+            lecturaLabel.style.boxShadow = '0 0 12px rgba(76, 175, 80, 0.3)';
+            lecturaLabel.querySelector('i')?.style.setProperty('color', 'var(--accent)');
+            lecturaLabel.querySelector('strong')?.style.setProperty('color', 'var(--accent)');
         }
         
         document.getElementById('modo-estudio-modal').style.display = 'flex';
@@ -995,8 +1026,16 @@ document.addEventListener('DOMContentLoaded', () => {
     on('#ex-mode-btn-flash',              'click', () => examenSetMode('flash'));
     on('#ex-mode-btn-real',               'click', () => examenSetMode('real'));
     on('#ex-mode-btn-feynman',            'click', () => examenSetMode('feynman'));
+    on('#ex-mode-btn-quiz',               'click', () => examenSetMode('quiz'));
+    on('#ex-demo',                        'click', probarExamen);
     on('#btn-iniciarexamen',              'click', iniciarExamen);
     on('#ex-f-btn-revelar',              'click', examenFlashRevelar);
+    on('#ex-f-saltar',                   'click', examenFlashSaltar);
+    on('#ex-f-anterior',                 'click', examenFlashAnterior);
+    document.getElementById('ex-f-nav')?.addEventListener('click', event => {
+        const btn = event.target.closest('[data-flash-ir]');
+        if (btn) EXAM.flashIrA(Number(btn.dataset.flashIr));
+    });
     on('#btn-examenflashpuntuar',         'click', () => examenFlashPuntuar(1));
     on('#btn-examenflashpuntuar-2',       'click', () => examenFlashPuntuar(2));
     on('#btn-examenflashpuntuar-3',       'click', () => examenFlashPuntuar(3));
@@ -1006,7 +1045,7 @@ document.addEventListener('DOMContentLoaded', () => {
     on('#btn-examenrealsiguiente',        'click', examenRealSiguiente);
     on('#btn-examenrealentregar',         'click', examenRealEntregar);
     on('#ex-c-btn-nota',                 'click', examenRealCalcularNota);
-    on('#btn-repetirexamen',             'click', repetirExamen);
+    on('#btn-repetirexamen',             'click', () => EXAM.repetirDesdeResultado());
 
     // Pizarra
     on('#pz-btn-lapiz',       'click',  () => Pizarra.setModo('lapiz'));

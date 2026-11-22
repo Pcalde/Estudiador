@@ -6,6 +6,8 @@
 
 const StudyEngine = (() => {
 
+    let esperaAnki;
+
     function _parsearListaNumeros(str) {
         const result = new Set();
         if (!str || !str.trim()) return result;
@@ -23,12 +25,14 @@ const StudyEngine = (() => {
     }
 
     function aplicarFiltros() {
+        clearTimeout(esperaAnki);
         const asigActual = State.get('nombreAsignaturaActual');
         if (!asigActual) return;
         
         const biblioteca = State.get('biblioteca');
         const todos = biblioteca[asigActual] || [];
         let filtrados = [...todos];
+        let filtros = {};
 
         const modoEstudio = State.get('modoEstudio') || 'aleatorio';
 
@@ -59,6 +63,7 @@ const StudyEngine = (() => {
                 tiposSeleccionados: [], difsActivas: []
             };
 
+            filtros = f;
             if (f.hoy) filtrados = filtrados.filter(c => !c.ProximoRepaso || window.esVencido(c.ProximoRepaso));
             if (f.nuevas) filtrados = filtrados.filter(c => !c.UltimoRepaso);
             if (f.tema && f.temaVal) {
@@ -101,7 +106,7 @@ const StudyEngine = (() => {
                     const valB = b.ProximoRepaso ? window.fechaValor(b.ProximoRepaso) : 0;
                     return valA - valB; 
                 });
-            } else if (modoEstudio === 'secuencial_puro' || modoEstudio === 'lectura') {
+            } else if (modoEstudio === 'secuencial_puro') {
                 // Orden natural
             } else {
                 for (let i = filtrados.length - 1; i > 0; i--) {
@@ -113,7 +118,7 @@ const StudyEngine = (() => {
 
         // 3. Notificación a UI e Inyección de Estado
         const isSecuencialGlobal = modoEstudio === 'montecarlo' ? true : State.get('modoSecuencial');
-        const nFiltros = modoEstudio === 'montecarlo' ? 1 : 0; // Falsa bandera para forzar UI activa
+        const nFiltros = modoEstudio === 'montecarlo' ? { tipo: true } : filtros;
 
         if (typeof UI !== 'undefined') {
             if (UI.renderEstadoFiltros) UI.renderEstadoFiltros(nFiltros, filtrados.length, isSecuencialGlobal);
@@ -126,24 +131,25 @@ const StudyEngine = (() => {
             State.set('conceptoActual', filtrados.length > 0 ? structuredClone(filtrados[0]) : null);
         });
 
+        if (modoEstudio === 'anki' && filtrados.length) seleccionarAnki(-1);
+
         if (filtrados.length === 0 && typeof UI !== 'undefined' && UI.renderTarjetaVacia) {
             UI.renderTarjetaVacia();
         }
     }
     function setModoEstudio(modo) {
         State.set('modoEstudio', modo);
-        State.set('modoLectura', modo === 'lectura');
         State.set('modoSecuencial', modo !== 'aleatorio' && modo !== 'anki');
 
         aplicarFiltros();
 
-        if (modo === 'lectura' && typeof UI !== 'undefined' && UI.revelar) UI.revelar();
         if (typeof UI !== 'undefined' && UI.renderBotonesDificultad) UI.renderBotonesDificultad(modo);
     }
 
     function siguienteTarjeta() {
         const cola = State.get('colaEstudio') || [];
         if (cola.length === 0) return;
+        if (State.get('modoEstudio') === 'anki') { seleccionarAnki(State.get('indiceNavegacion')); return; }
         
         let idx = State.get('indiceNavegacion');
         idx = (idx + 1) % cola.length;
@@ -156,7 +162,7 @@ const StudyEngine = (() => {
 
     function anteriorTarjeta() {
         const cola = State.get('colaEstudio') || [];
-        if (cola.length <= 1) return;
+        if (cola.length <= 1 || State.get('modoEstudio') === 'anki') return;
 
         let idx = State.get('indiceNavegacion');
         idx = (idx - 1 + cola.length) % cola.length;
@@ -176,24 +182,38 @@ const StudyEngine = (() => {
             const due = cola[idx]._ankiDueAt;
             if (!due || due <= ahora) return idx;
         }
-        // Ninguna lista todavía: mostramos la más próxima en lugar de bloquear
-        let mejor = (idxActual + 1) % n;
-        cola.forEach((c, idx) => {
-            if (idx === idxActual) return;
-            if ((c._ankiDueAt || 0) < (cola[mejor]._ankiDueAt || 0)) mejor = idx;
+        return -1;
+    }
+
+    function seleccionarAnki(indice) {
+        clearTimeout(esperaAnki);
+        const cola = State.get('colaEstudio') || [];
+        const idx = _siguienteIndiceAnkiDisponible(cola, indice);
+        State.batch(() => {
+            State.set('indiceNavegacion', idx);
+            State.set('conceptoActual', idx < 0 ? null : structuredClone(cola[idx]));
         });
-        return mejor;
+        if (idx >= 0 || !cola.length) return;
+        const restante = Math.max(1, Math.min(...cola.map(c => c._ankiDueAt)) - Date.now());
+        const titulo = document.getElementById('concepto-titulo');
+        if (titulo) titulo.textContent = 'Pausa de repaso';
+        const contenido = document.getElementById('concepto-contenido');
+        if (contenido) contenido.textContent = 'Siguiente tarjeta en aproximadamente ' + Math.ceil(restante / 60000) + ' min.';
+        esperaAnki = setTimeout(() => {
+            if (State.get('modoEstudio') === 'anki' && State.get('colaEstudio') === cola) seleccionarAnki(indice);
+        }, restante);
     }
 
     function procesarRepasoAnki(calidad, concepto, asigActual) {
-        const result = Scheduler.calcularSiguienteRepasoAnki(concepto, calidad);
-        const tarjetaActualizada = result.tarjeta;
 
         const biblioteca = State.get('biblioteca');
-        const idxOriginal = biblioteca[asigActual].findIndex(
-            c => c.id === concepto.id || (c.Titulo === concepto.Titulo && c.Contenido === concepto.Contenido)
+        const idxOriginal = (biblioteca[asigActual] || []).findIndex(
+            c => concepto.id && c.id === concepto.id
         );
         if (idxOriginal === -1) return;
+
+        const result = Scheduler.calcularSiguienteRepasoAnki(concepto, calidad);
+        const tarjetaActualizada = result.tarjeta;
 
         State.batch(() => {
             biblioteca[asigActual][idxOriginal] = tarjetaActualizada;
@@ -208,25 +228,11 @@ const StudyEngine = (() => {
             let cola = State.get('colaEstudio') || [];
             const currentIdx = State.get('indiceNavegacion');
 
-            if (result.graduado) {
-                cola.splice(currentIdx, 1);
-                State.set('colaEstudio', cola);
-                if (cola.length === 0) {
-                    State.set('indiceNavegacion', 0);
-                    State.set('conceptoActual', null);
-                } else {
-                    const nextIdx = currentIdx % cola.length;
-                    State.set('indiceNavegacion', nextIdx);
-                    State.set('conceptoActual', structuredClone(cola[nextIdx]));
-                }
-            } else {
-                cola[currentIdx] = tarjetaActualizada;
-                State.set('colaEstudio', cola);
-                const nextIdx = _siguienteIndiceAnkiDisponible(cola, currentIdx);
-                State.set('indiceNavegacion', nextIdx);
-                State.set('conceptoActual', nextIdx === -1 ? null : structuredClone(cola[nextIdx]));
-            }
+            if (result.graduado) cola.splice(currentIdx, 1);
+            else cola[currentIdx] = tarjetaActualizada;
+            State.set('colaEstudio', cola);
         });
+        seleccionarAnki(result.graduado ? State.get('indiceNavegacion') - 1 : State.get('indiceNavegacion'));
 
         EventBus.emit('DATA_REQUIRES_SAVE');
         if (typeof window.updateDashboard === 'function') window.updateDashboard();
@@ -257,23 +263,13 @@ const StudyEngine = (() => {
             return;
         }
 
+        
+        const biblioteca = State.get('biblioteca');
+        const idxOriginal = (biblioteca[asigActual] || []).findIndex(c => concepto.id && c.id === concepto.id);
+
+        if (idxOriginal === -1) return;
         const result = Scheduler.calcularSiguienteRepaso(concepto, calidad);
         const tarjetaActualizada = result.tarjeta;
-        
-        if (typeof DB !== 'undefined' && typeof DB.addRevlog === 'function') {
-            DB.addRevlog({
-                cardId: concepto.id,
-                reviewTime: Date.now(),
-                // Si la tarjeta es nueva y no tiene UltimoRepaso, usamos Date.now() como punto 0
-                lastReviewTime: concepto.UltimoRepaso ? new Date(concepto.UltimoRepaso).getTime() : Date.now(),
-                grade: calidad,
-                stability: tarjetaActualizada.fsrs_stability || 0.1 
-            }).catch(e => console.error("Error guardando log FSRS:", e));
-        }
-
-        const biblioteca = State.get('biblioteca');
-        const idxOriginal = biblioteca[asigActual].findIndex(c => c.id === concepto.id || (c.Titulo === concepto.Titulo && c.Contenido === concepto.Contenido));
-
         if (idxOriginal !== -1) {
             State.batch(() => {
                 // Actualizar DB en memoria
@@ -293,8 +289,8 @@ const StudyEngine = (() => {
                 
                 if (calidad === 4) {
                     // REENCOLAR: Extrae y la envía al final de la cola activa
-                    const tarjetaFallada = cola.splice(currentIdx, 1)[0];
-                    cola.push(tarjetaFallada);
+                    cola.splice(currentIdx, 1);
+                    cola.push(tarjetaActualizada);
                     State.set('colaEstudio', cola);
                     
                     // El puntero se mantiene (apuntando al nuevo elemento en esa posición)
@@ -332,6 +328,10 @@ const StudyEngine = (() => {
 
     function toggleModoLectura(isLec) {
         State.set('modoLectura', !!isLec);
+        const switchLectura = document.getElementById('check-lectura');
+        if (switchLectura) switchLectura.checked = !!isLec;
+        const modoLectura = document.getElementById('check-modo-lectura');
+        if (modoLectura) modoLectura.checked = !!isLec;
     }
 
     return {
@@ -379,8 +379,4 @@ window.toggleModoLectura = (eventOrBool) => {
     }
     StudyEngine.toggleModoLectura(isLec);
     
-    // El controlador orquesta la interfaz si se activa la lectura
-    if (isLec && typeof UI !== 'undefined' && UI.revelar) {
-        UI.revelar();
-    }
 };

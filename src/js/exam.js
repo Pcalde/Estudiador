@@ -1,19 +1,6 @@
-// ════════════════════════════════════════════════════════════════
-// EXAM.JS — Módulo de Evaluación
-// Encapsula toda la lógica, estado y UI del Modo Examen.
-//
-// Dependencias en window (deben cargar antes):
-//   - Logger        (app.js)
-//   - biblioteca    (state.js)
-//   - nombreAsignaturaActual (state.js)
-//   - _examenActivo (state.js)  ← leído como global en el keydown de app.js
-//   - MathJax       (CDN, opcional)
-//   - actualizarMenuLateral, cargarAsignatura (app.js, usados en cerrarExamen)
-// ════════════════════════════════════════════════════════════════
-// ════════════════════════════════════════════════════════════════
-// EXAM.JS — Módulo de Evaluación (V2: Feynman & Interleaved Support)
-// Encapsula toda la lógica, estado y UI del Modo Examen.
-// ════════════════════════════════════════════════════════════════
+// EXAM.JS — Coordinador de exámenes Flash, Real y Feynman.
+// El motor conversacional está en feynman.js y su interfaz en interfaz/ui-feynman.js.
+// Dependencias: State, Logger, CommandRegistry, FEYNMAN, UIFeynman.
 
 function generarBarraEstrellas(plenas) {
     let html = '';
@@ -32,10 +19,11 @@ const EXAM = (() => {
     let _idx        = 0;
     let _puntos     = [];       // calificación [1-4] por tarjeta
     let _respuestas = [];       // texto libre del usuario
-    let _feedbacks  = [];       // retroalimentación de la IA (Modo Feynman)
     let _timer      = null;
     let _segsLeft   = 0;
     let _config     = {};
+    let _flashReveladas = [];
+    let _ultimoResultado = 'exam';
 
     // ── Constantes ────────────────────────────────────────────────
     const TIPOS_COLORES = {
@@ -58,7 +46,8 @@ const EXAM = (() => {
     }
 
     function _show(id) {
-        ['examen-config', 'examen-flash', 'examen-real', 'examen-correccion', 'examen-resultados']
+        ['examen-config', 'examen-flash', 'examen-real', 'examen-correccion', 'examen-resultados', 'examen-feynman',
+            'quiz-config', 'quiz-pregunta', 'quiz-resultados']
             .forEach(s => {
                 const el = document.getElementById(s);
                 if (el) el.style.display = (s === id) ? 'block' : 'none';
@@ -75,102 +64,176 @@ const EXAM = (() => {
     }
 
     // ── CONFIG ────────────────────────────────────────────────────
+    const DESCRIPCIONES = {
+        flash: ['Repaso Flash', 'Recuperación rápida: piensa la respuesta, revélala y evalúate. Ideal para afianzar definiciones y resultados breves.'],
+        real: ['Examen Real', 'Responde por escrito sin ver la solución. Puedes saltar preguntas, revisarlas y entregar cuando quieras. Después compararás tus respuestas con los apuntes.'],
+        feynman: ['Método Feynman', 'Explica un concepto a un personaje que hace preguntas y señala lagunas. Recomendado para profundizar en pocos conceptos.'],
+        quiz: ['Tipo Test con IA', 'La IA crea preguntas de cuatro opciones a partir del contenido seleccionado. Elige dificultad y creatividad, navega libremente y revisa tus resultados.']
+    };
+
+    function _bibliotecaSeleccionada() {
+        const biblioteca = State.get('biblioteca') || {};
+        const asig = document.getElementById('ex-asig')?.value || 'ALL';
+        return asig === 'ALL' ? Object.values(biblioteca).flat() : (biblioteca[asig] || []);
+    }
+
+    function _checkboxes(name) {
+        return [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(x => x.value);
+    }
+
+    function leerFiltros() {
+        const desde = document.getElementById('ex-desde')?.value;
+        const hasta = document.getElementById('ex-hasta')?.value;
+        return {
+            temas: _checkboxes('ex-tema'), apartados: _checkboxes('ex-apartado'), tipos: _checkboxes('ex-tipo'),
+            desde: desde === '' || desde == null ? null : Number(desde),
+            hasta: hasta === '' || hasta == null ? null : Number(hasta),
+            repaso: !!document.getElementById('ex-repaso')?.checked
+        };
+    }
+
+    function _filtrar() {
+        const filtros = leerFiltros();
+        const asig = document.getElementById('ex-asig').value;
+        const biblioteca = State.get('biblioteca') || {};
+        let pool = asig === 'ALL'
+            ? Object.entries(biblioteca).flatMap(([nombre, tarjetas]) => tarjetas.map(c => ({...c, _asigFicticia: nombre})))
+            : [...(biblioteca[asig] || [])];
+        if (asig !== 'ALL') pool = pool.slice(filtros.desde ?? 0, filtros.hasta == null ? undefined : filtros.hasta + 1);
+        const temas = new Set(filtros.temas), apartados = new Set(filtros.apartados), tipos = new Set(filtros.tipos);
+        const elegibles = _bibliotecaSeleccionada();
+        const posiblesTipos = [...new Set(elegibles.map(c => String(c.Tipo || '')).filter(Boolean))];
+        const seleccionVacia = posiblesTipos.length && tipos.size === 0;
+        if (seleccionVacia) return [];
+        return pool.filter(c => (!temas.size || temas.has(String(c.Tema))) &&
+            (!apartados.size || apartados.has(String(c.Apartado))) &&
+            (!tipos.size || tipos.has(String(c.Tipo))) &&
+            (!filtros.repaso || Number(c.Dificultad) >= 3 || Number(c.fsrs_lapses) > 0));
+    }
+
+    function actualizarContenido() {
+        const tarjetas = _bibliotecaSeleccionada();
+        const asig = document.getElementById('ex-asig').value;
+        const tipos = [...new Set(tarjetas.map(c => c.Tipo).filter(Boolean))].sort();
+        const temas = [...new Set(tarjetas.map(c => c.Tema).filter(v => v !== undefined && v !== null && v !== ''))].sort((a,b) => Number(a)-Number(b));
+        const apartados = [...new Set(tarjetas.map(c => c.Apartado).filter(Boolean))].sort();
+        const colorTipo = t => State.get('tiposTarjeta')?.[t]?.color || TIPOS_COLORES[t] || 'var(--accent)';
+        const cb = (name, value, label, checked, color) => `<label class="exam-quiz-type" style="--type-color:${color || 'var(--accent)'}"><input type="checkbox" name="${name}" value="${escapeHtml(String(value))}" ${checked ? 'checked' : ''}>${escapeHtml(String(label))}</label>`;
+        document.getElementById('ex-tipos-grid').innerHTML = tipos.length ? tipos.map(t => cb('ex-tipo',t,t,true,colorTipo(t))).join('') : '<small>Sin tipos registrados</small>';
+        document.getElementById('ex-contenido').innerHTML = `<div class="exam-setup-filter"><strong>Temas</strong><div class="exam-quiz-type-grid">${temas.map(t => cb('ex-tema',t,`Tema ${t}`,false)).join('') || '<small>Sin temas</small>'}</div></div><div class="exam-setup-filter"><strong>Apartados</strong><div class="exam-quiz-type-grid">${apartados.map(t => cb('ex-apartado',t,t,false,colorTipo(t))).join('') || '<small>Sin apartados</small>'}</div></div>`;
+        const tramo = document.getElementById('ex-tramo');
+        tramo.hidden = asig === 'ALL';
+        const opts = tarjetas.map((c, i) => `<option value="${i}">${i+1}. ${escapeHtml(String(c.Titulo || c.Apartado || 'Sin título'))}</option>`).join('');
+        document.getElementById('ex-desde').innerHTML = '<option value="">Desde el principio</option>' + opts;
+        document.getElementById('ex-hasta').innerHTML = '<option value="">Hasta el final</option>' + opts;
+        actualizarDisponibles();
+    }
+
+    function actualizarDisponibles() {
+        const el = document.getElementById('ex-disponibles');
+        if (!el) return;
+        const n = _filtrar().length;
+        el.textContent = `${n} concepto${n === 1 ? '' : 's'} disponible${n === 1 ? '' : 's'} con estos filtros`;
+        el.classList.toggle('exam-setup-empty', !n);
+    }
+
     function abrir() {
         Logger.info('Modo Examen: abriendo');
         State.set('currentContext', 'exam');
         State.set('examenActivo', true);
-
-        const biblioteca = State.get('biblioteca') || {};
-        const asigActual = State.get('nombreAsignaturaActual');
-
-        document.getElementById('examen-modal').style.display = 'flex';
+        const modal = document.getElementById('examen-modal');
+        modal.style.display = 'flex';
+        if (typeof UIFeynman !== 'undefined') UIFeynman.montar();
         _show('examen-config');
-
+        const biblioteca = State.get('biblioteca') || {};
+        const actual = State.get('nombreAsignaturaActual');
         const sel = document.getElementById('ex-asig');
-        sel.innerHTML = '<option value="ALL">🌟 TODAS LAS ASIGNATURAS (Intercalado)</option>' + 
-            Object.keys(biblioteca).map(a => `<option value="${a}">${a}</option>`).join('');
-            
-        if (asigActual && biblioteca[asigActual]) sel.value = asigActual;
-        const tipos = ['Definición', 'Teorema', 'Proposición', 'Lema', 'Corolario', 'Ejemplo', 'Observación', 'Ejercicio', 'Axioma'];
-        document.getElementById('ex-tipos-grid').innerHTML = tipos.map(t => {
-            const c = TIPOS_COLORES[t] || '#888';
-            return `<label
-                onmouseover="this.style.background='${c}30'"
-                onmouseout="this.style.background=this.querySelector('input').checked?'${c}30':'${c}15'"
-                style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.78em;
-                       padding:5px 10px;border:1px solid ${c}55;border-radius:12px;color:${c};
-                       background:${c}15;user-select:none;transition:all 0.15s ease;">
-                <input type="checkbox" value="${t}" checked style="accent-color:${c};">
-                ${t}
-            </label>`;
-        }).join('');
+        sel.innerHTML = '<option value="ALL">Todas las asignaturas</option>' + Object.keys(biblioteca).map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
+        if (actual && biblioteca[actual]) sel.value = actual;
+        if (!sel.dataset.configurado) {
+            sel.addEventListener('change', actualizarContenido);
+            document.getElementById('examen-config').addEventListener('change', e => {
+                if (e.target.matches('#ex-asig')) return;
+                actualizarDisponibles();
+            });
+            sel.dataset.configurado = '1';
+        }
+        actualizarContenido();
+        setModo(_modo);
     }
 
     function setModo(m) {
+        if (!DESCRIPCIONES[m]) return;
         _modo = m;
-        const btns = {
-            'flash': document.getElementById('ex-mode-btn-flash'),
-            'real': document.getElementById('ex-mode-btn-real'),
-            'feynman': document.getElementById('ex-mode-btn-feynman') // Nuevo botón
-        };
-        
-        Object.keys(btns).forEach(key => {
-            if (btns[key]) {
-                btns[key].style.borderColor = key === m ? 'var(--accent)' : '#333';
-                btns[key].style.background  = key === m ? 'rgba(76,175,80,0.12)' : 'transparent';
-            }
+        Object.keys(DESCRIPCIONES).forEach(key => {
+            const btn = document.getElementById(`ex-mode-btn-${key}`);
+            if (!btn) return;
+            btn.classList.toggle('active', key === m);
+            btn.setAttribute('aria-pressed', String(key === m));
         });
+        document.getElementById('ex-mode-title').textContent = DESCRIPCIONES[m][0];
+        document.getElementById('ex-mode-description').textContent = DESCRIPCIONES[m][1];
+        document.getElementById('ex-quiz-specific').hidden = m !== 'quiz';
+        document.getElementById('ex-tiempo-wrap').hidden = m === 'quiz' || m === 'feynman';
+        document.getElementById('ex-tiempo-label').textContent = m === 'flash' ? 'Tiempo por tarjeta (segundos, 0 = libre)' : 'Tiempo total (minutos, 0 = libre)';
+        document.getElementById('ex-num').max = m === 'quiz' ? '20' : '100';
+        if (m === 'quiz' && Number(document.getElementById('ex-num').value) > 20) document.getElementById('ex-num').value = 20;
+        if (typeof UIFeynman !== 'undefined') UIFeynman.actualizarConfiguracion(m);
+    }
 
-        const tiempoLabel = document.getElementById('ex-tiempo-label');
-        if (tiempoLabel) tiempoLabel.innerText = m === 'flash'
-            ? 'TIEMPO/TARJETA (s, 0=libre)'
-            : 'TIEMPO TOTAL (min, 0=libre)';
+    function iniciarDemo() {
+        _clearTimer();
+        if (_modo === 'quiz') { Quiz.iniciarDemo(); return; }
+        const muestra = [{ Apartado: 'Definición', Tema: 1, Tipo: 'Teoría', Titulo: '¿Qué es una función inyectiva?', Contenido: 'Una función $f:A\\to B$ es inyectiva si $f(x)=f(y)$ implica $x=y$.', Dificultad: 1 },
+            { Apartado: 'Teorema', Tema: 1, Tipo: 'Teoría', Titulo: 'Explica el teorema de Pitágoras.', Contenido: 'En un triángulo rectángulo, $a^2+b^2=c^2$.', Dificultad: 1 }];
+        _cola = muestra;
+        _idx = 0; _puntos = new Array(muestra.length).fill(null); _respuestas = new Array(muestra.length).fill(''); _flashReveladas = new Array(muestra.length).fill(false);
+        _config = { asig: 'Demostración', tiempo: 0, modo: _modo, numMax: muestra.length, demo: true };
+        if (_modo === 'feynman') {
+            if (typeof FEYNMAN === 'undefined' || typeof UIFeynman === 'undefined') return alert('Falta el motor Feynman.');
+            UIFeynman.mostrarDemo();
+            _show('examen-feynman');
+        } else if (_modo === 'flash') { _show('examen-flash'); _flashRender(); }
+        else { _show('examen-real'); _realRender(); }
     }
 
     function iniciar() {
-        const asig        = document.getElementById('ex-asig').value;
-        const numMax      = parseInt(document.getElementById('ex-num').value) || 10;
-        const tiempo      = parseInt(document.getElementById('ex-tiempo').value) || 0;
-        const temasRaw    = document.getElementById('ex-temas').value.trim();
-        const temasFiltro = temasRaw ? temasRaw.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n)) : [];
-        const tiposChecked = [...document.querySelectorAll('#ex-tipos-grid input:checked')].map(cb => cb.value);
-
-        const biblioteca = State.get('biblioteca') || {};
-        let rawPool = [];
-        
-        // Soporte de Examen Intercalado
-        if (asig === 'ALL') {
-            Object.keys(biblioteca).forEach(a => {
-                biblioteca[a].forEach(c => rawPool.push({ ...c, _asigFicticia: a }));
-            });
-        } else {
-            if (!biblioteca[asig] || biblioteca[asig].length === 0) return alert('La asignatura está vacía.');
-            rawPool = [...biblioteca[asig]];
-        }
-
-        let pool = rawPool.filter(c => {
-            const tipoOk = tiposChecked.length === 0 || tiposChecked.includes(c.Apartado);
-            const temaOk = temasFiltro.length === 0  || temasFiltro.includes(Number(c.Tema));
-            return tipoOk && temaOk;
-        });
-        
-        if (pool.length === 0) { alert('Ninguna tarjeta coincide con los filtros.'); return; }
+        _clearTimer();
+        if (_modo === 'quiz') { Quiz.iniciar(); return; }
+        const asig = document.getElementById('ex-asig').value;
+        const numMax = Math.max(1, Number(document.getElementById('ex-num').value) || 10);
+        const tiempo = Math.max(0, Number(document.getElementById('ex-tiempo').value) || 0);
+        const filtros = leerFiltros();
+        if (filtros.desde != null && filtros.hasta != null && filtros.desde > filtros.hasta) return alert('El final del tramo debe ser posterior al inicio.');
+        const pool = _filtrar();
+        if (!pool.length) return alert('No hay conceptos que coincidan con los filtros seleccionados.');
 
         _cola       = _shuffle(pool).slice(0, numMax);
         _idx        = 0;
         _puntos     = new Array(_cola.length).fill(null);
         _respuestas = new Array(_cola.length).fill('');
-        _feedbacks  = new Array(_cola.length).fill('');
+        _flashReveladas = new Array(_cola.length).fill(false);
         _config     = { asig, tiempo, modo: _modo, numMax: _cola.length };
 
         Logger.info(`Examen (${_modo}): ${_cola.length} tarjetas. Contexto: ${asig}`);
 
-        if (_modo === 'flash') {
+        if (_modo === 'feynman') {
+            if (typeof FEYNMAN === 'undefined' || typeof UIFeynman === 'undefined') {
+                alert('No se han cargado los módulos Feynman. Revisa el orden de scripts.');
+                return;
+            }
+            UIFeynman.montar();
+            if (!FEYNMAN.iniciar({
+                tarjetas: _cola,
+                config: _config,
+                personaje: UIFeynman.leerPersonaje(), reto: UIFeynman.leerReto()
+            })) return;
+            _show('examen-feynman');
+        } else if (_modo === 'flash') {
             _show('examen-flash');
             _flashRender();
             if (tiempo > 0) _flashStartTimer(tiempo);
         } else {
-            // El modo 'real' y 'feynman' comparten la interfaz de redacción
             _show('examen-real');
             _realRender();
             if (tiempo > 0) _realStartTimer(tiempo * 60);
@@ -190,11 +253,18 @@ const EXAM = (() => {
         document.getElementById('ex-f-tema').innerHTML           = `${badgeAsig}Tema ${c.Tema || '?'}`;
         document.getElementById('ex-f-titulo').innerHTML         = c.Titulo || '';
         document.getElementById('ex-f-contenido').innerHTML      = c.Contenido || '';
-        document.getElementById('ex-f-contenido').style.display  = 'none';
-        document.getElementById('ex-f-btn-revelar').style.display = 'block';
-        document.getElementById('ex-f-valoracion').style.display  = 'none';
+        const revelada = !!_flashReveladas[_idx];
+        document.getElementById('ex-f-contenido').style.display  = revelada ? 'block' : 'none';
+        document.getElementById('ex-f-btn-revelar').style.display = revelada ? 'none' : 'block';
+        document.getElementById('ex-f-valoracion').style.display  = revelada ? 'flex' : 'none';
+        const anterior = document.getElementById('ex-f-anterior');
+        if (anterior) anterior.disabled = _idx === 0;
+        const siguiente = document.getElementById('ex-f-saltar');
+        if (siguiente) siguiente.textContent = _idx === _cola.length - 1 ? 'Finalizar →' : 'Siguiente →';
+        const nav = document.getElementById('ex-f-nav');
+        if (nav) nav.innerHTML = _cola.map((_, i) => `<button type="button" class="exam-question-dot ${i === _idx ? 'current' : ''} ${_puntos[i] !== null ? 'answered' : ''}" data-flash-ir="${i}" aria-label="Tarjeta ${i + 1}">${i + 1}</button>`).join('');
 
-        document.getElementById('ex-f-bar').style.width   = `${(_idx / _cola.length) * 100}%`;
+        document.getElementById('ex-f-bar').style.width   = `${((_idx + 1) / _cola.length) * 100}%`;
         document.getElementById('ex-f-label').innerText   = `${_idx + 1}/${_cola.length}`;
 
         if (typeof MathJax !== 'undefined') MathJax.typesetPromise([document.getElementById('examen-flash')]).catch(() => {});
@@ -216,17 +286,32 @@ const EXAM = (() => {
 
     function flashRevelar() {
         _clearTimer();
+        _flashReveladas[_idx] = true;
         document.getElementById('ex-f-contenido').style.display   = 'block';
         document.getElementById('ex-f-btn-revelar').style.display  = 'none';
         document.getElementById('ex-f-valoracion').style.display   = 'flex';
         if (typeof MathJax !== 'undefined') MathJax.typesetPromise([document.getElementById('ex-f-contenido')]).catch(() => {});
     }
 
+    function flashIrA(i) {
+        if (!Number.isInteger(i) || i < 0 || i >= _cola.length) return;
+        _clearTimer();
+        _idx = i;
+        _flashRender();
+        if (_config.tiempo > 0 && !_flashReveladas[_idx]) _flashStartTimer(_config.tiempo);
+    }
+
+    function flashAnterior() { flashIrA(_idx - 1); }
+
+    function flashSaltar() {
+        if (_idx < _cola.length - 1) flashIrA(_idx + 1);
+        else { _clearTimer(); _mostrarResultados(); }
+    }
+
     function flashPuntuar(n) {
         _puntos[_idx] = n;
-        _idx++;
-        _flashRender();
-        if (_config.tiempo > 0 && _idx < _cola.length) _flashStartTimer(_config.tiempo);
+        if (_idx < _cola.length - 1) flashIrA(_idx + 1);
+        else { _clearTimer(); _mostrarResultados(); }
     }
 
     // ── MODO REAL / FEYNMAN ───────────────────────────────────────
@@ -241,17 +326,10 @@ const EXAM = (() => {
         const badgeAsig = c._asigFicticia ? `<span style="color:#FF9800; margin-right:8px;">[${c._asigFicticia}]</span>` : '';
         document.getElementById('ex-r-tema').innerHTML           = `${badgeAsig}Tema ${c.Tema || '?'}`;
         document.getElementById('ex-r-titulo').innerHTML         = c.Titulo || '';
-        // Inyección condicional UX para advertencia de Modo Feynman
         const inputRespuesta = document.getElementById('ex-r-respuesta');
-        if (_modo === 'feynman') {
-            inputRespuesta.placeholder = "Modo Feynman activo: Explica este concepto de forma intuitiva. Imagina que se lo explicas a un neófito, pero mantén la precisión matemática.";
-            inputRespuesta.style.border = "1px solid var(--accent)";
-            inputRespuesta.style.background = "rgba(76,175,80,0.03)";
-        } else {
-            inputRespuesta.placeholder = "Escribe tu respuesta formal aquí... (soporta LaTeX con $...$)";
-            inputRespuesta.style.border = "1px solid #3a3a3a";
-            inputRespuesta.style.background = "#151515";
-        }
+        inputRespuesta.placeholder = "Escribe tu respuesta formal aquí... (soporta LaTeX con $...$)";
+        inputRespuesta.style.border = "1px solid #3a3a3a";
+        inputRespuesta.style.background = "#151515";
         inputRespuesta.value = _respuestas[_idx] || '';
 
         document.getElementById('ex-r-bar').style.width  = `${((_idx + 1) / _cola.length) * 100}%`;
@@ -297,99 +375,11 @@ const EXAM = (() => {
         
         _show('examen-correccion');
         
-        if (_modo === 'feynman') {
-            _evaluarFeynmanIA();
-        } else {
-            _renderCorreccion();
-        }
-    }
-
-    // ── MIDDLEWARE: EVALUACIÓN FEYNMAN (IA) ───────────────────────
-    async function _evaluarFeynmanIA() {
-        const lista = document.getElementById('ex-c-lista');
-        lista.innerHTML = `
-            <div style="text-align:center; padding: 60px 20px;">
-                <i class="fa-solid fa-microchip fa-spin fa-3x" style="color:var(--accent); margin-bottom: 20px;"></i>
-                <h3 style="color:#eee;">El Profesor Feynman está evaluando...</h3>
-                <p style="color:#888;">Analizando rigurosidad y simplicidad pedagógica.</p>
-            </div>
-        `;
-
-        const apiKey = State.get('groqApiKey');
-        const proxyUrl = State.get('groqProxyUrl');
-
-        if (!apiKey && !proxyUrl) {
-            alert("Error de Arquitectura: La API Key de IA no está configurada. Pasando a corrección manual.");
-            _modo = 'real';
-            _renderCorreccion();
-            return;
-        }
-
-        const QA_Payload = _cola.map((c, i) => ({
-            id: i,
-            concepto: c.Titulo,
-            solucion_matematica: c.Contenido,
-            respuesta_alumno: _respuestas[i] || "[En blanco]"
-        }));
-
-        const prompt = `Eres Richard Feynman evaluando a un alumno universitario de ciencias exactas.
-            El alumno debe explicar conceptos complejos de forma simple, pero SIN PERDER EL RIGOR MATEMÁTICO.
-            Si la explicación es demasiado técnica y no demuestra intuición, penalízalo levemente. Si pierde el rigor o se inventa matemáticas, suspéndelo.
-
-            INSTRUCCIÓN CRÍTICA: La "solucion_matematica" base está escrita en código LaTeX puro. Debes evaluar el fondo matemático y la equivalencia semántica de la respuesta del alumno frente a esta solución, ignorando las diferencias de notación formal (no exijas que el alumno escriba LaTeX).
-
-            Evalúa cada respuesta contra la "solucion_matematica".
-            Escala ESTRICTA para la clave "nota":
-            1: Excelente (Domina el concepto, intuición perfecta y matemáticamente sólido).
-            2: Bien (Correcto, pero le falta claridad o tiene pequeñas imprecisiones).
-            3: Difícil/Regular (Errores conceptuales moderados o falta rigor).
-            4: Mal (Incorrecto, en blanco, o alucina matemáticas).
-
-            Devuelve ÚNICAMENTE un JSON válido con esta estructura:
-            {"evaluacion": [{"id": 0, "nota": 2, "feedback": "Tu explicación de por qué esta nota (máx 2 líneas, directo y al grano)"}]}
-
-            Examen a evaluar:
-            ${JSON.stringify(QA_Payload)}`;
-
-        try {
-            const endpoint = proxyUrl || "https://api.groq.com/openai/v1/chat/completions";
-            const headers = { "Content-Type": "application/json" };
-            if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
-
-            const response = await fetch(endpoint, {
-                method: "POST",
-                headers: headers,
-                body: JSON.stringify({
-                    model: State.get('iaModel') || "llama-3.3-70b-versatile",
-                    messages: [{ role: "user", content: prompt }],
-                    temperature: 0.1,
-                    response_format: { type: "json_object" }
-                })
-            });
-
-            if (!response.ok) throw new Error("Fallo en la API de IA");
-            const data = await response.json();
-            
-            let rawStr = data.choices[0].message.content.replace(/```json/g, '').replace(/```/g, '').trim();
-            const result = JSON.parse(rawStr);
-
-            result.evaluacion.forEach(ev => {
-                _puntos[ev.id] = ev.nota;
-                _feedbacks[ev.id] = ev.feedback;
-            });
-
-            _renderCorreccion(true); // Flag de Feynman activada
-
-        } catch (error) {
-            Logger.error("Fallo IA Feynman", error);
-            alert("Error de red o parseo en la IA. Devolviendo el control a la corrección manual.");
-            _modo = 'real';
-            _renderCorreccion();
-        }
+        _renderCorreccion();
     }
 
     // ── CORRECCIÓN ────────────────────────────────────────────────
-    function _renderCorreccion(isFeynman = false) {
+    function _renderCorreccion() {
         const fragment = document.createDocumentFragment();
 
         _cola.forEach((c, i) => {
@@ -400,29 +390,12 @@ const EXAM = (() => {
             const respuestaUsuario = (_respuestas[i] || '').trim() || '<em style="color:#555">(en blanco)</em>';
             const badgeAsig = c._asigFicticia ? `<span style="color:#FF9800; margin-right:8px; font-weight:bold;">[${c._asigFicticia}]</span>` : '';
             
-            let panelNota = '';
-
-            if (isFeynman) {
-                // Renderizado IA
-                const notaIA = _puntos[i] || 4;
-                const lbl = ['', 'Excelente', 'Bien', 'Regular', 'Mal'][notaIA];
-                const bgColors = ['', '#4CAF50', '#8BC34A', '#FF9800', '#f44336'];
-                
-                panelNota = `
-                    <div style="background: #1e1e1e; padding: 15px; border-radius: 8px; border-left: 4px solid ${bgColors[notaIA]}; margin-top: 15px;">
-                        <div style="font-weight:bold; color:${bgColors[notaIA]}; margin-bottom: 5px;">Calificación IA: ${lbl}</div>
-                        <div style="font-size:0.9em; color:#ddd; font-style:italic;">"${_feedbacks[i]}"</div>
-                    </div>
-                `;
-            } else {
-                // Renderizado Manual
-                let botonesNota = '';
-                [1, 2, 3, 4].forEach(n => {
-                    const lbl = ['', 'Fácil', 'Bien', 'Difícil', 'Mal'][n];
-                    botonesNota += `<button onclick="window.examenCorreccionPuntuar(${i},${n})" id="ex-c-btn-${i}-${n}" class="exam-btn-grade grade-${n}">${n} ${lbl}</button>`;
-                });
-                panelNota = `<div class="exam-grade-grid">${botonesNota}</div>`;
-            }
+            let botonesNota = '';
+            [1, 2, 3, 4].forEach(n => {
+                const lbl = ['', 'Fácil', 'Bien', 'Difícil', 'Mal'][n];
+                botonesNota += `<button onclick="window.examenCorreccionPuntuar(${i},${n})" id="ex-c-btn-${i}-${n}" class="exam-btn-grade grade-${n}">${n} ${lbl}</button>`;
+            });
+            const panelNota = `<div class="exam-grade-grid">${botonesNota}</div>`;
 
             card.innerHTML = `
                 <div class="exam-card-header">
@@ -446,31 +419,18 @@ const EXAM = (() => {
             fragment.appendChild(card);
         });
 
-        // Botón de cálculo de nota si es Feynman (ya que no hay interacción manual requerida)
-        if (isFeynman) {
-            const btnDiv = document.createElement('div');
-            btnDiv.style.textAlign = 'center';
-            btnDiv.style.marginTop = '20px';
-            btnDiv.innerHTML = `<button onclick="window.examenRealCalcularNota()" class="btn-main" style="padding: 15px 30px; font-size: 1.1em; background: var(--accent); color: #000;">Ver nota final del Profesor Feynman →</button>`;
-            fragment.appendChild(btnDiv);
-        }
-
         const lista = document.getElementById('ex-c-lista');
         if (lista) {
             lista.innerHTML = '';
             lista.appendChild(fragment);
-            // Si es corrección manual, nos aseguramos de resetear el botón de nota
-            if (!isFeynman) {
-                const submitBtn = document.getElementById('ex-c-btn-nota');
-                if (submitBtn) submitBtn.innerText = `Ver nota final (faltan ${_cola.length}) →`;
-            }
+            const submitBtn = document.getElementById('ex-c-btn-nota');
+            if (submitBtn) submitBtn.innerText = `Ver nota final (faltan ${_cola.length}) →`;
         }
 
         if (typeof MathJax !== 'undefined') MathJax.typesetPromise([document.getElementById('ex-c-lista')]).catch(() => {});
     }
 
     function correccionPuntuar(pregIdx, n) {
-        if (_modo === 'feynman') return; // Bloqueo de seguridad
 
         _puntos[pregIdx] = n;
         for (let k = 1; k <= 4; k++) {
@@ -492,6 +452,10 @@ const EXAM = (() => {
 
     // ── RESULTADOS ────────────────────────────────────────────────
     function _mostrarResultados(nota10, ptsArray) {
+        _ultimoResultado = 'exam';
+        document.getElementById('ex-res-nota').nextElementSibling.textContent = 'Nota';
+        document.getElementById('ex-res-ok').nextElementSibling.textContent = 'Bien';
+        document.getElementById('ex-res-fail').nextElementSibling.textContent = 'A repasar';
         _show('examen-resultados');
         const pts      = (ptsArray || _puntos).map(p => p === null ? 4 : p);
         const total    = _cola.length;
@@ -505,7 +469,7 @@ const EXAM = (() => {
         document.getElementById('ex-res-ok').innerText   = bien;
         document.getElementById('ex-res-fail').innerText = aRep;
         
-        const modoVisual = _config.modo === 'flash' ? 'Repaso Rápido' : (_config.modo === 'feynman' ? 'Evaluación Feynman (IA)' : 'Examen Real');
+        const modoVisual = _config.modo === 'flash' ? 'Repaso Rápido' : 'Examen Real';
         document.getElementById('ex-res-asig').innerText = `${_config.asig} · ${total} tarjetas · ${modoVisual}`;
 
         const [estrellas, titulo, colorTexto] =
@@ -533,20 +497,17 @@ const EXAM = (() => {
                 : `<p style="color:#888;margin:0 0 8px 0;">A repasar (${falladasMapped.length}):</p>` +
                   falladasMapped.map(item => {
                       const c = item.tarjeta;
-                      const idx = item.indexOriginal;
-                      const feedback = _config.modo === 'feynman' ? `<br><span style="color:#FF9800;font-style:italic;">${_feedbacks[idx]}</span>` : '';
                       return `<div style="padding:4px 0;border-bottom:1px solid #222;color:#ccc;">
                           <span style="color:#f44336;margin-right:5px;">✖</span>
                           <strong>${c.Titulo || '?'}</strong>
                           <span style="color:#555;font-size:0.85em;"> · ${c.Apartado || ''}</span>
-                          ${feedback}
                        </div>`;
                   }).join('');
         }
 
         Logger.info(`Examen terminado: nota ${niceNota}, bien=${bien}, repasar=${aRep}`);
 
-        if (typeof EventBus !== 'undefined') {
+        if (!_config.demo && typeof EventBus !== 'undefined') {
             EventBus.emit('EXAMEN_COMPLETADO', {
                 fecha: new Date().toISOString(),
                 asignatura: _config.asig,
@@ -559,14 +520,53 @@ const EXAM = (() => {
         }
     }
 
+    function mostrarResultadoExterno({ origen, nota, bien, mal, descripcion, detalles, etiqueta = 'Nota' }) {
+        _ultimoResultado = origen;
+        const notaValida = Number.isFinite(nota);
+        const puntuacion = notaValida ? Math.max(0, Math.min(10, nota)) : 0;
+        const [estrellas, titulo, colorTexto] =
+            puntuacion >= 9 ? [5, 'Sobresaliente', '#FFD700'] :
+            puntuacion >= 8 ? [4, 'Notable alto', '#bb86fc'] :
+            puntuacion >= 7 ? [3, 'Notable bajo', '#bb86fc'] :
+            puntuacion >= 6 ? [3, 'Bien', '#4dabf7'] :
+            puntuacion >= 5 ? [2, 'Aprobado', '#4dabf7'] :
+            puntuacion >= 3.5 ? [1, 'La próxima será...', '#ef5350'] : [0, 'Suspenso', '#ef5350'];
+        const heading = document.getElementById('ex-res-titulo');
+        heading.textContent = origen === 'feynman' ? 'Informe Feynman' : titulo;
+        heading.style.color = origen === 'feynman' ? 'var(--accent)' : colorTexto;
+        document.getElementById('ex-res-emoji').innerHTML = generarBarraEstrellas(notaValida ? estrellas : 0);
+        document.getElementById('ex-res-asig').textContent = descripcion;
+        document.getElementById('ex-res-nota').textContent = notaValida ? nota.toFixed(1) : '—';
+        document.getElementById('ex-res-nota').nextElementSibling.textContent = etiqueta;
+        document.getElementById('ex-res-ok').textContent = bien;
+        document.getElementById('ex-res-ok').nextElementSibling.textContent = origen === 'feynman' ? 'Verificadas' : 'Bien';
+        document.getElementById('ex-res-fail').textContent = mal;
+        document.getElementById('ex-res-fail').nextElementSibling.textContent = origen === 'feynman' ? 'Pendientes' : 'A repasar';
+        document.getElementById('ex-res-lista').replaceChildren(detalles);
+        document.getElementById('btn-repetirexamen').querySelector('i').className = 'fa-solid fa-rotate-left';
+        _show('examen-resultados');
+    }
+
+    function repetirDesdeResultado() {
+        if (_ultimoResultado === 'quiz') { Quiz.repetir(); return; }
+        if (_ultimoResultado === 'feynman') { abrir(); setModo('feynman'); return; }
+        repetir();
+    }
+
     function repetir() {
         _cola       = _shuffle(_cola);
         _idx        = 0;
         _puntos     = new Array(_cola.length).fill(null);
         _respuestas = new Array(_cola.length).fill('');
-        _feedbacks  = new Array(_cola.length).fill('');
+        _flashReveladas = new Array(_cola.length).fill(false);
         
-        if (_modo === 'flash') {
+        if (_modo === 'feynman') {
+            if (typeof FEYNMAN === 'undefined' || typeof UIFeynman === 'undefined') return;
+            UIFeynman.montar();
+            if (FEYNMAN.iniciar({ tarjetas: _cola, config: _config, personaje: UIFeynman.leerPersonaje(), reto: UIFeynman.leerReto() })) {
+                _show('examen-feynman');
+            }
+        } else if (_modo === 'flash') {
             _show('examen-flash'); _flashRender();
             if (_config.tiempo > 0) _flashStartTimer(_config.tiempo);
         } else {
@@ -577,6 +577,7 @@ const EXAM = (() => {
 
     function cerrar() {
         _clearTimer();
+        if (typeof FEYNMAN !== 'undefined') FEYNMAN.cerrar();
         State.set('examenActivo', false);
         State.set('currentContext', 'study');
         const modal = document.getElementById('examen-modal');
@@ -589,8 +590,9 @@ const EXAM = (() => {
 
     // ── API pública ───────────────────────────────────────────────
     return {
-        abrir, setModo, iniciar, cerrar, repetir,
-        flashRevelar, flashPuntuar,
+        abrir, setModo, iniciar, iniciarDemo, cerrar, repetir, mostrarVista: _show, leerFiltros,
+        flashRevelar, flashPuntuar, flashSaltar, flashAnterior, flashIrA,
+        mostrarResultadoExterno, repetirDesdeResultado,
         realGuardarRespuesta, realSiguiente, realAnterior, realEntregar,
         correccionPuntuar, calcularNota,
         _api: { realIrA }
@@ -601,6 +603,7 @@ const EXAM = (() => {
 window.abrirExamen                = () => EXAM.abrir();
 window.examenSetMode              = m  => EXAM.setModo(m);
 window.iniciarExamen              = () => EXAM.iniciar();
+window.probarExamen               = () => EXAM.iniciarDemo();
 window.cerrarExamen               = () => {
     EXAM.cerrar();
     if (typeof actualizarMenuLateral === 'function') actualizarMenuLateral();
@@ -608,6 +611,8 @@ window.cerrarExamen               = () => {
 };
 window.repetirExamen              = () => EXAM.repetir();
 window.examenFlashRevelar         = () => EXAM.flashRevelar();
+window.examenFlashSaltar          = () => EXAM.flashSaltar();
+window.examenFlashAnterior        = () => EXAM.flashAnterior();
 window.examenFlashPuntuar         = n  => EXAM.flashPuntuar(n);
 window.examenRealGuardarRespuesta = () => EXAM.realGuardarRespuesta();
 window.examenRealSiguiente        = () => EXAM.realSiguiente();

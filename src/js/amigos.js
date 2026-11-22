@@ -191,19 +191,26 @@ const Amigos = (() => {
                 );
                 if (!nombreFinal?.trim()) return;
                 nombreFinal = nombreFinal.trim();
+                if (Object.hasOwn(biblioteca, nombreFinal)) {
+                    Toast.show('Ese nombre ya está en uso.', 'error');
+                    return;
+                }
             }
 
-            State.batch(() => {
-                const bib = State.get('biblioteca');
-                bib[nombreFinal] = d.cards;
-                State.set('biblioteca', bib);
-            });
-            EventBus.emit('DATA_REQUIRES_SAVE');
+            const ids = new Set(Object.values(biblioteca).flatMap(cards => cards.map(card => card.id)));
+            const cards = DataIO.normalizarTarjetas(d.cards, ids);
+            await DataIO.guardarBiblioteca({ ...biblioteca, [nombreFinal]: cards });
 
             if (typeof actualizarMenuLateral === 'function') actualizarMenuLateral();
             if (typeof window.sincronizar    === 'function') window.sincronizar();
 
-            await db.collection('sharedSubjects').doc(docId).update({ seen: true });
+            try {
+                await db.collection('sharedSubjects').doc(docId).update({ seen: true });
+            } catch (error) {
+                Logger.error('Amigos: no se pudo marcar la invitación como vista.', error);
+                Toast.show('La asignatura se guardó. La invitación sigue pendiente.', 'warning');
+                return;
+            }
             alert(`¡Éxito! "${nombreFinal}" importada.`);
             cargarPanel();
         } catch (e) {

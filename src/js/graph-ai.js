@@ -1,241 +1,127 @@
-// ════════════════════════════════════════════════════════════════
-// GRAPH-AI.JS — Generación de Mapas Conceptuales con IA
-// Formato DSL lineal robusto para evitar problemas con LaTeX
-// ════════════════════════════════════════════════════════════════
-
+// GRAPH-AI.JS — Propuestas de relaciones con referencias temporales inequívocas.
+// La IA nunca escribe directamente en el grafo: el usuario revisa cada relación.
 const GraphAI = (() => {
+    const _normalizarTitulo = t => String(t || '').replace(/\$\$?/g, '')
+        .replace(/\\(?:textbf|textit|mathrm|text)\{([^}]*)\}/g, '$1')
+        .toLocaleLowerCase().replace(/\s+/g, ' ').trim();
 
-    // ── Utilidades de normalización ───────────────────────────────
-    
-    /**
-     * Normaliza un título para comparación fuzzy:
-     * - Elimina delimitadores LaTeX ($$, $)
-     * - Elimina comandos como \textbf{}, \textit{}
-     * - Convierte a minúsculas y trim
-     */
-    function _normalizarTitulo(t) {
-        return (t || '')
-            .replace(/\$\$?/g, '')
-            .replace(/\\[a-zA-Z]+\{([^}]*)\}/g, '$1')
-            .toLowerCase()
-            .trim();
+    // No hacer emparejamiento aproximado: si hay títulos duplicados el resultado es ambiguo.
+    function _resolverTitulo(titulo, cards) {
+        const matches = cards.filter(c => _normalizarTitulo(c.Titulo) === _normalizarTitulo(titulo));
+        return matches.length === 1 ? matches[0] : null;
     }
-
-    /**
-     * Busca una tarjeta que coincida con el título buscado.
-     * Primero intenta match exacto normalizado, luego inclusión.
-     */
-    function _resolverTitulo(tituloBuscado, cardsDisponibles) {
-        const norm = _normalizarTitulo(tituloBuscado);
-        
-        // 1. Match exacto normalizado
-        let match = cardsDisponibles.find(c => _normalizarTitulo(c.Titulo) === norm);
-        if (match) return match;
-        
-        // 2. Match por inclusión (en cualquier dirección)
-        match = cardsDisponibles.find(c => {
-            const cn = _normalizarTitulo(c.Titulo);
-            return cn.includes(norm) || norm.includes(cn);
-        });
-        
-        return match || null;
-    }
-
-    // ── Parser tolerante de DSL ───────────────────────────────────
-    
-    /**
-     * Parsea texto formato DSL: "Título A -> Título B : etiqueta"
-     * Ignora líneas vacías y comentarios (#)
-     * Devuelve válidas e inválidas por separado
-     */
     function _parsearRelacionesTexto(texto) {
-        const validas = [];
-        const invalidas = [];
-
-        texto.split('\n').forEach(linea => {
-            const raw = linea.trim();
-            if (!raw || raw.startsWith('#')) return; // ignora vacías y comentarios
-
-            const m = raw.match(/^(.+?)\s*->\s*(.+?)\s*(?::\s*(.+))?$/);
-            if (!m) { 
-                invalidas.push(raw); 
-                return; 
-            }
-
-            validas.push({
-                origenRaw: m[1].trim(),
-                destinoRaw: m[2].trim(),
-                etiqueta: (m[3] || '').trim()
-            });
-        });
-
+        const validas = [], invalidas = [];
+        for (const line of String(texto || '').split(/\r?\n/)) {
+            const raw = line.trim();
+            if (!raw || raw.startsWith('#') || raw.startsWith('```')) continue;
+            const match = raw.match(/^(C\d+)\s*->\s*(C\d+)(?:\s*:\s*(.*))?$/i);
+            if (match) validas.push({ origenRaw: match[1].toUpperCase(),
+                destinoRaw: match[2].toUpperCase(), etiqueta: String(match[3] || '').replace(/^['"]|['"]$/g, '').trim() });
+            else invalidas.push(raw);
+        }
         return { validas, invalidas };
     }
-
-    // ── Modal de revisión en texto plano ──────────────────────────
-    
-    function _abrirRevisionTextoPlano(textoInicial, asig, cardsDisponibles) {
-        const overlay = document.createElement('div');
-        overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:9999999; display:flex; align-items:center; justify-content:center;';
-
-        overlay.innerHTML = `
-            <div style="background:var(--card-bg); width:600px; max-width:90vw; border-radius:12px; border:1px solid var(--border); padding:20px; display:flex; flex-direction:column; gap:12px;">
-                <h4 style="margin:0; color:var(--accent);"><i class="fa-solid fa-diagram-project"></i> Revisa el mapa antes de aplicarlo</h4>
-                <p style="font-size:0.8em; color:var(--text-muted); margin:0;">
-                    Formato: <code>Origen -> Destino : etiqueta</code>. Las líneas marcadas con <code>#</code> no se aplicarán — corrígelas o bórralas.
-                </p>
-                <textarea id="graph-ia-review" style="height:300px; font-family:monospace; font-size:0.85em; background:var(--bg-color); color:var(--text-main); border:1px solid var(--border); border-radius:6px; padding:10px; resize:vertical;">${textoInicial}</textarea>
-                <div style="display:flex; justify-content:flex-end; gap:10px;">
-                    <button id="graph-ia-cancel" style="padding:8px 16px; background:transparent; border:1px solid var(--border); color:var(--text-muted); border-radius:6px; cursor:pointer;">Cancelar</button>
-                    <button id="graph-ia-apply" style="padding:8px 16px; background:var(--accent); border:none; color:#000; border-radius:6px; font-weight:bold; cursor:pointer;">Aplicar al mapa</button>
-                </div>
-            </div>`;
-        document.body.appendChild(overlay);
-
-        overlay.querySelector('#graph-ia-cancel').onclick = () => overlay.remove();
-        overlay.querySelector('#graph-ia-apply').onclick = () => {
-            const textoFinal = overlay.querySelector('#graph-ia-review').value;
-            const { validas } = _parsearRelacionesTexto(textoFinal);
-            _aplicarRelacionesAlGrafo(validas, asig, cardsDisponibles);
-            overlay.remove();
-        };
-    }
-
-    // ── Aplicación de relaciones al grafo ─────────────────────────
-    
-    function _aplicarRelacionesAlGrafo(validas, asig, cardsDisponibles) {
-        let aplicadas = 0;
-        
-        validas.forEach(v => {
-            const origen  = _resolverTitulo(v.origenRaw, cardsDisponibles);
-            const destino = _resolverTitulo(v.destinoRaw, cardsDisponibles);
-            
-            if (!origen || !destino) {
-                Logger.warn(`Relación ignorada (no resuelta): ${v.origenRaw} -> ${v.destinoRaw}`);
-                return;
-            }
-
-            const idOrigen  = Graph._cardId(origen, asig);
-            const idDestino = Graph._cardId(destino, asig);
-            
-            if (!idOrigen || !idDestino) {
-                Logger.warn(`IDs no generados: ${origen.Titulo} -> ${destino.Titulo}`);
-                return;
-            }
-
-            Graph.addNode(idOrigen);
-            Graph.addNode(idDestino);
-            Graph.addEdge(idOrigen, idDestino, v.etiqueta);
-            aplicadas++;
-        });
-        
-        if (typeof Toast !== 'undefined') {
-            Toast.show(`Mapa actualizado con ${aplicadas} relaciones de la IA.`, 'success');
+    function _rowSelect(cards, initial) {
+        const select = document.createElement('select');
+        select.className = 'graph-review-select';
+        for (const c of cards) {
+            const opt = new Option(`${c.ref} · ${c.title.slice(0, 85)}`, c.ref);
+            select.add(opt);
         }
+        select.value = initial;
+        return select;
+    }
+    function _reviewProposal(text, cards, asig) {
+        const { validas, invalidas } = _parsearRelacionesTexto(text);
+        const cardMap = new Map(cards.map(c => [c.ref, c]));
+        const root = document.createElement('div');
+        root.className = 'graph-overlay';
+        root.innerHTML = `<div class="graph-dialog graph-review-dialog">
+            <h3>Revisar relaciones propuestas</h3>
+            <p class="graph-help">Las relaciones son hipótesis de la IA, no hechos verificados. Ajusta sus extremos y etiquetas antes de aceptarlas.</p>
+            <div class="graph-review-list" id="graph-review-list"></div>
+            <p class="graph-help" id="graph-review-errors"></p>
+            <div class="graph-actions"><button class="graph-secondary" data-close>Cancelar</button>
+                <button data-apply>Aplicar seleccionadas</button></div>
+        </div>`;
+        const list = root.querySelector('#graph-review-list');
+        const entries = [];
+        for (const p of validas) {
+            const line = document.createElement('div');
+            line.className = 'graph-review-row';
+            const check = document.createElement('input'); check.type = 'checkbox';
+            check.checked = cardMap.has(p.origenRaw) && cardMap.has(p.destinoRaw) && p.origenRaw !== p.destinoRaw;
+            const source = _rowSelect(cards, p.origenRaw);
+            const target = _rowSelect(cards, p.destinoRaw);
+            const label = document.createElement('input'); label.type = 'text';
+            label.value = p.etiqueta; label.maxLength = 180; label.placeholder = 'Tipo de relación';
+            const arrow = document.createElement('span'); arrow.textContent = '→';
+            line.append(check, source, arrow, target, label);
+            list.append(line);
+            entries.push({ check, source, target, label });
+        }
+        root.querySelector('#graph-review-errors').textContent =
+            `${validas.length} propuestas, ${invalidas.length} líneas no interpretadas.` +
+            (invalidas.length ? ` Primera línea incorrecta: ${invalidas[0].slice(0, 130)}` : '');
+        root.querySelector('[data-close]').onclick = () => root.remove();
+        root.querySelector('[data-apply]').onclick = () => {
+            if (State.get('nombreAsignaturaActual') !== asig) {
+                Toast.show('La asignatura cambió mientras se revisaban relaciones', 'warning'); return;
+            }
+            const approved = [];
+            for (const e of entries) {
+                if (!e.check.checked) continue;
+                const from = cardMap.get(e.source.value), to = cardMap.get(e.target.value);
+                if (!from || !to || from.id === to.id) continue;
+                approved.push({ source: from.id, target: to.id, label: e.label.value });
+            }
+            if (!approved.length) { Toast.show('No hay relaciones seleccionadas', 'warning'); return; }
+            const count = Graph.aplicarRelaciones(approved, 'ia');
+            Toast.show(`${count} relaciones añadidas. Permanecen marcadas como pendientes de verificación.`, 'success');
+            root.remove();
+        };
+        document.getElementById('modal-graph')?.appendChild(root);
     }
 
-    // ── Función principal de generación ───────────────────────────
-    
     async function generarMapaConIA(cardsSeleccionadas = null) {
         const asig = State.get('nombreAsignaturaActual');
-        if (!asig) {
-            Toast.show('Selecciona una asignatura primero', 'warning');
-            return;
+        const all = (State.get('biblioteca') || {})[asig] || [];
+        const cards = cardsSeleccionadas ?? all;
+        if (!asig || !cards.length) { Toast.show('Selecciona tarjetas antes de generar relaciones', 'warning'); return; }
+        if (cards.length > 180) { Toast.show('Procesa un lote de como máximo 180 tarjetas', 'warning'); return; }
+        if (typeof AI === 'undefined' || typeof AI.generarRespuesta !== 'function') {
+            Toast.show('Servicio IA no disponible', 'error'); return;
         }
+        const assigned = cards.map((card, i) => ({
+            id: Graph._cardId(card, asig), ref: `C${i + 1}`, title: card.Titulo,
+            tema: card.Tema, tipo: card.Apartado
+        }));
+        const listing = assigned.map(c => `${c.ref} [tema ${c.tema}, ${c.tipo}]: ${c.title}`).join('\n');
+        const prompt = `Eres un asistente de Matemáticas. Propón relaciones matemáticas justificables entre estos conceptos.
+Las referencias C1, C2, ... son identificadores de esta lista; NO son títulos.
+${listing}
 
-        const todasCards = (State.get('biblioteca') || {})[asig] || [];
-        if (todasCards.length === 0) {
-            Toast.show('No hay tarjetas en esta asignatura', 'warning');
-            return;
-        }
+Devuelve exclusivamente líneas como:
+C1 -> C4 : requiere
+C4 -> C6 : generaliza
 
-        // Si se pasan cards seleccionadas, usar solo esas; si no, todas
-        const cardsDisponibles = cardsSeleccionadas && cardsSeleccionadas.length > 0 
-            ? cardsSeleccionadas 
-            : todasCards;
-
-        const apiKey = State.get('groqApiKey');
-        const proxyUrl = State.get('groqProxyUrl');
-        if (!apiKey && !proxyUrl) {
-            Toast.show('Configura la API Key de Groq o el Proxy en Ajustes', 'error');
-            return;
-        }
-
-        // Preparar lista de títulos para el prompt
-        const listaTitulos = cardsDisponibles.map(c => `- ${c.Titulo}`).join('\n');
-        const esBatch = cardsSeleccionadas && cardsSeleccionadas.length > 0;
-        
-        const prompt = `Tienes esta lista de conceptos matemáticos:${esBatch ? ' (subconjunto seleccionado)' : ''}:
-${listaTitulos}
-
-Genera las relaciones lógicas entre ellos (depende_de, demuestra, generaliza, aplica_a, es_caso_de, etc.)
-usando EXACTAMENTE este formato, una relación por línea, sin explicaciones ni JSON:
-
-Título origen -> Título destino : etiqueta
-
-Usa los títulos EXACTOS de la lista. No inventes conceptos nuevos.
-Prioriza relaciones significativas (máximo 2-3 por concepto).`;
-
-        // Mostrar estado de carga
-        if (typeof Toast !== 'undefined') {
-            Toast.show(`Generando mapa con IA${esBatch ? ' (lote seleccionado)' : ''}...`, 'info');
-        }
-
+Usa SOLO referencias existentes de la lista, sin inventar conceptos. Máximo 2-3 conexiones significativas por concepto.
+Indica una relación breve y precisa (requiere, generaliza, es_caso_de, aplica_a, demuestra, equivale_a, etc.).
+Diferencia la secuencia de los apuntes de una verdadera dependencia lógica: NO infieras una relación solo por el orden.
+El usuario verificará las propuestas antes de aplicarlas.`;
+        Toast.show(`Analizando ${cards.length} tarjetas…`, 'info');
         try {
-            // Llamada a la IA usando el módulo AI existente
-            let respuesta;
-            if (typeof AI !== 'undefined' && typeof AI.generarRespuesta === 'function') {
-                respuesta = await AI.generarRespuesta(prompt);
-            } else {
-                throw new Error('Módulo AI no disponible');
-            }
-
-            // Parsear respuesta
-            const { validas, invalidas } = _parsearRelacionesTexto(respuesta);
-
-            // Reconstruir texto para revisión humana
-            let lineasParaRevision = [];
-            
-            validas.forEach(v => {
-                const origen  = _resolverTitulo(v.origenRaw, cardsDisponibles);
-                const destino = _resolverTitulo(v.destinoRaw, cardsDisponibles);
-                
-                if (origen && destino) {
-                    lineasParaRevision.push(`${origen.Titulo} -> ${destino.Titulo}${v.etiqueta ? ' : ' + v.etiqueta : ''}`);
-                } else {
-                    lineasParaRevision.push(`# NO RESUELTA: ${v.origenRaw} -> ${v.destinoRaw}`);
-                }
-            });
-            
-            invalidas.forEach(l => {
-                lineasParaRevision.push(`# LÍNEA MAL FORMADA: ${l}`);
-            });
-
-            if (lineasParaRevision.length === 0) {
-                Toast.show('La IA no generó relaciones válidas', 'warning');
-                return;
-            }
-
-            // Abrir modal de revisión
-            _abrirRevisionTextoPlano(lineasParaRevision.join('\n'), asig, cardsDisponibles);
-
+            const response = await AI.generarRespuesta(prompt);
+            if (State.get('nombreAsignaturaActual') !== asig) return;
+            const { validas } = _parsearRelacionesTexto(String(response || ''));
+            if (!validas.length) { Toast.show('La IA no devolvió propuestas reconocibles', 'warning'); return; }
+            _reviewProposal(String(response), assigned, asig);
         } catch (error) {
-            Logger.error('Error generando mapa con IA:', error);
-            Toast.show(`Error: ${error.message}`, 'error');
+            if (typeof Logger !== 'undefined') Logger.error('Error en GraphAI', error);
+            Toast.show(`No se pudieron generar las relaciones: ${error.message}`, 'error');
         }
     }
-
-    // ── API pública ───────────────────────────────────────────────
-    
-    return {
-        generarMapaConIA,
-        _parsearRelacionesTexto,   // Expuesto para tests
-        _normalizarTitulo,         // Expuesto para tests
-        _resolverTitulo            // Expuesto para tests
-    };
+    return { generarMapaConIA, _parsearRelacionesTexto, _normalizarTitulo, _resolverTitulo };
 })();
-
-// Registrar comando para acceso desde consola/tests
-if (typeof CommandRegistry !== 'undefined') {
-    CommandRegistry.register('generarMapaConIA', () => GraphAI.generarMapaConIA());
-}
+if (typeof CommandRegistry !== 'undefined') CommandRegistry.register('generarMapaConIA', () => GraphAI.generarMapaConIA());

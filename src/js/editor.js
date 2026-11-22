@@ -67,7 +67,7 @@ function abrirEditorAmigable() {
     }
 }
 
-function guardarDatosEditorAmigable(cerrar = true) {
+async function guardarDatosEditorAmigable(cerrar = true) {
     const concepto   = State.get('conceptoActual');
     const asigActual = State.get('nombreAsignaturaActual');
     if (!concepto || !asigActual) return false;
@@ -83,55 +83,40 @@ function guardarDatosEditorAmigable(cerrar = true) {
         return false;
     }
 
-    let success = false;
-    State.batch(() => {
-        const biblioteca = State.get('biblioteca');
-        
-        // Identidad estricta priorizando los identificadores únicos
-        const matcher = (c) => {
-            if (c.id && concepto.id && c.id === concepto.id) return true;
-            if (c._idx !== undefined && concepto._idx !== undefined && c._idx === concepto._idx) return true;
-            if (c.IndiceGlobal !== undefined && concepto.IndiceGlobal !== undefined && c.IndiceGlobal === concepto.IndiceGlobal) return true;
-            return c.Titulo === concepto.Titulo && c.Contenido === concepto.Contenido;
-        };
-
-        const targetIdx = biblioteca[asigActual].findIndex(matcher);
-
-        if (targetIdx !== -1) {
-            const updatedCard = {
-                ...biblioteca[asigActual][targetIdx],
-                Titulo:    formData.titulo,
-                Contenido: typeof Parser !== 'undefined' ? Parser.sanearLatex(formData.contenido) : formData.contenido,
-                Tema:      formData.tema,
-                Apartado:  formData.apartado
-            };
-            biblioteca[asigActual][targetIdx] = updatedCard;
-            State.set('biblioteca', biblioteca);
-            State.set('conceptoActual', structuredClone(updatedCard));
-
-            let cola = State.get('colaEstudio') || [];
-            const colaIdx = cola.findIndex(matcher);
-            if (colaIdx !== -1) {
-                cola[colaIdx] = updatedCard;
-                State.set('colaEstudio', cola);
-            }
-            success = true;
-        } else {
-            Logger.error("Editor: Índice objetivo no localizado. Abortando mutación para evitar duplicados.");
-        }
-    });
-
-    if (success) {
-        if (typeof EventBus !== 'undefined') EventBus.emit('DATA_REQUIRES_SAVE');
-        if (typeof window.updateDashboard === 'function') window.updateDashboard();
-        if (typeof UI !== 'undefined' && UI.mostrarFeedbackGuardadoEditor) UI.mostrarFeedbackGuardadoEditor();
+    const biblioteca = State.get('biblioteca');
+    const tarjetas = biblioteca[asigActual] || [];
+    const idx = tarjetas.findIndex(card => concepto.id && card.id === concepto.id);
+    if (idx < 0) {
+        Toast.show('No se ha encontrado la tarjeta original.', 'error');
+        return false;
+    }
+    const actualizada = {
+        ...tarjetas[idx],
+        Titulo: formData.titulo,
+        Contenido: typeof Parser !== 'undefined' ? Parser.sanearLatex(formData.contenido) : formData.contenido,
+        Tema: formData.tema,
+        Apartado: formData.apartado
+    };
+    const siguientes = tarjetas.map((card, i) => i === idx ? actualizada : card);
+    try {
+        await DataIO.guardarBiblioteca({ ...biblioteca, [asigActual]: siguientes });
+    } catch (error) {
+        Toast.show('No se pudo guardar la tarjeta.', 'error');
+        return false;
+    }
+    if (State.get('conceptoActual')?.id === concepto.id) {
+        State.batch(() => {
+            State.set('conceptoActual', structuredClone(actualizada));
+            State.set('colaEstudio', (State.get('colaEstudio') || []).map(card => card.id === concepto.id ? actualizada : card));
+        });
         if (cerrar) cancelarEdicion();
     }
-    return success;
+    Toast.show('Tarjeta guardada.', 'success');
+    return true;
 }
 
-function navegarEditor(delta) {
-    if (!guardarDatosEditorAmigable(false)) return;
+async function navegarEditor(delta) {
+    if (!await guardarDatosEditorAmigable(false)) return;
 
     const cola = State.get('colaEstudio') || [];
     if (cola.length === 0) return;
@@ -159,6 +144,8 @@ async function guardarNuevoConcepto() {
         return;
     }
 
+    const asigActual = State.get('nombreAsignaturaActual');
+    if (!asigActual) return;
     const formData = UI.getEditorData();
     let t = formData.titulo;
     const c = formData.contenido;
@@ -176,14 +163,15 @@ async function guardarNuevoConcepto() {
         }
     }
 
-    const asigActual = State.get('nombreAsignaturaActual');
-    if (!asigActual) return;
-
-    State.batch(() => {
-        const biblioteca = State.get('biblioteca');
+    const biblioteca = State.get('biblioteca');
+    if (!Object.hasOwn(biblioteca, asigActual)) {
+        Toast.show('La asignatura de destino ya no existe.', 'error');
+        return;
+    }
         const maxIdx = biblioteca[asigActual].reduce((max, card) => Math.max(max, card.IndiceGlobal || card._idx || 0), 0);
         
-        biblioteca[asigActual].push({
+    const tarjeta = {
+            id: DataIO.nuevoId(),
             "Titulo":       t,
             "Contenido":    typeof _procesarContenido === 'function' ? _procesarContenido(c) : c,
             "Tema":         formData.tema || 1,
@@ -193,14 +181,20 @@ async function guardarNuevoConcepto() {
             "UltimoRepaso": null,
             "ProximoRepaso": typeof window.getFechaHoy === 'function' ? window.getFechaHoy() : new Date().toISOString().split('T')[0],
             "IndiceGlobal": maxIdx + 1,
-            "_idx":         maxIdx + 1
-        });
-        State.set('biblioteca', biblioteca);
-    });
-
-    if (typeof EventBus !== 'undefined') EventBus.emit('DATA_REQUIRES_SAVE');
+            "_idx": maxIdx + 1
+    };
+    try {
+        await DataIO.guardarBiblioteca({ ...biblioteca, [asigActual]: [...biblioteca[asigActual], tarjeta] });
+    } catch (error) {
+        Toast.show('No se pudo guardar la tarjeta.', 'error');
+        return;
+    }
+    if (State.get('nombreAsignaturaActual') !== asigActual) {
+        Toast.show('Tarjeta guardada en ' + asigActual, 'success');
+        return;
+    }
     if (typeof UI.limpiarEditorData === 'function') UI.limpiarEditorData();
-    alert("Tarjeta guardada: " + t);
+    Toast.show("Tarjeta guardada: " + t, "success");
     cancelarEdicion();
     if (typeof window.aplicarFiltros === 'function') window.aplicarFiltros();
     if (typeof window.updateDashboard === 'function') window.updateDashboard();

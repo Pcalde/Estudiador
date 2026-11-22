@@ -641,7 +641,7 @@ const OlvidoAnalytics = {
       return {
         tau: tau,
         yProb: Math.pow(0.9, tau),
-        yReal: log.grade > 1 ? 1 : 0 
+        yReal: log.grade >= 1 && log.grade <= 3 ? 1 : 0 
       };
     }).filter(d => !isNaN(d.tau) && isFinite(d.tau)); // Filtrar fallos de datos
 

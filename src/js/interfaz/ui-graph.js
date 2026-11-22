@@ -1,676 +1,694 @@
-// ════════════════════════════════════════════════════════════════
-// UI-GRAPH.JS — Renderizado del Mapa Conceptual (Vis.js Network)
-// Responsabilidad: DOM + Vis.js. Cero lógica de negocio.
-// Carga tras: los demás ui-*.js, antes de ui.js
-// ════════════════════════════════════════════════════════════════
-
+// UI-GRAPH.JS — Interfaz del grafo. No modifica directamente la biblioteca.
+// Vis.js se utiliza solo para visualizar y seleccionar; la lógica reside en Graph.
 const UIGraph = (() => {
-
-    let _network    = null;
-    let _previewPanel = null;
-    let _cb         = {};   
-    let _tipos      = {};
-    let _edgeMode   = false;
-    let _edgeSrc    = null;
-
-    // ── Utilidades de mapeo ───────────────────────────────────────
-
-    function _getCssVar(varName, fallback) {
-        const val = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
-        return val ? val : fallback;
+    let _network = null, _cb = {}, _types = {}, _allNodes = [], _allEdges = [];
+    let _preview = null, _selected = null, _connectFrom = null, _pathFrom = null;
+    let _mode = 'normal', _emphasis = null, _hiddenTypes = new Set(), _fsrs = false;
+    let _searchBound = false, _toolbarBound = false, _showIslands = true;
+    let _dataNodes = null, _dataEdges = null;
+    const $ = id => document.getElementById(id);
+    const _css = (name, fallback) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+    const _escaped = value => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    const _plain = s => String(s || '(sin título)').replace(/\$\$?/g, '')
+        .replace(/\\(?:textbf|textit|mathrm|text)\{([^}]*)\}/g, '$1').trim();
+    const _tipoColor = type => _types[type]?.color || _css('--accent', '#4caf50');
+    const _colorEstado = card => {
+        if (!card.UltimoRepaso || card.fsrs_state === 'new') return _css('--text-subtle', '#888');
+        if (card.fsrs_state === 'learning') return _css('--status-red', '#bb0e02');
+        const s = Number(card.fsrs_stability || 0);
+        if (s >= 21) return _css('--status-green', '#4caf50');
+        if (s >= 7) return _css('--status-blue', '#256ca5');
+        return _css('--status-yellow', '#cdcd00');
+    };
+    const _allowed = n => !_hiddenTypes.has(n.card.Apartado || '');
+    function _toNode(n) {
+        const bg = _css('--surface-1', '#2a2a2a'), fg = _css('--text-main', '#eee');
+        const border = _fsrs ? _colorEstado(n.card) : _tipoColor(n.card.Apartado);
+        const emph = !_emphasis || _emphasis.nodes.includes(String(n.id));
+        const label = _plain(n.card.Titulo);
+        return { id: n.id, label: label.length > 75 ? label.slice(0, 72) + '…' : label,
+            shape: 'box', margin: 10, borderWidth: n.latestBatch ? 3.5 : (emph ? 2.5 : 1),
+            color: { background: bg, border,
+                highlight: { background: bg, border: _css('--accent', '#4caf50') },
+                hover: { background: bg, border } },
+            font: { color: emph ? fg : _css('--text-subtle', '#666'), size: 13, face: 'sans-serif' },
+            title: undefined,
+            opacity: emph ? 1 : .24, x: n.x, y: n.y };
     }
-
-    // ── Utilidades de mapeo ───────────────────────────────────────
-    function _colorForTipo(tipo) {
-        return (_tipos[tipo]?.color) || _getCssVar('--accent', '#607d8b');
+    function _toEdge(e) {
+        const foreground = _css('--text-main', '#ddd'), muted = _css('--border-light', '#555');
+        const active = !_emphasis || _emphasis.edges.includes(String(e.id));
+        const text = String(e.label || '').trim();
+        const font = { color: active ? foreground : _css('--text-subtle', '#666'), size: 11,
+            align: 'middle', face: 'sans-serif', strokeWidth: 0 };
+        // Canvas no entiende colores CSS tipo var(...).
+        if (text) font.background = _css('--bg-color', '#121212');
+        return { id: e.id, from: e.source, to: e.target, label: text,
+            arrows: { to: { enabled: true, scaleFactor: .8 } },
+            color: { color: active ? muted : _css('--border', '#333'),
+                highlight: _css('--accent', '#4caf50'), hover: muted, opacity: active ? 1 : .13 },
+            font, dashes: e.reviewed === false, width: active ? 1.7 : 1,
+            smooth: { type: 'continuous', roundness: .4 } };
     }
-
-    /** Saneador mejorado: Mantiene el texto LaTeX crudo legible, elimina llaves superfluas */
-    function _plainTitle(titulo) {
-        if (!titulo) return '(sin título)';
-        return titulo
-            .replace(/\$\$/g, '') // Quita delimitadores de bloque
-            .replace(/\$/g, '')   // Quita delimitadores inline
-            .replace(/\\textbf\{([^}]*)\}/g, '$1')
-            .replace(/\\textit\{([^}]*)\}/g, '$1')
-            .trim()
-            .substring(0, 65) + (titulo.length > 65 ? '...' : '');
+    function _visible() {
+        const nodes = _allNodes.filter(_allowed);
+        const ids = new Set(nodes.map(n => String(n.id)));
+        const edges = _allEdges.filter(e => ids.has(String(e.source)) && ids.has(String(e.target)));
+        return { nodes, edges };
     }
-
-    function _toVisNode(n) {
-        const baseColor = _colorForTipo(n.card.Apartado);
-        const bgColor   = _getCssVar('--surface-1', '#1e1e1e'); // Fondo OPACO (Soluciona flechas superpuestas)
-        const textColor = _getCssVar('--text-main', '#e0e0e0');
-
-        return {
-            id:    n.id,
-            label: _plainTitle(n.card.Titulo), 
-            color: {
-                background: bgColor, 
-                border:     baseColor,
-                highlight:  { background: bgColor, border: baseColor },
-                hover:      { background: bgColor, border: baseColor },
-            },
-            font:        { color: textColor, size: 13, face: 'inherit' },
-            borderWidth: 2,
-            shape:       'box',
-            margin:      10,
-            x: n.x,
-            y: n.y,
-        };
+    function _redraw(fit = false) {
+        if (!_network || !_dataNodes || !_dataEdges) return;
+        const { nodes, edges } = _visible();
+        _hideTooltip();
+        // Conserva las instancias DataSet y las coordenadas del lienzo.
+        // setData() recreaba la simulación y cambiaba posiciones al filtrar.
+        const ids = new Set(nodes.map(n=>String(n.id)));
+        const edgeIds = new Set(edges.map(e=>String(e.id)));
+        const removedEdges=_dataEdges.getIds().filter(id=>!edgeIds.has(String(id)));
+        if(removedEdges.length)_dataEdges.remove(removedEdges);
+        const removedNodes=_dataNodes.getIds().filter(id=>!ids.has(String(id)));
+        if(removedNodes.length)_dataNodes.remove(removedNodes);
+        _dataNodes.update(nodes.map(_toNode));
+        _dataEdges.update(edges.map(_toEdge));
+        if (fit && nodes.length) _network.fit({ animation: false });
+        _fillTypes();_renderMaps();_renderIslands();
+        const count = $('graph-count'); if (count) count.textContent = `${nodes.length} nodos · ${edges.length} relaciones`;
+        _network.redraw();
     }
-
-    function _toVisEdge(e) {
-        const edgeColor = _getCssVar('--border', '#555');
-        const textColor = _getCssVar('--text-main', '#aaa');
-        
-        return {
-            id:     e.id,
-            from:   e.source,
-            to:     e.target,
-            label:  e.label || '',
-            arrows: {
-                to: { enabled: true, scaleFactor: 0.8 } 
-            },
-            color:  { 
-                color: edgeColor, 
-                highlight: _getCssVar('--accent', '--text-main'), 
-                hover: edgeColor 
-            },
-            font: { 
-                color: textColor, 
-                size: 11, 
-                align: 'middle', 
-                face: 'inherit', 
-                background: 'var(--bg-color)',
-                // Reducimos el trazo del borde del texto para máxima claridad
-                strokeWidth: 0,
-                strokeColor: 'transparent'
-            },
-            smooth: { type: 'continuous', roundness: 0.5 },
-            // Bajamos la anchura base y la de selección
-            width: 1.5,
-            selectionWidth: 1.5 
-        };
-    }
-
-    // ── Modo conexión ─────────────────────────────────────────────
-
-    function _setEdgeMode(on) {
-        _edgeMode = on;
-        _edgeSrc  = null;
-        if (_network) _network.unselectAll();
-
-        const btn  = document.getElementById('graph-btn-edge');
-        const hint = document.getElementById('graph-hint');
-
-        if (btn) {
-            btn.style.background   = on ? 'rgba(76,175,80,0.2)' : '';
-            btn.style.borderColor  = on ? 'var(--accent)'       : 'var(--border-light)';
-            btn.style.color        = on ? 'var(--accent)'       : 'var(--text-muted)';
+    function _setMode(mode) {
+        _mode = _mode === mode ? 'normal' : mode;
+        _connectFrom = null; _pathFrom = null;
+        for (const [button, value] of [['graph-btn-edge','edge'], ['graph-btn-path','path']]) {
+            $(button)?.classList.toggle('graph-active', _mode === value);
         }
-        if (hint) hint.innerText = on ? 'Clic en nodo origen → luego nodo destino.' : '';
+        _hint(_mode === 'edge' ? 'Selecciona origen y destino para crear una relación.' :
+            _mode === 'path' ? 'Selecciona origen y destino para encontrar un camino.' : '');
     }
-    // ── Custom Prompt No Bloqueante ───────────────────────────────
-
-    function _customPrompt(mensaje, valorPorDefecto, callback) {
-        const overlay = document.createElement('div');
-        overlay.style.cssText = 'position:absolute; inset:0; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index:9999; backdrop-filter:blur(2px);';
-        
-        const box = document.createElement('div');
-        box.style.cssText = 'background:var(--bg-color, #121212); padding:20px; border-radius:8px; border:1px solid var(--border-light, #333); width:320px; box-shadow:0 8px 24px rgba(0,0,0,0.5); display:flex; flex-direction:column; gap:12px; font-family:inherit;';
-        
-        const label = document.createElement('label');
-        label.textContent = mensaje;
-        label.style.color = 'var(--text-main, #fff)';
-        label.style.fontSize = '0.9em';
-        
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.value = valorPorDefecto || '';
-        input.style.cssText = 'padding:10px; border-radius:6px; border:1px solid var(--border, #444); background:var(--surface-1, #1e1e1e); color:var(--text-main, #fff); width:100%; box-sizing:border-box; outline:none; font-family:inherit;';
-        input.onfocus = () => input.style.borderColor = 'var(--accent, #4caf50)';
-        input.onblur = () => input.style.borderColor = 'var(--border, #444)';
-        
-        const btnRow = document.createElement('div');
-        btnRow.style.cssText = 'display:flex; justify-content:flex-end; gap:10px; margin-top:8px;';
-        
-        const btnCancel = document.createElement('button');
-        btnCancel.textContent = 'Cancelar';
-        btnCancel.style.cssText = 'padding:8px 14px; background:transparent; border:1px solid var(--border-light, #444); color:var(--text-muted, #aaa); border-radius:6px; cursor:pointer; font-weight:bold; transition:all 0.2s;';
-        
-        const btnOk = document.createElement('button');
-        btnOk.textContent = 'Aceptar';
-        btnOk.style.cssText = 'padding:8px 14px; background:var(--accent, #4caf50); border:none; color:#fff; border-radius:6px; cursor:pointer; font-weight:bold; transition:all 0.2s;';
-        
-        btnRow.appendChild(btnCancel);
-        btnRow.appendChild(btnOk);
-        box.appendChild(label);
-        box.appendChild(input);
-        box.appendChild(btnRow);
-        overlay.appendChild(box);
-        
-        document.getElementById('modal-graph').appendChild(overlay);
-        input.focus();
-        input.select();
-        
-        const close = (val) => {
-            overlay.remove();
-            callback(val);
-        };
-        
-        btnOk.onclick = () => close(input.value);
-        btnCancel.onclick = () => close(null);
-        input.onkeydown = (e) => {
-            if (e.key === 'Enter') close(input.value);
-            if (e.key === 'Escape') close(null);
-        };
+    function _hint(text) { if ($('graph-hint')) $('graph-hint').textContent = text; }
+    function _dialog(title, builder, width = '560px') {
+        const overlay = document.createElement('div'); overlay.className = 'graph-overlay';
+        const dialog = document.createElement('div'); dialog.className = 'graph-dialog';
+        dialog.style.maxWidth = width;
+        const h = document.createElement('h3'); h.textContent = title;
+        dialog.append(h); overlay.append(dialog); $('modal-graph').append(overlay);
+        overlay.addEventListener('click', event => { if (event.target === overlay) overlay.remove(); });
+        builder(dialog, () => overlay.remove()); _applyGraphButtonTheme(dialog); return overlay;
     }
-
-    function _deleteSelected() {
-        if (!_network) return;
-        _network.getSelectedNodes().forEach(id => _cb.onRemoveNode?.(id));
-        _network.getSelectedEdges().forEach(id => _cb.onRemoveEdge?.(id));
+    function _prompt(title, initial, callback) {
+        _dialog(title, (box, close) => {
+            const inp = document.createElement('input'); inp.value = initial || ''; inp.maxLength = 180;
+            const actions = document.createElement('div'); actions.className = 'graph-actions';
+            const cancel = document.createElement('button'); cancel.className = 'graph-secondary'; cancel.textContent = 'Cancelar'; cancel.onclick = close;
+            const ok = document.createElement('button'); ok.textContent = 'Aceptar';
+            ok.onclick = () => { callback(inp.value.trim()); close(); };
+            inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); ok.click(); } };
+            actions.append(cancel, ok); box.append(inp, actions); inp.focus(); inp.select();
+        }, '380px');
     }
-
-    // ── Búsqueda ──────────────────────────────────────────────────
-
-
-    function _bindSearch() {
-        const input   = document.getElementById('graph-search-input');
-        const results = document.getElementById('graph-search-results');
-        const filter  = document.getElementById('graph-search-filter');
-        const temaInput = document.getElementById('graph-search-tema'); // NUEVO
-        if (!input || !results) return;
-
-        const triggerSearch = () => {
-            const q = input.value;
-            const f = filter ? filter.value : '';
-            const t = temaInput ? temaInput.value : ''; // NUEVO
-            
-            const found = _cb.onSearch?.(q, f, t) || [];
-            
-            results.innerHTML  = '';
-            if (found.length === 0) {
-                results.style.display = 'none';
-                return;
-            }
-
-            results.style.display = 'block';
-            found.forEach(r => {
-                const div = document.createElement('div');
-                div.style.cssText = `
-                    padding:7px 12px; cursor:pointer; font-size:0.82em;
-                    border-bottom:1px solid var(--border);
-                    color:${_colorForTipo(r.tipo)};
-                    transition:background 0.15s; display:flex; gap:8px; align-items:center;
-                `;
-                div.innerHTML = `<span style="font-size:0.7em; padding:2px 4px; border:1px solid; border-radius:3px; opacity:0.8">${r.tipo.substring(0,3).toUpperCase()}</span> ${escapeHtml(_plainTitle(r.titulo))}`;
-                div.onmouseenter = () => div.style.background = 'var(--surface-1)';
-                div.onmouseleave = () => div.style.background = '';
-                div.onclick = () => {
-                    _cb.onAddNode?.(r.id);
-                    input.value = '';
-                    results.style.display = 'none';
-                };
-                results.appendChild(div);
-            });
-        };
-
-        input.oninput = triggerSearch;
-        input.onfocus = triggerSearch;
-        if (filter) filter.onchange = triggerSearch;
-        if (temaInput) temaInput.oninput = triggerSearch; // Escucha el cambio de tema
-
-        document.addEventListener('click', (e) => {
-            if (!input.contains(e.target) && !results.contains(e.target) && (!filter || !filter.contains(e.target))) {
-                results.style.display = 'none';
-            }
-        }, { capture: false });
-    }
-
-    // Helper interno (si no lo tienes, añádelo arriba)
-    function escapeHtml(text) {
-        return (text || '').replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    }
-
-    // ── Inicialización de Vis.js ──────────────────────────────────
-
-    function _initNetwork(nodes, edges) {
-        const container = document.getElementById('graph-canvas-container');
-        if (!container) return;
-
-        if (_network) { _network.destroy(); _network = null; }
-
-        const visNodes = new vis.DataSet(nodes.map(_toVisNode));
-        const visEdges = new vis.DataSet(edges.map(_toVisEdge));
-
-        const options = {
-            physics:     { enabled: false },
-            interaction: { hover: true, multiselect: true, tooltipDelay: 300 },
-            manipulation:{ enabled: false },
-            nodes:       { widthConstraint: { maximum: 200 } },
-            edges:       { selectionWidth: 2.5 },
-        };
-
-        _network = new vis.Network(container, { nodes: visNodes, edges: visEdges }, options);
-
-        // ── Eventos de red ──────────────────────────────────────────
-
-        _network.on('click', (params) => {
-            if (params.nodes.length === 1) {
-                const targetNode = params.nodes[0];
-                
-                if (_edgeMode) {
-                    // Lógica de creación de flechas
-                    if (!_edgeSrc) {
-                        _edgeSrc = targetNode;
-                        _network.selectNodes([_edgeSrc]);
-                    } else {
-                        if (targetNode !== _edgeSrc) {
-                            _customPrompt('Etiqueta de la relación (vacío = ninguna):', '', (result) => {
-                                if (result !== null) _cb.onAddEdge?.(_edgeSrc, targetNode, result.trim());
-                                _setEdgeMode(false);
-                            });
-                        } else {
-                            _setEdgeMode(false);
-                        }
-                    }
-                } else {
-                    // NUEVO: Modo normal -> Dispara evento de apertura de tarjeta
-                    _cb.onNodeClick?.(targetNode);
-                }
-            } else if (params.nodes.length === 0 && params.edges.length === 0) {
-                _setEdgeMode(false);
-                if (_previewPanel) _previewPanel.style.display = 'none'; // Cierra panel al clicar fuera
-            }
+    function _inspectEdge(id) {
+        const edge = _allEdges.find(e => String(e.id) === String(id)); if (!edge) return;
+        _dialog('Revisar relación', (box, close) => {
+            const label = document.createElement('label'); label.textContent = 'Etiqueta de la relación';
+            const input = document.createElement('input'); input.value = edge.label || ''; input.maxLength = 180;
+            const row = document.createElement('label'); row.className = 'graph-checkline';
+            const checked = document.createElement('input'); checked.type = 'checkbox'; checked.checked = edge.reviewed !== false;
+            row.append(checked, document.createTextNode(' Relación verificada por mí'));
+            const note = document.createElement('p'); note.className = 'graph-help';
+            note.textContent = 'Las relaciones propuestas por IA se señalan con líneas discontinuas hasta verificarlas.';
+            const actions = document.createElement('div'); actions.className = 'graph-actions';
+            const del = document.createElement('button'); del.className = 'graph-danger'; del.textContent = 'Eliminar';
+            del.onclick = () => { _cb.onRemoveEdge?.(id); close(); };
+            const cancel = document.createElement('button'); cancel.className = 'graph-secondary'; cancel.textContent = 'Cancelar'; cancel.onclick = close;
+            const save = document.createElement('button'); save.textContent = 'Guardar';
+            save.onclick = () => { _cb.onEditEdge?.(id, {label: input.value, reviewed: checked.checked}); close(); };
+            actions.append(del, cancel, save); box.append(label, input, row, note, actions); input.focus();
         });
-
-        _network.on('dragEnd', (params) => {
-            if (params.nodes.length === 1) {
-                const id  = params.nodes[0];
+    }
+    function _clickNode(id) {
+        _selected = String(id);
+        if (_mode === 'edge') {
+            if (!_connectFrom) { _connectFrom = id; _hint('Selecciona el nodo de destino.'); return; }
+            if (String(_connectFrom) !== String(id)) {
+                const source = _connectFrom;
+                _prompt('Etiqueta de la nueva relación', '', value => _cb.onAddEdge?.(source, id, value));
+            }
+            _setMode('normal'); return;
+        }
+        if (_mode === 'path') {
+            if (!_pathFrom) { _pathFrom = id; _hint('Selecciona el destino del camino.'); return; }
+            const directed = $('graph-path-directed')?.checked !== false;
+            _emphasis = _cb.onPath?.(_pathFrom, id, directed);
+            _hint(_emphasis ? `Camino encontrado: ${_emphasis.nodes.length - 1} enlaces.` : 'No existe un camino entre estos nodos.');
+            _redraw(); _setMode('normal'); return;
+        }
+        _cb.onNodeClick?.(id);
+    }
+    function _hideTooltip() {
+        const tip = $('graph-node-tooltip');
+        if (tip) tip.hidden = true;
+    }
+    function _showTooltip(content, event) {
+        const host = $('graph-canvas-container');
+        if (!host || !content) return _hideTooltip();
+        let tip = $('graph-node-tooltip');
+        if (!tip) {
+            tip = document.createElement('div');
+            tip.id = 'graph-node-tooltip'; tip.className = 'graph-node-tooltip';
+            tip.setAttribute('role', 'tooltip'); host.append(tip);
+        }
+        tip.replaceChildren();
+        for (const line of content) {
+            const span = document.createElement('div');
+            span.className = line.kind === 'heading' ? 'graph-tooltip-heading' : 'graph-tooltip-text';
+            span.textContent = line.text;
+            tip.append(span);
+        }
+        tip.hidden = false;
+        _moveTooltip(event);
+    }
+    function _moveTooltip(event) {
+        const tip = $('graph-node-tooltip'), host = $('graph-canvas-container');
+        if (!tip || tip.hidden || !host || !event) return;
+        const rect = host.getBoundingClientRect();
+        const x = event.clientX - rect.left + 14;
+        const y = event.clientY - rect.top + 14;
+        tip.style.left = `${Math.min(Math.max(5,x), Math.max(5,host.clientWidth - tip.offsetWidth - 8))}px`;
+        tip.style.top = `${Math.min(Math.max(5,y), Math.max(5,host.clientHeight - tip.offsetHeight - 8))}px`;
+    }
+    function _applyGraphButtonTheme(root) {
+        if (!root) return;
+        root.querySelectorAll('button').forEach(button => {
+            if (button.classList.contains('btn-dif')) return;
+            button.classList.add('btn-modern');
+            button.classList.add(button.classList.contains('graph-primary') ? 'btn-next' : 'btn-reveal');
+        });
+    }
+    // Dibujar detrás de los nodos una frontera por cada componente conexa débil.
+    function _drawIslandBorders(ctx) {
+        if (!_showIslands || !_network || typeof GraphLayout === 'undefined') return;
+        const visible=_visible();
+        const components=GraphLayout.components(visible.nodes,visible.edges);
+        const names=_cb.onGetIslandNames?.() || {};
+        if(!components.length)return;
+        const palette=[_css('--accent','#4caf50'),_css('--status-blue','#256ca5'),
+            _css('--status-green','#4caf50'),_css('--status-yellow','#cdcd00')];
+        ctx.save();
+        components.forEach((group,index)=>{
+            if(group.length<2)return;
+            const boxes=group.map(n=>_network.getBoundingBox(n.id));
+            const pad=48, left=Math.min(...boxes.map(b=>b.left))-pad,
+                right=Math.max(...boxes.map(b=>b.right))+pad,
+                top=Math.min(...boxes.map(b=>b.top))-pad,
+                bottom=Math.max(...boxes.map(b=>b.bottom))+pad;
+            const radius=26,color=palette[index%palette.length];
+            ctx.beginPath();
+            ctx.moveTo(left+radius,top);ctx.lineTo(right-radius,top);
+            ctx.quadraticCurveTo(right,top,right,top+radius);ctx.lineTo(right,bottom-radius);
+            ctx.quadraticCurveTo(right,bottom,right-radius,bottom);ctx.lineTo(left+radius,bottom);
+            ctx.quadraticCurveTo(left,bottom,left,bottom-radius);ctx.lineTo(left,top+radius);
+            ctx.quadraticCurveTo(left,top,left+radius,top);ctx.closePath();
+            ctx.fillStyle=color;ctx.globalAlpha=.045;ctx.fill();
+            ctx.globalAlpha=.65;ctx.strokeStyle=color;ctx.lineWidth=1.7;
+            ctx.setLineDash([10,7]);ctx.stroke();ctx.setLineDash([]);
+            ctx.globalAlpha=.85;ctx.fillStyle=color;ctx.font='bold 13px sans-serif';
+            const name=group.map(n=>names[String(n.id)]).find(Boolean) || `Isla ${index+1}`;
+            ctx.fillText(`${name} · ${group.length} nodos`,left+13,top+23);
+        });
+        ctx.restore();
+    }
+    function _initNetwork() {
+        if (_network) _network.destroy();
+        $('graph-node-tooltip')?.remove();
+        _dataNodes = new vis.DataSet([]); _dataEdges = new vis.DataSet([]);
+        _network = new vis.Network($('graph-canvas-container'),
+            { nodes: _dataNodes, edges: _dataEdges },
+            { physics: { enabled: false }, interaction: { hover: true, multiselect: true, tooltipDelay: 250 },
+              manipulation: { enabled: false }, nodes: { widthConstraint: { maximum: 215 } } });
+        _network.on('beforeDrawing',ctx=>_drawIslandBorders(ctx));
+        _network.on('hoverNode', params => {
+            const n = _allNodes.find(n => String(n.id) === String(params.node));
+            if (!n) return;
+            _showTooltip([
+                {kind:'heading',text:n.card.Apartado || 'Tarjeta'},
+                {kind:'text',text:`Tema ${n.card.Tema ?? '?'} · ${_plain(n.card.Titulo)}`}
+            ], params.event?.srcEvent);
+        });
+        _network.on('hoverEdge', params => {
+            const e = _allEdges.find(e => String(e.id) === String(params.edge));
+            if (e) _showTooltip([{kind:'heading', text:e.label || 'Relación sin etiqueta'},
+                {kind:'text',text:e.reviewed === false ? 'Pendiente de verificación' : 'Relación verificada'}],params.event?.srcEvent);
+        });
+        _network.on('blurNode', _hideTooltip);
+        _network.on('blurEdge', _hideTooltip);
+        if ($('graph-canvas-container')) $('graph-canvas-container').onmousemove = _moveTooltip;
+        _network.on('click', params => {
+            _hideTooltip();
+            if (params.nodes.length === 1) _clickNode(params.nodes[0]);
+            else if (!params.edges.length) { _selected = null; _setMode('normal'); if (_preview) _preview.style.display = 'none'; }
+        });
+        _network.on('doubleClick', params => {
+            if (!params.nodes.length && params.edges.length === 1) _inspectEdge(params.edges[0]);
+        });
+        _network.on('dragEnd', params => {
+            for (const id of params.nodes) {
                 const pos = _network.getPosition(id);
                 _cb.onPositionChange?.(id, Math.round(pos.x), Math.round(pos.y));
             }
         });
-
-        // Doble clic en arista → editar etiqueta
-        _network.on('doubleClick', (params) => {
-            if (params.edges.length === 1 && params.nodes.length === 0) {
-                const edgeId   = params.edges[0];
-                const edgeData = visEdges.get(edgeId);
-                
-                // USO DEL CUSTOM PROMPT PARA EDICIÓN
-                _customPrompt('Nueva etiqueta:', edgeData?.label ?? '', (result) => {
-                    if (result !== null) {
-                        const fromId = edgeData.from;
-                        const toId   = edgeData.to;
-                        _cb.onRemoveEdge?.(edgeId);
-                        _cb.onAddEdge?.(fromId, toId, result.trim());
-                    }
-                });
-            }
-        });
+        _redraw(true);
     }
-
-    // ── API pública ───────────────────────────────────────────────
-
-    function abrirMapa(asig, enrichedNodes, edges, tiposConfig, callbacks) {
-        _cb    = callbacks;
-        _tipos = tiposConfig;
-        _setEdgeMode(false);
-
-        const modal = document.getElementById('modal-graph');
-        if (!modal) return;
-        modal.classList.remove('hidden');
-
-        const label = document.getElementById('graph-asig-label');
-        if (label) label.textContent = asig;
-
-        _initNetwork(enrichedNodes, edges);
-        _bindSearch();
-
-        setTimeout(() => document.getElementById('graph-search-input')?.focus(), 200);
-    }
-
-    function refreshMapa(enrichedNodes, edges, tiposConfig) {
-        _tipos = tiposConfig;
-        if (!_network) return;
-
-        const body = _network.body.data;
-        body.nodes.clear();
-        body.edges.clear();
-        body.nodes.add(enrichedNodes.map(_toVisNode));
-        body.edges.add(edges.map(_toVisEdge));
-    }
-
-    function cerrarMapa() {
-        document.getElementById('modal-graph')?.classList.add('hidden');
-        if (_network) { _network.destroy(); _network = null; }
-        _setEdgeMode(false);
-    }
-
-    function mostrarPreview(card, cardId) {
-        if (!_previewPanel) {
-            _previewPanel = document.createElement('div');
-            _previewPanel.style.cssText = 'position:absolute; top:70px; right:20px; width:400px; max-height:calc(100% - 90px); background:var(--surface-1, #1e1e1e); border:1px solid var(--border-light, #333); border-radius:8px; box-shadow:0 12px 32px rgba(0,0,0,0.6); z-index:1000; display:flex; flex-direction:column; overflow:hidden;';
-            document.getElementById('modal-graph').appendChild(_previewPanel);
+    function _fillTypes() {
+        const field = $('graph-filter-types'); if (!field) return;
+        const types = [...new Set(_allNodes.map(n => n.card.Apartado || 'Sin tipo'))].sort();
+        const key = types.join('\u0000'); if (field.dataset.key === key) {
+            field.querySelectorAll('label').forEach(label => { const box = label.querySelector('input'); if (box) box.checked = !_hiddenTypes.has(label.dataset.type); });
+            return;
         }
-        
-        const tipo = card.Apartado || 'Tarjeta';
-        const color = _colorForTipo(tipo);
-
-        const titulo = card.Titulo || '(Sin título)';
-        const Contenido = card.Contenido ? `<div id="graph-preview-answer" style="display:none; border-top:1px dashed var(--border, #444); padding-top:16px; color:var(--text-main, #eee);">${card.Contenido}</div>` : '';
-
-        _previewPanel.innerHTML = `
-            <div style="padding:12px 16px; border-bottom:1px solid var(--border, #444); display:flex; justify-content:space-between; align-items:center; background:var(--surface-1, #1e1e1e);">
-                <span style="font-size:0.85em; color:${color}; font-weight:bold; text-transform:uppercase; letter-spacing:1px;">${tipo}</span>
-                <button id="graph-preview-close" title="Cerrar panel" style="background:none; border:none; color:var(--text-muted, #aaa); cursor:pointer; font-size:1.4em; line-height:1;">&times;</button>
-            </div>
-            <div style="padding:20px; overflow-y:auto; flex:1; font-size:0.95em; line-height:1.6;">
-                <h3 style="margin-top:0; color:var(--text-main, #fff); font-size:1.15em; margin-bottom:16px;">${titulo}</h3>
-                
-                ${Contenido}
-            </div>
-            <div style="padding:12px 16px; border-top:1px solid var(--border, #444); background:var(--surface-1, #1e1e1e); display:flex; flex-direction:column; gap:10px;">
-                <button id="graph-preview-show" style="width:100%; padding:10px; background:var(--accent, #4caf50); border:none; color:#fff; border-radius:6px; cursor:pointer; font-weight:bold; transition:all 0.2s;">
-                    <i class="fa-solid fa-eye"></i> Mostrar Contenido
-                </button>
-                
-                <div id="graph-preview-rates" style="display:none; gap:6px; width:100%;">
-                    <button class="btn-dif btn-dif-1" data-rate="1">1<br><span>Fácil</span></button>
-                    <button class="btn-dif btn-dif-2" data-rate="2">2<br><span>Bien</span></button>
-                    <button class="btn-dif btn-dif-3" data-rate="3">3<br><span>Difícil</span></button>
-                    <button class="btn-dif btn-dif-4" data-rate="4">4<br><span>Mal</span></button>
-                </div>
-            </div>
-        `;
-
-        _previewPanel.style.display = 'flex';
-
-        // ── CSS Dinámico para Botones Estéticos (Solución Deuda Técnica/UX) ──
-        
-        const ratesDiv = document.getElementById('graph-preview-rates');
-        
-        // Estilo base para los botones de rating (Outlined)
-        const baseRateBtnStyle = `
-            flex:1; padding:12px 6px; border-radius:6px; cursor:pointer; font-weight:bold; 
-            font-size:0.85em; transition:all 0.2s; border:1px solid transparent; text-transform:uppercase; letter-spacing:0.5px;
-            background:transparent;
-        `;
-
-        ratesDiv.querySelectorAll('.graph-btn-rate').forEach(btn => {
-            const semanticVar = btn.getAttribute('data-semantic-color');
-            const color = _getCssVar(semanticVar, '#888');
-            const hoverColor = btn.getAttribute('data-hover-color');
-
-            // Aplicar estilo base y color contorneado
-            btn.style.cssText = baseRateBtnStyle;
-            btn.style.borderColor = color;
-            btn.style.color = color;
-
-            // Efecto de relleno al hover
-            btn.onmouseenter = () => {
-                btn.style.background = color;
-                btn.style.color = hoverColor;
-            };
-            btn.onmouseleave = () => {
-                btn.style.background = 'transparent';
-                btn.style.color = color;
-            };
-        });
-
-        // ── Listeners de Interacción ──
-        
-        document.getElementById('graph-preview-close').onclick = () => {
-            _previewPanel.style.display = 'none';
-        };
-
-        const btnShow = document.getElementById('graph-preview-show');
-        const answerDiv = document.getElementById('graph-preview-answer');
-
-        btnShow.onclick = () => {
-            btnShow.style.display = 'none';
-            ratesDiv.style.display = 'flex';
-            if (answerDiv) answerDiv.style.display = 'block';
-        };
-
-        // Delegación de calificación
-        document.querySelectorAll('.graph-btn-rate').forEach(btn => {
-            btn.onclick = (e) => {
-                // Obtenemos el rating nativo de la UI (ej. '1' -> 'Fácil')
-                const rating = parseInt(e.target.getAttribute('data-rate'));
-                _cb.onRateCard?.(cardId, rating);
-                _previewPanel.style.display = 'none';
-            };
-        });
-
-        // Renderizado MathJax
-        if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
-            MathJax.typesetPromise([_previewPanel]).catch(e => console.error("Error MathJax:", e));
+        field.dataset.key = key; field.innerHTML = '';
+        for (const t of types) {
+            const label = document.createElement('label'); label.className = 'graph-checkline'; label.dataset.type = t;
+            const inp = document.createElement('input'); inp.type = 'checkbox'; inp.checked = !_hiddenTypes.has(t);
+            inp.onchange = () => { if (inp.checked) _hiddenTypes.delete(t); else _hiddenTypes.add(t); _redraw(); };
+            label.append(inp, document.createTextNode(` ${t}`)); field.append(label);
         }
     }
-
-
-    function _promptMassInsert(callback) {
-        const overlay = document.createElement('div');
-        overlay.style.cssText = 'position:absolute; inset:0; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; z-index:9999; backdrop-filter:blur(3px);';
-        
-        const box = document.createElement('div');
-        box.style.cssText = 'background:var(--bg-color); padding:24px; border-radius:8px; border:1px solid var(--border-light); width:340px; box-shadow:0 12px 32px rgba(0,0,0,0.8); display:flex; flex-direction:column; gap:14px; font-family:inherit; color:var(--text-main);';
-        
-        box.innerHTML = `
-            <h4 style="margin:0 0 5px 0; color:var(--accent); font-size:1.1em;"><i class="fa-solid fa-layer-group"></i> Inserción por Lote</h4>
-            <p style="font-size:0.75em; color:var(--text-muted); margin:0 0 10px 0; line-height:1.4;">Los nodos se agruparán espacialmente en el lienzo según su número de tema.</p>
-            
-            <label style="font-size:0.85em; color:var(--text-muted);">Tema a extraer (Obligatorio)</label>
-            <input type="number" id="batch-tema" placeholder="Ej: 1" style="padding:10px; background:var(--surface-1); border:1px solid var(--border); color:#fff; border-radius:4px; outline:none;">
-            
-            <label style="font-size:0.85em; color:var(--text-muted);">Tipo de Tarjeta</label>
-            <select id="batch-tipo" style="padding:10px; background:var(--surface-1); border:1px solid var(--border); color:#fff; border-radius:4px; outline:none;">
-                <option value="">Todo el Tema (Cuidado: muchos nodos)</option>
-                <option value="Definición" selected>Solo Definiciones</option>
-                <option value="Teorema">Solo Teoremas</option>
-                <option value="Proposición">Solo Proposiciones</option>
-            </select>
-
-            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:15px;">
-                <button id="batch-cancel" style="padding:8px 14px; background:transparent; border:1px solid var(--border); color:var(--text-muted); border-radius:6px; cursor:pointer; transition:all 0.2s;">Cancelar</button>
-                <button id="batch-ok" style="padding:8px 14px; background:var(--accent); border:none; color:#000; border-radius:6px; cursor:pointer; font-weight:bold;">Generar Lote</button>
-            </div>
-        `;
-        
-        overlay.appendChild(box);
-        document.getElementById('modal-graph').appendChild(overlay);
-        document.getElementById('batch-tema').focus();
-
-        const close = () => overlay.remove();
-        document.getElementById('batch-cancel').onclick = close;
-        
-        document.getElementById('batch-ok').onclick = () => {
-            const t = document.getElementById('batch-tema').value;
-            const tipo = document.getElementById('batch-tipo').value;
-            close();
-            callback(t ? parseInt(t) : null, tipo);
-        };
+    function _renderMaps() {
+        const select = $('graph-map-select'); if (!select || !_cb.onListMaps) return;
+        const current = _cb.onGetMap?.().id;
+        select.innerHTML = '';
+        for (const m of _cb.onListMaps()) select.add(new Option(`${m.name} (${m.nodes})`, m.id));
+        select.value = current;
     }
-
-    // ── Prompt para selección de lote con IA ───────────────────────
-    
-    function _promptBatchForIA(callback) {
-        const overlay = document.createElement('div');
-        overlay.style.cssText = 'position:absolute; inset:0; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; z-index:9999; backdrop-filter:blur(3px);';
-        
-        const box = document.createElement('div');
-        box.style.cssText = 'background:var(--bg-color); padding:24px; border-radius:8px; border:1px solid var(--border-light); width:340px; box-shadow:0 12px 32px rgba(0,0,0,0.8); display:flex; flex-direction:column; gap:14px; font-family:inherit; color:var(--text-main);';
-        
-        box.innerHTML = `
-            <h4 style="margin:0 0 5px 0; color:var(--accent); font-size:1.1em;"><i class="fa-solid fa-wand-magic-sparkles"></i> Generar Relaciones por Lote</h4>
-            <p style="font-size:0.75em; color:var(--text-muted); margin:0 0 10px 0; line-height:1.4;">La IA generará relaciones solo para las tarjetas del tema seleccionado.</p>
-            
-            <label style="font-size:0.85em; color:var(--text-muted);">Tema a procesar</label>
-            <input type="number" id="ia-batch-tema" placeholder="Ej: 1" style="padding:10px; background:var(--surface-1); border:1px solid var(--border); color:#fff; border-radius:4px; outline:none;">
-            
-            <label style="font-size:0.85em; color:var(--text-muted);">Filtrar por tipo (opcional)</label>
-            <select id="ia-batch-tipo" style="padding:10px; background:var(--surface-1); border:1px solid var(--border); color:#fff; border-radius:4px; outline:none;">
-                <option value="">Todos los tipos</option>
-                <option value="Definición">Solo Definiciones</option>
-                <option value="Teorema">Solo Teoremas</option>
-                <option value="Proposición">Solo Proposiciones</option>
-            </select>
-
-            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:15px;">
-                <button id="ia-batch-cancel" style="padding:8px 14px; background:transparent; border:1px solid var(--border); color:var(--text-muted); border-radius:6px; cursor:pointer; transition:all 0.2s;">Cancelar</button>
-                <button id="ia-batch-ok" style="padding:8px 14px; background:var(--accent); border:none; color:#000; border-radius:6px; cursor:pointer; font-weight:bold;">Generar con IA</button>
-            </div>
-        `;
-        
-        overlay.appendChild(box);
-        document.getElementById('modal-graph').appendChild(overlay);
-        document.getElementById('ia-batch-tema').focus();
-
-        const close = () => overlay.remove();
-        document.getElementById('ia-batch-cancel').onclick = close;
-        
-        document.getElementById('ia-batch-ok').onclick = () => {
-            const t = document.getElementById('ia-batch-tema').value;
-            const tipo = document.getElementById('ia-batch-tipo').value;
-            close();
-            callback(t ? parseInt(t) : null, tipo);
-        };
+    function _getIslandComponents() {
+        const {nodes,edges}=_visible();
+        return typeof GraphLayout==='undefined' ? [] : GraphLayout.components(nodes,edges);
     }
-
-
-
-    // ── Event listeners estáticos (toolbar) ──────────────────────
-
-    document.addEventListener('DOMContentLoaded', () => {
-        document.getElementById('graph-btn-edge')?.addEventListener('click', () => _setEdgeMode(!_edgeMode));
-        document.getElementById('graph-btn-delete')?.addEventListener('click', _deleteSelected);
-        document.getElementById('graph-btn-fit')?.addEventListener('click', () => _network?.fit({ animation: { duration: 400 } }));
-        
-        document.getElementById('graph-btn-close')?.addEventListener('click', cerrarMapa);
-        
-        document.getElementById('btn-togglegrafo')?.addEventListener('click', () => window.abrirMapaConceptual?.());
-        
-        document.getElementById('graph-btn-add-mass')?.addEventListener('click', () => {
-            _promptMassInsert((tema, tipo) => {
-                _cb.onAddMassive?.(tema, tipo);
+    function _getIslandBySelectedOption() {
+        const index=Number($('graph-island-select')?.value);
+        return _getIslandComponents()[index] || null;
+    }
+    function _renderIslands() {
+        const select=$('graph-island-select');if(!select)return;
+        const previous=select.value, groups=_getIslandComponents();
+        const names=_cb.onGetIslandNames?.()||{};
+        select.replaceChildren();
+        groups.forEach((group,index)=>{
+            const name=group.map(n=>names[String(n.id)]).find(Boolean)||`Isla ${index+1}`;
+            select.add(new Option(`${name} (${group.length} nodos)`,String(index)));
+        });
+        if(previous && Number(previous)<groups.length) select.value=previous;
+    }
+    function _createTools() {
+        if ($('graph-extra-tools')) return;
+        const toolbar = $('graph-toolbar');
+        const more = document.createElement('div'); more.id = 'graph-extra-tools'; more.className = 'graph-extra-tools';
+        more.innerHTML = `<select id="graph-map-select" title="Mapa activo" aria-label="Mapa activo"></select>
+            <details class="graph-menu"><summary>Mapas</summary><div class="graph-menu-panel">
+                <button id="graph-map-new">+ Nuevo mapa</button>
+                <button id="graph-map-rename">Renombrar mapa</button>
+                <button id="graph-map-delete" class="graph-danger">Borrar mapa</button>
+            </div></details>
+            <details class="graph-menu"><summary>Visualización</summary>
+                <div class="graph-menu-panel">
+                    <div id="graph-filter-types"></div>
+                    <label class="graph-checkline"><input type="checkbox" id="graph-show-islands" checked> Mostrar fronteras de islas conexas</label>
+                    <label class="graph-checkline"><input type="checkbox" id="graph-fsrs"> Mostrar progreso FSRS en el borde</label>
+                    <p class="graph-help">FSRS: gris nuevo · rojo aprendizaje · amarillo consolidación · azul revisión · verde estable.</p>
+                    <button id="graph-clear-emphasis" class="graph-secondary">Mostrar todo / quitar resaltado</button>
+                </div></details>
+            <details class="graph-menu"><summary>Organizar</summary><div class="graph-menu-panel">
+                <p class="graph-help">Primero selecciona los nodos que quieras ordenar (Ctrl + clic para varios). El resto del mapa no se moverá.</p>
+                <button id="graph-layout-grid">Organizar en cuadrícula</button>
+                <button id="graph-layout-islands">Separar componentes en islas</button>
+                <button id="graph-layout-hierarchy" title="Ordena desde los prerrequisitos hasta los resultados, según relaciones requiere/depende_de">Ordenar por prerrequisitos</button>
+                <button id="graph-layout-generality" title="Ordena resultados generales y casos particulares según generaliza/es_caso_de">Ordenar generalizaciones y casos</button>
+                <p class="graph-help">Prerrequisitos: arriba los conceptos necesarios; debajo los resultados que los usan. Generalizaciones: arriba el concepto más general; debajo sus casos particulares. Solo cuentan las relaciones reconocidas.</p>
+                <button id="graph-layout-undo">Deshacer organización</button>
+            </div></details>
+            <details class="graph-menu"><summary>Conexiones</summary><div class="graph-menu-panel">
+                <button id="graph-btn-explore" title="Destacar relaciones de un nodo">Ver entorno del nodo</button>
+                <select id="graph-explore-direction" title="Dirección de exploración"><option value="entrantes">Entrantes</option><option value="salientes">Salientes</option><option value="ambos">Ambos</option></select>
+                <button id="graph-btn-path" title="Escoger dos nodos y mostrar el camino">Buscar camino</button>
+                <label class="graph-inline"><input id="graph-path-directed" type="checkbox" checked>Camino dirigido</label>
+                <button id="graph-reset-highlight">Quitar resaltado</button>
+            </div></details>
+            <details class="graph-menu"><summary>Islas</summary><div class="graph-menu-panel">
+                <label for="graph-island-select" class="graph-help">Componente conexa</label>
+                <select id="graph-island-select" aria-label="Elegir isla"></select>
+                <button id="graph-island-select-all">Seleccionar todos sus nodos</button>
+                <button id="graph-island-rename">Renombrar isla</button>
+                <p class="graph-help">Tras seleccionar la isla, arrastra cualquier nodo seleccionado para mover el conjunto. Las islas siguen la conectividad actual del mapa.</p>
+            </div></details>
+            <details class="graph-menu"><summary>Exportar / Importar</summary><div class="graph-menu-panel">
+                <button id="graph-export-text">Texto editable</button><button id="graph-import-text">Importar texto</button>
+                <button id="graph-export-svg">Imagen SVG</button><button id="graph-export-png">Imagen PNG</button>
+            </div></details>
+            <span id="graph-count" class="graph-small"></span>`;
+        toolbar.insertBefore(more, $('graph-hint'));
+        const search = document.createElement('details');
+        search.className='graph-menu graph-search-menu';
+        search.innerHTML='<summary>Buscar concepto</summary><div class="graph-menu-panel graph-search-panel"></div>';
+        const panel=search.querySelector('.graph-menu-panel');
+        for(const id of ['graph-search-filter','graph-search-tema','graph-search-input']){
+            const element=$(id); if(element) panel.append(id==='graph-search-input' && element.parentElement !== toolbar ? element.parentElement : element);
+        }
+        toolbar.insertBefore(search,more);
+        // El listado flotante permanece junto al campo de búsqueda.
+        const status=$('graph-hint'); if(status) toolbar.append(status);
+        const primary=toolbar.querySelector('#graph-btn-ia')?.parentElement;
+        if(primary) primary.classList.add('graph-primary-actions');
+        _applyGraphButtonTheme(more);
+        $('graph-map-select').onchange = e => { _emphasis = null; _hiddenTypes.clear(); _cb.onSelectMap?.(e.target.value); _renderMaps(); _network?.fit(); };
+        $('graph-map-new').onclick = () => _prompt('Nombre del nuevo mapa', 'Mapa nuevo', name => { if (name) { _cb.onCreateMap?.(name); _emphasis = null; _hiddenTypes.clear(); _network?.fit(); } });
+        $('graph-map-rename').onclick = () => {
+            const m = _cb.onGetMap?.(); if (m) _prompt('Renombrar mapa', m.name, name => { if (name) _cb.onRenameMap?.(m.id, name); });
+        };
+        $('graph-map-delete').onclick = () => {
+            const maps = _cb.onListMaps?.() || []; if (maps.length < 2) return Toast.show('Debe quedar al menos un mapa', 'warning');
+            const m = _cb.onGetMap?.();
+            if (window.confirm(`¿Eliminar el mapa «${m.name}»? No se puede deshacer.`)) _cb.onDeleteMap?.(m.id);
+        };
+        $('graph-fsrs').onchange = e => { _fsrs = e.target.checked; _redraw(); };
+        $('graph-show-islands').onchange=e=>{_showIslands=e.target.checked;_network?.redraw();};
+        const arrange=(type,criterion)=>{
+            const ids=_network?.getSelectedNodes() || [];
+            if(!ids.length) return Toast.show('Selecciona primero los nodos que quieras organizar.', 'info');
+            const ok=_cb.onOrganize?.(type,ids,{criterion});
+            if(ok) _hint(`Organizados ${ids.length} nodos. El resto conserva su posición.`);
+            else Toast.show(type==='hierarchy' ? 'No hay relaciones reconocidas para esa jerarquía.' : 'No es necesario mover esos nodos.', 'info');
+        };
+        $('graph-layout-grid').onclick=()=>arrange('grid');
+        $('graph-layout-islands').onclick=()=>arrange('islands');
+        $('graph-layout-hierarchy').onclick=()=>arrange('hierarchy','dependencias');
+        $('graph-layout-generality').onclick=()=>arrange('hierarchy','generalidad');
+        $('graph-layout-undo').onclick=()=>{if(_cb.onUndoLayout?.())_hint('Organización deshecha.');};
+        $('graph-island-select-all').onclick=()=>{
+            const component=_getIslandBySelectedOption();
+            if(!component) return;
+            _network.selectNodes(component.map(n=>n.id));
+            _hint(`${component.length} nodos seleccionados. Arrastra uno para desplazar la isla.`);
+        };
+        $('graph-island-rename').onclick=()=>{
+            const component=_getIslandBySelectedOption();if(!component)return;
+            const names=_cb.onGetIslandNames?.()||{};
+            const current=component.map(n=>names[String(n.id)]).find(Boolean)||'';
+            _prompt('Nombre de la isla',current,name=>{
+                _cb.onRenameIsland?.(component.map(n=>n.id),name);
+                _renderIslands();_network?.redraw();
             });
-        });
-
-        // NUEVO: Botón de generación de mapa con IA (menú contextual)
-        const btnIA = document.getElementById('graph-btn-ia');
-        if (btnIA) {
-            btnIA.onclick = (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                
-                // Crear menú contextual si no existe
-                let menu = document.getElementById('graph-ia-menu');
-                if (!menu) {
-                    menu = document.createElement('div');
-                    menu.id = 'graph-ia-menu';
-                    menu.style.cssText = 'position:absolute; background:var(--card-bg); border:1px solid var(--border); border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.5); z-index:10000; display:none; flex-direction:column; overflow:hidden; min-width:180px;';
-                    menu.innerHTML = `
-                        <div style="padding:10px 14px; font-size:0.75em; color:var(--text-muted); border-bottom:1px solid var(--border);">Generar relaciones</div>
-                        <button id="ia-menu-full" style="padding:10px 14px; background:transparent; border:none; color:var(--text-main); text-align:left; cursor:pointer; font-size:0.85em; transition:background 0.2s;"><i class="fa-solid fa-network-wired" style="width:20px;"></i> Todo el mapa</button>
-                        <button id="ia-menu-batch" style="padding:10px 14px; background:transparent; border:none; color:var(--text-main); text-align:left; cursor:pointer; font-size:0.85em; transition:background 0.2s;"><i class="fa-solid fa-layer-group" style="width:20px;"></i> Por lote (tema)</button>
-                    `;
-                    document.body.appendChild(menu);
-                    
-                    // Cerrar menú al hacer clic fuera
-                    document.addEventListener('click', function closeMenu(ev) {
-                        if (!menu.contains(ev.target) && !btnIA.contains(ev.target)) {
-                            menu.style.display = 'none';
-                            document.removeEventListener('click', closeMenu);
-                        }
-                    });
-                }
-                
-                // Posicionar y mostrar/ocultar menú
-                const rect = btnIA.getBoundingClientRect();
-                menu.style.top = (rect.bottom + window.scrollY + 5) + 'px';
-                menu.style.left = (rect.left + window.scrollX) + 'px';
-                menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
-                
-                // Handlers de opciones
-                document.getElementById('ia-menu-full').onclick = () => {
-                    menu.style.display = 'none';
-                    if (typeof GraphAI !== 'undefined') {
-                        GraphAI.generarMapaConIA();
-                    } else {
-                        Toast.show('Módulo de IA no disponible', 'error');
-                    }
-                };
-                
-                document.getElementById('ia-menu-batch').onclick = () => {
-                    menu.style.display = 'none';
-                    _promptBatchForIA((tema, tipo) => {
-                        if (!tema) {
-                            Toast.show('Tema no válido', 'warning');
-                            return;
-                        }
-                        
-                        const asig = State.get('nombreAsignaturaActual');
-                        if (!asig) return;
-                        
-                        const todasCards = (State.get('biblioteca') || {})[asig] || [];
-                        const filtradas = todasCards.filter(c => {
-                            const matchTema = c.Tema === tema;
-                            const matchTipo = !tipo || c.Apartado === tipo;
-                            return matchTema && matchTipo;
-                        });
-                        
-                        if (filtradas.length === 0) {
-                            Toast.show(`No hay tarjetas${tipo ? ' de tipo "' + tipo + '"' : ''} en el tema ${tema}`, 'warning');
-                            return;
-                        }
-                        
-                        if (typeof GraphAI !== 'undefined') {
-                            GraphAI.generarMapaConIA(filtradas);
-                        } else {
-                            Toast.show('Módulo de IA no disponible', 'error');
-                        }
-                    });
-                };
+        };
+        $('graph-clear-emphasis').onclick = () => { _emphasis = null; _hiddenTypes.clear(); _redraw(); };
+        $('graph-btn-explore').onclick = () => {
+            if (!_selected) return Toast.show('Selecciona un nodo primero', 'info');
+            _emphasis = _cb.onExplore?.(_selected, $('graph-explore-direction').value, 1);
+            _redraw(); _hint(`${_emphasis?.nodes.length || 0} nodos en el entorno seleccionado.`);
+        };
+        $('graph-btn-path').onclick = () => _setMode('path');
+        $('graph-reset-highlight').onclick = () => { _emphasis = null; _setMode('normal'); _redraw(); _hint('Resaltado eliminado.'); };
+        $('graph-export-text').onclick = () => _textDialog(false);
+        $('graph-import-text').onclick = () => _textDialog(true);
+        $('graph-export-svg').onclick = _exportSVG;
+        $('graph-export-png').onclick = _exportPNG;
+    }
+    function _bindSearch() {
+        if (_searchBound) return; _searchBound = true;
+        const input = $('graph-search-input'), results = $('graph-search-results');
+        if (!input || !results) return;
+        const doSearch = () => {
+            const list = _cb.onSearch?.(input.value, $('graph-search-filter')?.value || '', $('graph-search-tema')?.value || '') || [];
+            results.replaceChildren(); results.style.display = list.length ? 'block' : 'none';
+            for (const item of list) {
+                const div = document.createElement('div'); div.className = 'graph-search-item';
+                const kind = document.createElement('span');
+                kind.className = 'graph-search-kind'; kind.textContent = (item.tipo || 'Tarjeta').slice(0, 4).toUpperCase();
+                kind.style.setProperty('--graph-type-color', _tipoColor(item.tipo));
+                const title = document.createElement('span');
+                title.className = 'graph-search-title'; title.textContent = _plain(item.titulo);
+                div.append(kind, title);
+                div.onclick = () => { _cb.onAddNode?.(item.id); input.value = ''; results.style.display = 'none'; };
+                results.append(div);
+            }
+        };
+        for (const id of ['graph-search-input', 'graph-search-tema']) $(id)?.addEventListener('input', doSearch);
+        $('graph-search-filter')?.addEventListener('change', doSearch);
+        input.addEventListener('focus', doSearch);
+        document.addEventListener('click', e => { if (!results.contains(e.target) && e.target !== input) results.style.display = 'none'; });
+    }
+    function _massDialog(forAI = false) {
+        _dialog(forAI ? 'Generar relaciones con IA' : 'Añadir tarjetas por lote', (box, close) => {
+            const txt = document.createElement('p'); txt.className = 'graph-help';
+            txt.textContent = forAI ? 'Deja el tema vacío para incluir toda la asignatura (hasta 180 tarjetas).' : 'Añade las tarjetas seleccionadas sin cambiar la disposición general.';
+            const title = document.createElement('label'); title.textContent = 'Tema (opcional)';
+            const tema = document.createElement('input'); tema.type = 'number'; tema.min = '1'; tema.placeholder = 'Todos los temas';
+            const tlabel = document.createElement('label'); tlabel.textContent = 'Tipo';
+            const tipo = document.createElement('select');
+            for (const type of ['', 'Definición', 'Teorema', 'Proposición', 'Lema', 'Corolario', 'Demot', 'Demop', 'Demol', 'Ejercicio', 'Ejemplo'])
+                tipo.add(new Option(type || 'Todos los tipos', type));
+            const actions = document.createElement('div'); actions.className = 'graph-actions';
+            const cancel = document.createElement('button'); cancel.className = 'graph-secondary'; cancel.textContent = 'Cancelar'; cancel.onclick = close;
+            const submit = document.createElement('button'); submit.textContent = forAI ? 'Proponer relaciones' : 'Añadir nodos';
+            submit.onclick = () => {
+                const theme = tema.value ? Number(tema.value) : null, cardType = tipo.value;
+                if (forAI) {
+                    const asig = State.get('nombreAsignaturaActual');
+                    const cards = ((State.get('biblioteca') || {})[asig] || []).filter(c =>
+                        (theme == null || Number(c.Tema) === theme) && (!cardType || c.Apartado === cardType));
+                    if (!cards.length) return Toast.show('No hay tarjetas para ese filtro', 'warning');
+                    GraphAI.generarMapaConIA(cards);
+                } else _cb.onAddMassive?.(theme, cardType);
+                close();
             };
-        }
-
-        document.addEventListener('keydown', (e) => {
-            const modal = document.getElementById('modal-graph');
-            if (!modal || modal.classList.contains('hidden')) return; 
-
-            if (e.key === 'Escape') {
-                if (_previewPanel && _previewPanel.style.display === 'flex') {
-                    _previewPanel.style.display = 'none'; 
-                } else {
-                    cerrarMapa(); // CORRECCIÓN: camelCase aplicado
-                }
-                return;
+            actions.append(cancel, submit); box.append(txt, title, tema, tlabel, tipo, actions);
+        });
+    }
+    function _deleteSelection() {
+        if (!_network) return;
+        // Primero aristas para evitar refrescos que pierdan la selección.
+        const edges = _network.getSelectedEdges(), nodes = _network.getSelectedNodes();
+        for (const id of edges) _cb.onRemoveEdge?.(id);
+        for (const id of nodes) _cb.onRemoveNode?.(id);
+    }
+    function _download(blob, filename) {
+        const a = document.createElement('a'), url = URL.createObjectURL(blob);
+        a.href = url; a.download = filename; document.body.append(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+    function _filename(ext) {
+        const name = _cb.onGetMap?.()?.name || 'Mapa';
+        return name.replace(/[^a-z0-9áéíóúüñ_-]+/gi, '_').slice(0, 50) + '.' + ext;
+    }
+    function _textDialog(importing) {
+        _dialog(importing ? 'Importar mapa desde texto' : 'Exportar mapa en texto', (box, close) => {
+            const help = document.createElement('p'); help.className = 'graph-help';
+            help.textContent = importing ? 'Pega un archivo ESTUDIADOR-GRAPH v1. Los IDs se resolverán en tu biblioteca; si no coinciden, se probará una coincidencia exacta y única por título/tipo/tema.' :
+                'Copia el contenido para revisarlo con otro LLM. Los IDs estables permitirán importar de vuelta las relaciones.';
+            const textarea = document.createElement('textarea'); textarea.className = 'graph-textarea';
+            textarea.value = importing ? '' : _cb.onExportText?.() || '';
+            const feedback = document.createElement('p'); feedback.className = 'graph-help';
+            const actions = document.createElement('div'); actions.className = 'graph-actions';
+            const cancel = document.createElement('button'); cancel.className = 'graph-secondary'; cancel.textContent = 'Cerrar'; cancel.onclick = close;
+            if (importing) {
+                const mode = document.createElement('select'); mode.id = 'graph-import-mode';
+                mode.add(new Option('Añadir / combinar', 'merge')); mode.add(new Option('Sustituir mapa activo', 'replace'));
+                const preview = document.createElement('button'); preview.textContent = 'Validar'; preview.className = 'graph-secondary';
+                const submit = document.createElement('button'); submit.textContent = 'Aplicar'; submit.disabled = true;
+                let validated = null;
+                preview.onclick = () => {
+                    validated = Graph.analizarTexto(textarea.value);
+                    feedback.textContent = validated.errors.length ? validated.errors.slice(0, 8).join('\n') :
+                        `${validated.nodes.length} nodos y ${validated.edges.length} relaciones válidas. Puedes aplicar.`;
+                    submit.disabled = !!validated.errors.length || !validated.nodes.length;
+                };
+                textarea.oninput = () => { submit.disabled = true; validated = null; feedback.textContent = ''; };
+                submit.onclick = () => {
+                    const result = _cb.onImportText?.(textarea.value, mode.value === 'replace');
+                    if (result?.ok) { Toast.show('Mapa importado correctamente', 'success'); close(); }
+                    else feedback.textContent = result?.errors?.join('\n') || 'Error de importación';
+                };
+                actions.append(mode, preview, submit, cancel);
+            } else {
+                const copy = document.createElement('button'); copy.textContent = 'Copiar';
+                copy.onclick = async () => {
+                    try { await navigator.clipboard.writeText(textarea.value); Toast.show('Texto copiado', 'success'); }
+                    catch { textarea.select(); document.execCommand('copy'); Toast.show('Texto seleccionado para copiar', 'info'); }
+                };
+                const download = document.createElement('button'); download.textContent = 'Descargar .txt';
+                download.onclick = () => _download(new Blob([textarea.value], {type:'text/plain;charset=utf-8'}), _filename('txt'));
+                actions.append(copy, download, cancel);
             }
-
-            if (_previewPanel && _previewPanel.style.display === 'flex') {
-                if (document.activeElement?.id === 'graph-search-input') return;
-
-                const btnShow = document.getElementById('graph-preview-show');
-                const ratesDiv = document.getElementById('graph-preview-rates');
-
-                if ((e.key === ' ' || e.key === 'Enter') && btnShow && btnShow.style.display !== 'none') {
-                    e.preventDefault();
-                    btnShow.click();
-                } else if (ratesDiv && ratesDiv.style.display !== 'none') {
-                    if (['1', '2', '3', '4'].includes(e.key)) {
-                        e.preventDefault();
-                        const btnCalificar = document.querySelector(`.btn-dif-${e.key}`);
-                        if (btnCalificar) btnCalificar.click();
-                    }
-                }
+            box.append(help, textarea, feedback, actions);
+        }, '800px');
+    }
+    function _exportPNG() {
+        const svg = _buildSVG(); if (!svg) return;
+        const url = URL.createObjectURL(new Blob([svg.text], {type:'image/svg+xml;charset=utf-8'}));
+        const image = new Image();
+        image.onload = () => {
+            try {
+                const factor = Math.min(2, 7000 / Math.max(svg.width, svg.height));
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.ceil(svg.width * factor);
+                canvas.height = Math.ceil(svg.height * factor);
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+                canvas.toBlob(blob => blob ? _download(blob, _filename('png')) :
+                    Toast.show('No se pudo convertir el mapa en PNG', 'error'), 'image/png');
+            } finally { URL.revokeObjectURL(url); }
+        };
+        image.onerror = () => { URL.revokeObjectURL(url); Toast.show('No se pudo generar el PNG', 'error'); };
+        image.src = url;
+    }
+    function _buildSVG() {
+        if (!_network) return;
+        const { nodes, edges } = _visible();
+        if (!nodes.length) return Toast.show('El mapa está vacío', 'warning');
+        const positions = _network.getPositions(nodes.map(n => n.id));
+        const boxes = new Map();
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const n of nodes) {
+            const b = _network.getBoundingBox(n.id);
+            boxes.set(String(n.id), b);
+            minX = Math.min(minX, b.left); minY = Math.min(minY, b.top);
+            maxX = Math.max(maxX, b.right); maxY = Math.max(maxY, b.bottom);
+        }
+        const pad = 55, width = Math.max(200, maxX - minX + pad * 2), height = Math.max(120, maxY - minY + pad * 2);
+        const fg = _css('--text-main', '#eee'), bg = _css('--bg-color', '#121212');
+        const border = _css('--border-light', '#777');
+        const content = [`<svg xmlns="http://www.w3.org/2000/svg" width="${Math.ceil(width)}" height="${Math.ceil(height)}" viewBox="${minX-pad} ${minY-pad} ${width} ${height}">`,
+            `<rect x="${minX-pad}" y="${minY-pad}" width="${width}" height="${height}" fill="${_escaped(bg)}"/>`,
+            `<defs><marker id="arrow" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6" fill="none" stroke="${_escaped(border)}"/></marker></defs>`];
+        for (const e of edges) {
+            const from = positions[String(e.source)], to = positions[String(e.target)];
+            if (!from || !to) continue;
+            const label = String(e.label || '');
+            const sourceBox = boxes.get(String(e.source)), targetBox = boxes.get(String(e.target));
+            const clipToEdge = (p, q, b) => {
+                const dx = q.x - p.x, dy = q.y - p.y;
+                const halfW = (b.right - b.left) / 2 + 1, halfH = (b.bottom - b.top) / 2 + 1;
+                const tx = dx ? Math.abs(halfW / dx) : Infinity;
+                const ty = dy ? Math.abs(halfH / dy) : Infinity;
+                const t = Math.min(tx, ty, 1);
+                return { x:p.x+dx*t, y:p.y+dy*t };
+            };
+            const a = clipToEdge(from, to, sourceBox), b = clipToEdge(to, from, targetBox);
+            content.push(`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${_escaped(border)}" stroke-width="1.6" ${e.reviewed === false ? 'stroke-dasharray="5 4"' : ''} marker-end="url(#arrow)"/>`);
+            if (label) {
+                const tx = (from.x + to.x) / 2, ty = (from.y + to.y) / 2;
+                const length = Math.min(350, label.length * 6.4 + 12);
+                content.push(`<rect x="${tx-length/2}" y="${ty-12}" width="${length}" height="19" rx="3" fill="${_escaped(bg)}"/>`,
+                    `<text x="${tx}" y="${ty+1}" text-anchor="middle" font-family="sans-serif" font-size="11" fill="${_escaped(fg)}">${_escaped(label.slice(0, 54))}</text>`);
+            }
+        }
+        for (const n of nodes) {
+            const b = boxes.get(String(n.id)), color = _fsrs ? _colorEstado(n.card) : _tipoColor(n.card.Apartado);
+            const label = _plain(n.card.Titulo).slice(0, 75);
+            content.push(`<rect x="${b.left}" y="${b.top}" width="${b.right-b.left}" height="${b.bottom-b.top}" rx="5" fill="${_escaped(_css('--surface-1', '#2a2a2a'))}" stroke="${_escaped(color)}" stroke-width="2"/>`);
+            const maxChars = Math.max(10, Math.floor((b.right-b.left-18)/7));
+            const words = label.split(/\s+/), lines = [];
+            let line = '';
+            for (const word of words) {
+                if (line && (line + ' ' + word).length > maxChars) { lines.push(line); line = ''; }
+                if (word.length > maxChars) {
+                    if (line) { lines.push(line); line = ''; }
+                    for (let i = 0; i < word.length; i += maxChars) lines.push(word.slice(i, i + maxChars));
+                } else line = line ? line + ' ' + word : word;
+            }
+            if (line) lines.push(line);
+            const midpoint = (b.top+b.bottom)/2 - (lines.length-1)*7;
+            content.push(`<text text-anchor="middle" font-size="12" font-family="sans-serif" fill="${_escaped(fg)}">`);
+            lines.forEach((row, i) => content.push(`<tspan x="${(b.left+b.right)/2}" y="${midpoint+i*14+4}">${_escaped(row)}</tspan>`));
+            content.push('</text>');
+        }
+        content.push('</svg>');
+        return { text: content.join('\n'), width, height };
+    }
+    function _exportSVG() {
+        const svg = _buildSVG();
+        if (svg) _download(new Blob([svg.text], {type:'image/svg+xml;charset=utf-8'}), _filename('svg'));
+    }
+    function _bindToolbar() {
+        if (_toolbarBound) return; _toolbarBound = true;
+        $('graph-btn-edge')?.addEventListener('click', () => _setMode('edge'));
+        $('graph-btn-delete')?.addEventListener('click', _deleteSelection);
+        $('graph-btn-fit')?.addEventListener('click', () => _network?.fit({animation:{duration:350}}));
+        $('graph-btn-close')?.addEventListener('click', cerrarMapa);
+        $('btn-togglegrafo')?.addEventListener('click', () => window.abrirMapaConceptual?.());
+        $('graph-btn-add-mass')?.addEventListener('click', () => _massDialog(false));
+        $('graph-btn-ia')?.addEventListener('click', () => _massDialog(true));
+        document.addEventListener('keydown', e => {
+            const modal = $('modal-graph'); if (!modal || modal.classList.contains('hidden')) return;
+            if (e.key === 'Escape') {
+                const overlay = modal.querySelector('.graph-overlay:last-of-type');
+                if (overlay) overlay.remove();
+                else if (_preview?.style.display === 'flex') _preview.style.display = 'none';
+                else cerrarMapa();
+                e.stopPropagation(); return;
+            }
+            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
+            if (_preview?.style.display === 'flex') {
+                if (e.key === ' ' || e.key === 'Enter') { $('graph-preview-show')?.click(); e.preventDefault(); }
+                if (['1','2','3','4'].includes(e.key)) { _preview.querySelector(`[data-rate="${e.key}"]`)?.click(); e.preventDefault(); }
             }
         });
+    }
+    function abrirMapa(asig, nodes, edges, tipos, callbacks) {
+        _cb = callbacks || {}; _types = tipos || {}; _allNodes = nodes || []; _allEdges = edges || [];
+        _hiddenTypes.clear(); _emphasis = null; _selected = null; _setMode('normal');
+        $('modal-graph')?.classList.remove('hidden');
+        if ($('graph-asig-label')) $('graph-asig-label').textContent = asig;
+        _createTools(); _bindToolbar(); _bindSearch(); _initNetwork();
+        setTimeout(() => $('graph-search-input')?.focus(), 100);
+    }
+    function refreshMapa(nodes, edges, tipos) {
+        _allNodes = nodes || []; _allEdges = edges || []; _types = tipos || {};
+        if (_emphasis) {
+            const ids = new Set(_allNodes.map(n => String(n.id)));
+            if (_emphasis.nodes.some(id => !ids.has(String(id)))) _emphasis = null;
+        }
+        _redraw();
+    }
+    function cerrarMapa() {
+        if (_network) { _network.destroy(); _network = null; _dataNodes=null; _dataEdges=null; }
+        $('graph-node-tooltip')?.remove();
+        _preview?.remove(); _preview = null;
+        $('modal-graph')?.querySelectorAll('.graph-overlay').forEach(el => el.remove());
+        $('modal-graph')?.classList.add('hidden'); _mode = 'normal';
+    }
+    function mostrarPreview(card, id) {
+        if (!_preview) { _preview = document.createElement('aside'); _preview.id = 'graph-preview'; _preview.className = 'graph-preview'; $('modal-graph').append(_preview); }
+        _preview.innerHTML = `<div class="graph-preview-head"><strong>${_escaped(card.Apartado || 'Tarjeta')}</strong>
+            <button id="graph-preview-close" class="graph-secondary btn-modern btn-reveal" aria-label="Cerrar">×</button></div>
+            <div class="graph-preview-content"><h3>${_escaped(card.Titulo || '(sin título)')}</h3>
+                <div id="graph-preview-answer" hidden></div></div>
+            <div class="graph-preview-footer"><button id="graph-preview-show" class="btn-modern btn-reveal graph-primary">Mostrar contenido</button>
+            <div id="graph-preview-rates" hidden>
+                <button class="btn-dif btn-dif-1" data-rate="1">1 Fácil</button>
+                <button class="btn-dif btn-dif-2" data-rate="2">2 Bien</button>
+                <button class="btn-dif btn-dif-3" data-rate="3">3 Difícil</button>
+                <button class="btn-dif btn-dif-4" data-rate="4">4 Mal</button>
+            </div></div>`;
+        // El contenido procede de las tarjetas locales: se mantiene el renderizado HTML/LaTeX de Estudiador.
+        $('graph-preview-answer').innerHTML = card.Contenido || '(Sin contenido)';
+        _preview.style.display = 'flex';
+        $('graph-preview-close').onclick = () => _preview.style.display = 'none';
+        $('graph-preview-show').onclick = () => {
+            $('graph-preview-answer').hidden = false; $('graph-preview-rates').hidden = false;
+            $('graph-preview-show').hidden = true;
+            if (typeof MathJax !== 'undefined' && MathJax.typesetPromise)
+                MathJax.typesetPromise([$('graph-preview-answer')]).catch(() => {});
+        };
+        for (const button of _preview.querySelectorAll('[data-rate]')) button.onclick = () => {
+            _cb.onRateCard?.(id, Number(button.dataset.rate)); _preview.style.display = 'none';
+        };
+        if (typeof MathJax !== 'undefined' && MathJax.typesetPromise)
+            MathJax.typesetPromise([_preview]).catch(() => {});
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+        _bindToolbar();
+        const observer = new MutationObserver(() => { if (_network) _redraw(); });
+        observer.observe(document.documentElement, {attributes:true, attributeFilter:['class','style','data-theme']});
+        if (document.body) observer.observe(document.body, {attributes:true, attributeFilter:['class','style','data-theme']});
     });
-
-    // CORRECCIÓN: Exportación estandarizada
     return { abrirMapa, refreshMapa, cerrarMapa, mostrarPreview };
 })();

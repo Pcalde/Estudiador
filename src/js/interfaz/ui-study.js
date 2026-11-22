@@ -87,7 +87,7 @@ const UIStudy = (() => {
             cont?.classList.remove('hidden');
             document.getElementById('controles-respuesta')?.classList.remove('hidden');
             document.getElementById('area-revelar')?.classList.add('hidden');
-            btnOcultar?.classList.remove('hidden');
+            btnOcultar?.classList.add('hidden');
         } else {
             cont?.classList.add('hidden');
             document.getElementById('controles-respuesta')?.classList.add('hidden');
@@ -131,7 +131,7 @@ const UIStudy = (() => {
     function renderBotonesDificultad(modoEstudio) {
         const esAnki = modoEstudio === 'anki';
         const config = esAnki
-            ? [['1', '5 días'], ['2', '10 min'], ['3', '6 min'], ['4', '&lt;1 min']]
+            ? [['1', 'Graduar'], ['2', '10 min'], ['3', '6 min'], ['4', '1 min']]
             : [['1', 'Fácil'],  ['2', 'Bien'],   ['3', 'Difícil'], ['4', 'Mal']];
         const ids = ['btn-procesarrepaso', 'btn-procesarrepaso-2', 'btn-procesarrepaso-3', 'btn-procesarrepaso-4'];
         ids.forEach((id, i) => {

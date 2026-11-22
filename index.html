@@ -142,9 +142,9 @@
 
     <div class="sidebar-header-row">
         <span class="sidebar-label">PROYECTOS</span>
-        <button id="btn-crearproyecto" class="btn-header-add" title="Nueva Asignatura / Importar JSON">+</button>
+        <button id="btn-crearproyecto" class="btn-header-add" title="Nuevo proyecto">+</button>
     </div>
-    <ul id="lista-proyectos" class="section-list" style="max-height: 150px; min-height: 30px;">
+    <ul id="lista-proyectos" class="section-list">
         <li style="padding:10px; color: #555; font-style: italic; font-size: 0.8em;">Sin proyectos.</li>
     </ul>
 
@@ -157,12 +157,9 @@
             </div>
         </button>
 
-        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; width: 100%;">
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 100%;">
             <button id="btn-abrirexamen" class="btn-modern btn-sidebar btn-icon-sm" title="Modo Examen" style="width: 100%; display: flex; justify-content: center;">
                 <i class="fa-solid fa-skull-crossbones"></i>
-            </button>
-            <button id="btn-quiz" class="btn-modern btn-sidebar btn-icon-sm" title="Tipo Test" style="width: 100%; display: flex; justify-content: center;">
-                <i class="fa-solid fa-list-check"></i>
             </button>
             <button id="btn-togglepizarra" class="btn-modern btn-sidebar btn-icon-sm" title="Activar Pizarra" style="width: 100%; display: flex; justify-content: center;">
                 <i class="fa-solid fa-chalkboard-user"></i>
@@ -175,6 +172,20 @@
     </div>
     <input type="file" id="file-input-unified" multiple accept=".json" style="display: none;">
 </div>
+
+<dialog id="sidebar-folder-dialog" aria-labelledby="sidebar-folder-title">
+    <form>
+        <h2 id="sidebar-folder-title"></h2>
+        <label for="sidebar-folder-field"></label>
+        <input id="sidebar-folder-field">
+        <p role="alert"></p>
+        <div class="sidebar-dialog-actions">
+            <button type="button" class="sidebar-dialog-extra" hidden>Nueva carpeta</button>
+            <button type="button" onclick="this.closest('dialog').close()">Cancelar</button>
+            <button type="submit">Guardar</button>
+        </div>
+    </form>
+</dialog>
 
 <div id="main-content">
     <div class="container">
@@ -338,35 +349,22 @@
                     <span id="graph-hint" style="font-size:0.75em; color:var(--accent); font-style:italic;"></span>
 
                     <div style="display:flex; gap:6px; margin-left:auto;">
-                        <button id="graph-btn-ia" title="Generar mapa con IA"
-                            style="background:var(--accent); border:none; color:#000;
-                                padding:5px 12px; border-radius:6px; cursor:pointer; font-size:0.82em; font-weight:bold; transition:all 0.2s;">
+                        <button id="graph-btn-ia" class="btn-modern btn-next graph-primary" title="Generar mapa con IA">
                             <i class="fa-solid fa-wand-magic-sparkles"></i> IA: Generar
                         </button>
-                        <button id="graph-btn-add-mass" title="Añadir bloque de tarjetas"
-                            style="background:none; border:1px solid var(--accent); color:var(--accent);
-                                padding:5px 12px; border-radius:6px; cursor:pointer; font-size:0.82em; transition:all 0.2s;">
+                        <button id="graph-btn-add-mass" class="btn-modern btn-reveal" title="Añadir bloque de tarjetas">
                             <i class="fa-solid fa-layer-group"></i> Lote
                         </button>
-                        <button id="graph-btn-edge" title="Modo conexión"
-                            style="background:none; border:1px solid var(--border-light); color:var(--text-muted);
-                                padding:5px 12px; border-radius:6px; cursor:pointer; font-size:0.82em;">
+                        <button id="graph-btn-edge" class="btn-modern btn-reveal" title="Modo conexión">
                             <i class="fa-solid fa-link"></i> Conectar
                         </button>
-                        <button id="graph-btn-delete" title="Eliminar seleccionado"
-                            style="background:none; border:1px solid var(--border-light); color:var(--status-red);
-                                padding:5px 12px; border-radius:6px; cursor:pointer; font-size:0.82em;">
+                        <button id="graph-btn-delete" class="btn-modern btn-reveal" title="Eliminar seleccionado">
                             <i class="fa-solid fa-trash"></i>
                         </button>
-                        <button id="graph-btn-fit" title="Centrar vista"
-                            style="background:none; border:1px solid var(--border-light); color:var(--text-muted);
-                                padding:5px 12px; border-radius:6px; cursor:pointer; font-size:0.82em;">
+                        <button id="graph-btn-fit" class="btn-modern btn-reveal" title="Centrar vista">
                             <i class="fa-solid fa-compress"></i>
                         </button>
-                        <button id="graph-btn-close" title="Cerrar"
-                            style="background:rgba(244,67,54,0.1); border:1px solid var(--status-red);
-                                color:var(--status-red); padding:5px 12px; border-radius:6px;
-                                cursor:pointer; font-size:0.82em;">✕</button>
+                        <button id="graph-btn-close" class="btn-modern btn-reveal" title="Cerrar">✕</button>
                     </div>
                 </div>
 
@@ -1191,7 +1189,7 @@
                     </p>
                 </div>
                 
-                <div class="setting-row" style="display:flex; justify-content:space-between; align-items-center; margin-top: 10px;">
+                <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; margin-top: 10px;">
                     <label>Modelo OpenRouter:</label>
                     <select id="set-openrouter-modelo" style="padding:8px; background: #1a1a1a; border: 1px solid #333; color: #eee; border-radius: 4px; min-width: 200px;">
                         <option value="">Cargando modelos...</option>
@@ -1511,8 +1509,12 @@
                 <span class="exam-mode-icon"><i class="fa-solid fa-brain"></i></span>
                 <strong>Feynman</strong>
             </label>
-            <button class="exam-mode-card" data-action="quiz" title="Tipo Test">
-                <span class="exam-mode-icon"><i class="fa-solid fa-clipboard-question"></i>
+            <button type="button" id="ex-mode-btn-graph" class="exam-mode-card" title="Examen de relaciones del mapa activo">
+                <span class="exam-mode-icon"><i class="fa-solid fa-diagram-project"></i></span>
+                <strong>Relaciones</strong>
+            </button>
+            <button type="button" class="exam-mode-card" data-action="quiz" title="Tipo Test">
+                <span class="exam-mode-icon"><i class="fa-solid fa-bomb fa-swing"></i></span>
                 <strong>Tipo Test</strong>
             </button>
             
@@ -1692,49 +1694,11 @@
             <button id="btn-cerrarexamen-6" style="flex:1; padding:10px; background:linear-gradient(135deg,#4CAF50,#2e7d32); border:none; border-radius:8px; color:white; font-weight:bold; cursor:pointer;">Cerrar</button>
         </div>
     </div>
+    <section id="quiz-config" class="exam-quiz-panel" style="display:none"></section>
+    <section id="quiz-pregunta" class="exam-quiz-panel" style="display:none"></section>
+    <section id="quiz-resultados" class="exam-quiz-panel" style="display:none"></section>
 </div>
 
-<!-- ════════════════════════════════════════════════════════════════
-     MODAL: TIPO TEST CON IA
-     ════════════════════════════════════════════════════════════════ -->
-<div id="quiz-modal" style="display:none; position:fixed; inset:0; z-index:10001; background:rgba(0,0,0,0.88); backdrop-filter:blur(6px); align-items:center; justify-content:center;">
-    
-<!-- PANTALLA: Configuración -->
-    <div id="quiz-config" style="
-        background:#1e1e1e; border:1px solid #444; border-radius:14px;
-        padding:28px 32px; max-width:500px; width:100%; margin:auto;
-        animation: popIn 0.3s cubic-bezier(0.34,1.56,0.64,1);">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-            <h3 style="margin:0; color:#eee;"><i class="fa-solid fa-list-check"></i> Tipo Test</h3>
-            <button onclick="UI_Quiz.cerrar()" class="btn-cerrar-modal" style="background: transparent; border: none; color: var(--text-muted); font-size: 1.2em; cursor: pointer; padding: 5px; transition: color 0.2s;" onmouseover="this.style.color='var(--status-red)'" onmouseout="this.style.color='#888'">✕</button>
-        </div>
-    </div>
-
-    <!-- PANTALLA: Preguntas -->
-    <div id="quiz-pregunta" style="display:none;
-        background:#1e1e1e; border:1px solid #444; border-radius:14px;
-        padding:28px 32px; max-width:600px; width:100%; margin:auto;
-        animation: popIn 0.3s cubic-bezier(0.34,1.56,0.64,1);">
-
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-            <h3 style="margin:0; color:#eee;">Pregunta</h3>
-            <button onclick="UI_Quiz.cerrar()" class="btn-cerrar-modal" style="background: transparent; border: none; color: var(--text-muted); font-size: 1.2em; cursor: pointer; padding: 5px; transition: color 0.2s;" onmouseover="this.style.color='var(--status-red)'" onmouseout="this.style.color='#888'">✕</button>
-        </div>
-        <div id="quiz-pregunta-container"></div>
-    </div>
-
-    <!-- PANTALLA: Resultados -->
-    <div id="quiz-resultados" style="display:none;
-        background:#1e1e1e; border:1px solid #444; border-radius:14px;
-        padding:28px 32px; max-width:550px; width:100%; margin:auto;
-        animation: popIn 0.3s cubic-bezier(0.34,1.56,0.64,1);">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-            <h3 style="margin:0; color:#eee;">Resultados</h3>
-            <button onclick="UI_Quiz.cerrar()" class="btn-cerrar-modal" style="background: transparent; border: none; color: var(--text-muted); font-size: 1.2em; cursor: pointer; padding: 5px; transition: color 0.2s;" onmouseover="this.style.color='var(--status-red)'" onmouseout="this.style.color='#888'">✕</button>
-        </div>
-    </div>
-</div>
-    
 <canvas id="pizarra-canvas" class="hidden" style="position: fixed; top: 0; left: 0; z-index: 9000; cursor: crosshair; touch-action: none;"></canvas>
 <div id="pizarra-controls" style="position: fixed; bottom: 20px; right: 20px; z-index: 9001; display: flex; gap: 10px; flex-direction: column; align-items: flex-end;">
     
@@ -2022,12 +1986,11 @@
                 <span style="color:#777; font-size:0.75em;">Orden temario</span>
             </label>
 
-            <!-- Lectura -->
-            <input type="radio" name="radio-modo-estudio" id="check-modo-lectura" value="lectura" style="display:none;">
+            <input type="checkbox" id="check-modo-lectura" style="display:none;">
             <label for="check-modo-lectura" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px; background:#1a1a1a; border:2px solid #333; border-radius:10px; cursor:pointer; text-align:center; user-select:none; transition:all 0.2s;">
                 <i id="icon-modo-lectura" class="fa-solid fa-book-open" style="font-size:2em; color:#555; transition:color 0.2s;"></i>
                 <strong style="color:#ccc; font-size:0.95em;">Lectura</strong>
-                <span style="color:#777; font-size:0.75em;">Visible siempre</span>
+                <span style="color:#777; font-size:0.75em;">Mostrar respuesta siempre</span>
             </label>
 
             <input type="radio" name="radio-modo-estudio" id="check-modo-anki" value="anki" style="display:none;">
@@ -2059,6 +2022,8 @@
 <script src="src/js/study-engine.js" defer></script>
 <script src="src/js/ui.js" defer></script>
 <script src="src/js/telemetry.js" defer></script>
+<script src="src/js/feynman.js" defer></script>
+<script src="src/js/interfaz/ui-feynman.js" defer></script>
 <script src="src/js/exam.js" defer></script> 
 <script src="src/js/quiz.js" defer></script>
 <script src="src/js/ui-quiz.js" defer></script>
@@ -2091,8 +2056,10 @@
 <script src="src/js/settings.js"></script>
 <script src="src/js/filters.js"></script>
 <script src="src/js/mobile.js"></script>
+<script src="src/js/graph-layout.js"></script>
 <script src="src/js/graph.js"></script>
 <script src="src/js/graph-ai.js" defer></script>
+<script src="src/js/graph-exam.js" defer></script>
 <script src="src/js/test-ai.js" defer></script>
 <script src="src/js/audio-manager.js"></script>
 <script src="src/js/app.js" defer></script>

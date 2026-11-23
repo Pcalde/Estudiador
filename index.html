@@ -1503,13 +1503,13 @@
             <section aria-label="Opciones generales">
                 <div class="exam-setup-fields">
                     <label>Asignatura<select id="ex-asig" class="form-input"></select></label>
-                    <label><span id="ex-num-label">Número de tarjetas</span><input id="ex-num" class="form-input" type="number" value="10" min="1" max="100"></label>
+                    <label>Número de tarjetas<input id="ex-num" class="form-input" type="number" value="10" min="1" max="100"></label>
                 </div>
                 <fieldset class="exam-setup-group"><legend>Tipos de contenido</legend><div id="ex-tipos-grid" class="exam-quiz-type-grid"></div></fieldset>
-                <fieldset class="exam-setup-group"><legend>Contenido incluido</legend><div id="ex-contenido" class="exam-quiz-filter-grid"></div><small>Si no eliges temas o apartados, se incluyen todos.</small></fieldset>
-                <fieldset class="exam-setup-group" id="ex-tramo"><legend>Tramo de tarjetas</legend><div class="exam-setup-fields"><label>Desde<select id="ex-desde" class="form-input"></select></label><label>Hasta (incluido)<select id="ex-hasta" class="form-input"></select></label></div></fieldset>
-                <label class="exam-setup-switch"><input type="checkbox" id="ex-repaso"> Solo conceptos difíciles o con fallos</label>
-                <p id="ex-disponibles" class="exam-setup-available" role="status"></p>
+                <fieldset class="exam-setup-group"><legend>Contenido incluido</legend><div id="ex-contenido" class="exam-setup-content"></div><small>Si no eliges temas o apartados, se incluyen todos.</small></fieldset>
+                <fieldset class="exam-graph-incompatible exam-setup-group" id="ex-tramo"><legend>Tramo de tarjetas</legend><div class="exam-setup-fields"><label>Desde<select id="ex-desde" class="form-input"></select></label><label>Hasta (incluido)<select id="ex-hasta" class="form-input"></select></label></div></fieldset>
+                <label class="exam-graph-incompatible exam-setup-switch"><input type="checkbox" id="ex-repaso"> Solo conceptos difíciles o con fallos</label>
+                <p class="exam-graph-incompatible" id="ex-disponibles" class="exam-setup-available" role="status"></p>
             </section>
             <section aria-labelledby="ex-mode-title">
                 <section class="exam-setup-description" aria-live="polite">
@@ -1520,6 +1520,7 @@
                     <label id="ex-tiempo-wrap"> <span id="ex-tiempo-label">Tiempo por tarjeta (segundos, 0 = libre)</span><input id="ex-tiempo" class="form-input" type="number" value="0" min="0"></label>
                 </div>
                 <div id="ex-quiz-specific" class="exam-quiz-form" hidden></div>
+                <div id="ex-graph-slot" class="exam-graph-slot" hidden></div>
                 <div id="ex-feynman-slot"></div>
             </section>
         </div>

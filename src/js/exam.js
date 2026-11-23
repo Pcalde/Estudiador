@@ -396,7 +396,7 @@ const EXAM = (() => {
             const card = document.createElement('div');
             card.className = 'exam-correction-card';
             
-            const respuestaUsuario = (_respuestas[i] || '').trim() || '<em style="color:#555">(en blanco)</em>';
+            const respuestaUsuario = (_respuestas[i] || '').trim() || '<em style="color:var(--surface-4)">(en blanco)</em>';
             const badgeAsig = c._asigFicticia ? `<span style="color:#FF9800; margin-right:8px; font-weight:bold;">[${c._asigFicticia}]</span>` : '';
             
             let botonesNota = '';
@@ -509,7 +509,7 @@ const EXAM = (() => {
                       return `<div style="padding:4px 0;border-bottom:1px solid #222;color:#ccc;">
                           <span style="color:#f44336;margin-right:5px;">✖</span>
                           <strong>${c.Titulo || '?'}</strong>
-                          <span style="color:#555;font-size:0.85em;"> · ${c.Apartado || ''}</span>
+                          <span style="color:var(--surface-4);font-size:0.85em;"> · ${c.Apartado || ''}</span>
                        </div>`;
                   }).join('');
         }

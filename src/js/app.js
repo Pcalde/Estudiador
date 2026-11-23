@@ -8,7 +8,7 @@
 //   → ui.js → app.js  ← este archivo
 // ════════════════════════════════════════════════════════════════
 
-const APP_VERSION = "2.9.1";
+const APP_VERSION = "2.9.5";
 
 // ────────────────────────────────────────────────────────────────
 // UTIL — helpers privados reutilizables
@@ -855,6 +855,8 @@ document.addEventListener('DOMContentLoaded', () => {
     on('#btn-cancelaredicion-4',           'click',  cancelarEdicion);
     on('#btn-cancelaredicion',             'click',  cancelarEdicion);
     on('#btn-guardarnuevoconcepto',        'click',  guardarNuevoConcepto);
+    on('#btn-regenerar-titulo',             'click',  () => AI.regenerarTituloEnEditor());
+    on('#btn-reintentar-titulos',           'click',  () => AI.reintentarTitulosFallidos());
     on('#btn-descargarasignaturaactual',   'click',  () => window.descargarAsignaturaActual());
     on('#btn-guardaredicionjson',          'click',  () => window.guardarEdicionJSON());
     on('#btn-volver-visual',              'click',  abrirEditorAmigable);
@@ -887,7 +889,7 @@ document.addEventListener('DOMContentLoaded', () => {
             label.style.boxShadow = 'none';
             const icon = label.querySelector('i');
             const strong = label.querySelector('strong');
-            if (icon) icon.style.color = '#555';
+            if (icon) icon.style.color = 'var(--surface-4)';
             if (strong) strong.style.color = '#ccc';
         });
         
@@ -1074,6 +1076,191 @@ document.addEventListener('DOMContentLoaded', () => {
     on('#btn-togglechat', 'click',   toggleChat);
     on('#btn-open-chat',  'click',   toggleChat);
     on('#ai-user-input',  'keydown', (e) => checkEnterIA(e));
+
+    // Herramientas de presentación del chat (sin modificar su servicio de IA).
+    const omniWidget = document.getElementById('ai-chat-widget');
+    const omniInput = document.getElementById('ai-user-input');
+    const omniLaunch = document.getElementById('btn-open-chat');
+    const omniExpand = document.getElementById('btn-chat-expand');
+    // El cambio de tamaño expandido se gestiona más abajo, junto a la geometría.
+    document.querySelectorAll('.omni-quick-prompt').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (!omniInput) return;
+            omniInput.value = btn.dataset.prompt || '';
+            omniInput.dispatchEvent(new Event('input', { bubbles: true }));
+            omniInput.focus();
+            omniInput.setSelectionRange(omniInput.value.length, omniInput.value.length);
+        });
+    });
+    omniInput?.addEventListener('input', () => {
+        omniInput.style.height = '42px';
+        omniInput.style.height = `${Math.min(150, Math.max(42, omniInput.scrollHeight))}px`;
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && omniWidget && !omniWidget.classList.contains('hidden') && omniWidget.style.display !== 'none') {
+            event.preventDefault();
+            document.getElementById('btn-togglechat')?.click();
+        }
+    });
+    if (omniWidget && omniLaunch && typeof MutationObserver !== 'undefined') {
+        const syncOmniExpanded = () => {
+            const open = !omniWidget.classList.contains('hidden') && omniWidget.style.display !== 'none';
+            omniLaunch.setAttribute('aria-expanded', String(open));
+        };
+        new MutationObserver(syncOmniExpanded).observe(omniWidget, { attributes: true, attributeFilter: ['class', 'style'] });
+        syncOmniExpanded();
+    }
+
+    // Omnisciente: mover, redimensionar y guardar geometría en este perfil.
+    // Se desactiva en móvil para respetar el panel inferior existente.
+    if (omniWidget) {
+        const key = 'estudiador_omni_geometry_v1';
+        const desktop = () => window.matchMedia('(min-width: 951px)').matches;
+        const minWidth = 340, minHeight = 300, margin = 8;
+        const bounds = () => ({ w: window.innerWidth, h: window.innerHeight });
+        const clamp = (n, low, high) => Math.max(low, Math.min(n, Math.max(low, high)));
+        const store = () => {
+            if (!desktop() || omniWidget.classList.contains('omni-expanded')) return;
+            const r = omniWidget.getBoundingClientRect();
+            try {
+                Perfil.local.setItem(key, JSON.stringify({ left: Math.round(r.left), top: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) }));
+            } catch (error) { Logger?.warn?.('No se guardó geometría de Omnisciente', error); }
+        };
+        const apply = (g) => {
+            if (!desktop() || !g) return;
+            const v = bounds();
+            const width = clamp(Number(g.width) || 460, minWidth, v.w - 2 * margin);
+            const height = clamp(Number(g.height) || 640, minHeight, v.h - 2 * margin);
+            omniWidget.style.width = `${width}px`;
+            omniWidget.style.height = `${height}px`;
+            omniWidget.style.left = `${clamp(Number(g.left) || 0, margin, v.w - width - margin)}px`;
+            omniWidget.style.top = `${clamp(Number(g.top) || 0, margin, v.h - height - margin)}px`;
+            omniWidget.style.right = 'auto';
+            omniWidget.style.bottom = 'auto';
+        };
+        let saved = null;
+        try { saved = JSON.parse(Perfil.local.getItem(key) || 'null'); } catch (_) { /* Perfil antiguo */ }
+        if (saved) apply(saved);
+        const dragHandle = omniWidget.querySelector('.omni-drag-handle');
+        const grip = document.getElementById('omni-resize-grip');
+        const startPointer = (event, mode, handle) => {
+            if (!desktop() || event.button !== 0 || omniWidget.classList.contains('omni-expanded')) return;
+            event.preventDefault();
+            const r = omniWidget.getBoundingClientRect();
+            const initial = { x: event.clientX, y: event.clientY, left: r.left, top: r.top, width: r.width, height: r.height };
+            // Una ventana posicionada con bottom/right no se desplaza correctamente con left/top.
+            apply(initial);
+            omniWidget.classList.add('omni-interacting');
+            handle.setPointerCapture(event.pointerId);
+            const move = (e) => {
+                if (e.pointerId !== event.pointerId) return;
+                const dx = e.clientX - initial.x, dy = e.clientY - initial.y;
+                const v = bounds();
+                if (mode === 'move') {
+                    omniWidget.style.left = `${clamp(initial.left + dx, margin, v.w - initial.width - margin)}px`;
+                    omniWidget.style.top = `${clamp(initial.top + dy, margin, v.h - initial.height - margin)}px`;
+                } else {
+                    omniWidget.style.width = `${clamp(initial.width + dx, minWidth, v.w - initial.left - margin)}px`;
+                    omniWidget.style.height = `${clamp(initial.height + dy, minHeight, v.h - initial.top - margin)}px`;
+                }
+            };
+            const finish = (e) => {
+                if (e.pointerId !== event.pointerId) return;
+                handle.removeEventListener('pointermove', move);
+                handle.removeEventListener('pointerup', finish);
+                handle.removeEventListener('pointercancel', finish);
+                omniWidget.classList.remove('omni-interacting');
+                if (handle.hasPointerCapture(e.pointerId)) handle.releasePointerCapture(e.pointerId);
+                store();
+            };
+            handle.addEventListener('pointermove', move);
+            handle.addEventListener('pointerup', finish);
+            handle.addEventListener('pointercancel', finish);
+        };
+        dragHandle?.addEventListener('pointerdown', e => startPointer(e, 'move', dragHandle));
+        grip?.addEventListener('pointerdown', e => startPointer(e, 'resize', grip));
+        document.getElementById('btn-chat-reset')?.addEventListener('click', () => {
+            try { Perfil.local.removeItem(key); } catch (_) {}
+            omniWidget.classList.remove('omni-expanded');
+            omniExpand?.setAttribute('aria-pressed', 'false');
+            for (const property of ['left', 'top', 'width', 'height', 'right', 'bottom']) omniWidget.style.removeProperty(property);
+        });
+        // Expandir sin perder las medidas personalizadas, y reducir al tamaño anterior.
+        let beforeExpand = null;
+        omniExpand?.addEventListener('click', () => {
+            const expanded = !omniWidget.classList.contains('omni-expanded');
+            if (expanded) {
+                const r = omniWidget.getBoundingClientRect();
+                beforeExpand = { left: r.left, top: r.top, width: r.width, height: r.height };
+                for (const property of ['left', 'top', 'width', 'height', 'right', 'bottom']) omniWidget.style.removeProperty(property);
+            }
+            omniWidget.classList.toggle('omni-expanded', expanded);
+            omniExpand.setAttribute('aria-pressed', String(expanded));
+            omniExpand.setAttribute('title', expanded ? 'Reducir chat' : 'Ampliar chat');
+            if (!expanded && beforeExpand) {
+                apply(beforeExpand);
+                beforeExpand = null;
+            }
+        });
+        window.addEventListener('resize', () => {
+            if (!desktop() || omniWidget.classList.contains('omni-expanded')) return;
+            const r = omniWidget.getBoundingClientRect();
+            if (omniWidget.style.left) apply({ left: r.left, top: r.top, width: r.width, height: r.height });
+        });
+    }
+
+    // Las respuestas del chat se añaden de forma dinámica por ai.js.
+    // MathJax ya está instalado globalmente, pero necesita procesar esos nodos nuevos.
+    const omniMessages = document.getElementById('chat-messages');
+    if (omniMessages && typeof MutationObserver !== 'undefined') {
+        let pendingMath = new Set();
+        let mathTimer = null;
+        let mathBusy = false;
+        const flushMath = async () => {
+            if (mathBusy) return;
+            if (!window.MathJax?.typesetPromise) {
+                // La librería se carga con async en index.html.
+                if (document.getElementById('MathJax-script') && pendingMath.size) mathTimer = setTimeout(flushMath, 500);
+                return;
+            }
+            const nodes = [...pendingMath].filter(el => el.isConnected);
+            pendingMath.clear();
+            if (!nodes.length) return;
+            mathBusy = true;
+            try {
+                await MathJax.startup.promise;
+                MathJax.typesetClear?.(nodes);
+                await MathJax.typesetPromise(nodes);
+            } catch (err) {
+                Logger?.warn?.('No se pudo renderizar LaTeX de Omnisciente', err);
+            } finally {
+                mathBusy = false;
+                if (pendingMath.size) mathTimer = setTimeout(flushMath, 250);
+            }
+        };
+        const scheduleMath = (node) => {
+            if (!node || node.nodeType !== 1) return;
+            const root = node.closest?.('.chat-msg');
+            if (root && root.classList.contains('ai')) pendingMath.add(root);
+            else node.querySelectorAll?.('.chat-msg.ai').forEach(el => pendingMath.add(el));
+            if (pendingMath.size && !mathBusy) {
+                clearTimeout(mathTimer);
+                mathTimer = setTimeout(flushMath, 180);
+            }
+        };
+        const observer = new MutationObserver(records => {
+            // No procesar el DOM generado por MathJax para evitar bucles infinitos.
+            if (mathBusy) return;
+            for (const record of records) {
+                if (record.target.parentElement?.closest?.('mjx-container, .MathJax')) continue;
+                if (record.target.closest?.('mjx-container, .MathJax')) continue;
+                if (record.type === 'characterData') scheduleMath(record.target.parentElement);
+                else for (const node of record.addedNodes) scheduleMath(node.nodeType === 3 ? node.parentElement : node);
+            }
+        });
+        observer.observe(omniMessages, { childList: true, subtree: true, characterData: true });
+        omniMessages.querySelectorAll('.chat-msg.ai').forEach(scheduleMath);
+    }
 
     // Amigos
     on('#btn-cerrarmodalamigos', 'click', cerrarModalAmigos);

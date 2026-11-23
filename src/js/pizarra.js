@@ -117,8 +117,8 @@ const Pizarra = (() => {
         ['lapiz', 'resaltador', 'linea', 'borrador'].forEach(m => {
             const btn = document.getElementById('pz-btn-' + m);
             if (btn) {
-                btn.style.background   = (m === modo) ? '#555' : '#333';
-                btn.style.borderColor  = (m === modo) ? 'var(--accent)' : '#555';
+                btn.style.background   = (m === modo) ? 'var(--surface-4)' : '#333';
+                btn.style.borderColor  = (m === modo) ? 'var(--accent)' : 'var(--surface-4)';
             }
         });
         canvas.style.cursor = modo === 'borrador' ? 'cell' : 'crosshair';
@@ -130,7 +130,7 @@ const Pizarra = (() => {
         if (picker) picker.value = c;
         ['amarillo', 'blanco', 'cyan', 'salmon', 'verde'].forEach(nombre => {
             const el = document.getElementById('pz-color-' + nombre);
-            if (el) el.style.borderColor = '#555';
+            if (el) el.style.borderColor = 'var(--surface-4)';
         });
         if (modoPizarra !== 'borrador') aplicarContextoActual();
     }

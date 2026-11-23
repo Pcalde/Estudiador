@@ -7,7 +7,7 @@
 const COLOR_PRESETS = {
     'default': {
         '--bg-color': '#121212', '--menu-color': '#181818', '--card-bg': '#1e1e1e',
-        '--text-main': '#e0e0e0', '--border': '#333333', '--accent': '#00ffcc',
+        '--text-main': '#e0e0e0', '--border': '#333333', '--accent': '#077215',
         '--pomo-work': '#d95550', '--pomo-short': '#4c9195', '--pomo-long': '#457ca3',
         '--status-green': '#4CAF50', '--status-red': '#f44336', '--status-yellow': '#FF9800', '--status-blue': '#2196F3'
     },

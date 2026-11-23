@@ -48,13 +48,13 @@ function toggleIconoFiltro(iconId, activeColor) {
     const cbId    = 'check-filtro-' + iconId.replace('icon-', '');
     const checked = document.getElementById(cbId)?.checked;
     const icon    = document.getElementById(iconId);
-    if (icon) icon.style.color = checked ? activeColor : '#555';
+    if (icon) icon.style.color = checked ? activeColor : 'var(--surface-4)';
 }
 
 function limpiarFiltros() {
     ['icon-hoy', 'icon-nuevas', 'icon-tema', 'icon-rango', 'icon-tipo', 'icon-dificultad'].forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.style.color = '#555';
+        if (el) el.style.color = 'var(--surface-4)';
     });
 
     ['check-filtro-hoy', 'check-filtro-nuevas', 'check-filtro-tema',

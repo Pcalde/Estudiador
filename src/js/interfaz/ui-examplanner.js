@@ -41,6 +41,10 @@ const UIExamPlanner = (() => {
     }
 
     function renderRecuperacion() {
+        const indicadorDia = document.getElementById('ep-dia-source');
+        if (indicadorDia) indicadorDia.textContent = borradorRecuperable
+            ? 'Borrador sin guardar · los cambios de este editor están pendientes de confirmación.'
+            : 'Revisión confirmada ' + planCache.revision;
         const ws = document.getElementById('examplanner-workspace');
         if (!ws) return;
         ws.querySelector('#ep-recovery')?.remove();
@@ -50,7 +54,7 @@ const UIExamPlanner = (() => {
         panel.className = 'ep-card ep-recovery';
         panel.setAttribute('role', 'status');
         panel.innerHTML = `
-            <p>${guardando ? 'Guardando cambios…' : 'Borrador pendiente de guardar. La revisión confirmada sigue protegida.'} ${escapeHtml(errorBorrador)}</p>
+            <p>${guardando ? 'Guardando cambios…' : 'Borrador sin guardar. El calendario, la configuración y los editores muestran cambios pendientes.'} ${escapeHtml(errorBorrador)}</p><p>Las métricas y las exportaciones muestran la revisión confirmada ${planCache.revision}.</p>
             <button class="ep-btn" id="ep-retry" ${guardando ? 'disabled' : ''}>Reintentar guardado</button>
             <button class="ep-btn" id="ep-resolve" ${guardando ? 'disabled' : ''}>Guardar borrador sobre revisión actual…</button>
             <button class="ep-btn" id="ep-recuperar-borrador">Descargar borrador</button>
@@ -154,6 +158,8 @@ const UIExamPlanner = (() => {
         if (UIState.view === 'calendar') renderCalendar();
         else if (UIState.view === 'setup') renderSetup();
         else if (UIState.view === 'metrics') renderMetrics();
+        else if (UIState.view === 'academic') UIPlannerAcademic.render(document.getElementById('ep-main'), getPlanSync(), savePlan);
+        else renderAgendaCorta();
     }
 
     // ── VISTAS ──
@@ -168,6 +174,9 @@ function renderNavegacion() {
 
     nav.innerHTML = `
         <button class="ep-navb ${UIState.view === 'calendar' ? 'on' : ''}" data-view="calendar"><i class="fa-solid fa-calendar-days"></i> Calendario</button>
+        <button class="ep-navb ${UIState.view === 'week' ? 'on' : ''}" data-view="week">Semana</button>
+        <button class="ep-navb ${UIState.view === 'today' ? 'on' : ''}" data-view="today">Hoy</button>
+        <button class="ep-navb ${UIState.view === 'academic' ? 'on' : ''}" data-view="academic">Académico</button>
         <button class="ep-navb ${UIState.view === 'setup' ? 'on' : ''}" data-view="setup"><i class="fa-solid fa-gear"></i> Configuración</button>
         <button class="ep-navb ${UIState.view === 'metrics' ? 'on' : ''}" data-view="metrics"><i class="fa-solid fa-chart-pie"></i> Métricas</button>
         <div style="width:1px; background:var(--border); margin:0 6px;"></div>
@@ -300,7 +309,7 @@ function renderNavegacion() {
                             border-radius:4px; background:${color}1a; border:1px solid ${color}88;
                             font-size:8px; overflow:hidden; ${opacity}">
                             <i class="fa-solid ${icon}" style="font-size:7px; color:${color}; flex-shrink:0;"></i>
-                            <strong style="color:${color}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; ${strikethrough}">${acro}</strong>
+                            <strong style="color:${color}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; ${strikethrough}">${escapeHtml(acro)}</strong>
                             ${isFail ? `<i class="fa-solid fa-xmark" style="font-size:6px; color:var(--status-red); margin-left:auto;"></i>` : ''}
                         </div>
                     `;
@@ -383,6 +392,27 @@ function renderNavegacion() {
 
         // open-day se gestiona exclusivamente mediante CommandRegistry.
 
+    }
+
+    function renderAgendaCorta() {
+        const main = document.getElementById('ep-main');
+        const plan = getPlanSync();
+        const inicio = Domain.parseDateSafe(Domain.getFechaHoy());
+        if (UIState.view === 'week') inicio.setDate(inicio.getDate() - (inicio.getDay()+6)%7);
+        const dias = UIState.view === 'week' ? 7 : 1;
+        let html = '';
+        for (let i=0; i<dias; i++) {
+            const fecha = Domain.toISODateString(inicio);
+            const tareas = plan.schedule[fecha] || [];
+            const minutos = tareas.reduce((n,t)=>n+(t.plannedMinutes ?? t.pomosAsignados*plan.pomodoroConversion.minutes),0);
+            html += `<section class="ep-card"><h3><button class="ep-btn" data-action="open-day" data-fecha="${fecha}">${escapeHtml(Domain.formatearFechaES(fecha))}</button></h3>
+                <p>${Math.round(minutos)} / ${Math.round(PlannerEngine.capacidadMinutos(plan,fecha))} min</p>
+                ${plan.examenes.filter(e=>e.fecha===fecha).map(e=>`<p>Examen · ${escapeHtml(e.asigNombre || e.id)}</p>`).join('')}
+                ${tareas.map(t=>`<p>${escapeHtml(t.asigNombre)} · ${escapeHtml(t.temaNombre)} · ${Math.round(t.plannedMinutes ?? t.pomosAsignados*plan.pomodoroConversion.minutes)} min · ${escapeHtml({pending:'Pendiente',completed:'Completada',failed:'Fallida'}[t.status])}</p>`).join('') || '<p>Sin sesiones.</p>'}
+            </section>`;
+            inicio.setDate(inicio.getDate()+1);
+        }
+        main.innerHTML='<div class="ep-academic">'+html+'</div>';
     }
 
     function renderSetup() {
@@ -748,6 +778,19 @@ function renderNavegacion() {
                 sincronizarDOM();
                 
                 State.batch(() => {
+                    for (const tema of draftTemas) {
+                        const anterior = asigActualizada.temas.find(t=>t.id===tema.id);
+                        if (!anterior || Number(anterior.pomosEstimados)===Number(tema.pomosEstimados)) continue;
+                        const actividades = (plan.activities || []).filter(a=>a.subjectId===asig.id && a.topicId===tema.id && !a.archived);
+                        const total = actividades.reduce((n,a)=>n+(a.estimateMinutes || 0),0);
+                        for (const actividad of actividades) {
+                            actividad.estimateMinutes = Number(tema.pomosEstimados)*plan.pomodoroConversion.minutes*(total ? (actividad.estimateMinutes || 0)/total : 1/actividades.length);
+                            actividad.source='manual';
+                        }
+                    }
+                    for (const actividad of plan.activities || []) {
+                        if (actividad.subjectId===asig.id && !draftTemas.some(t=>t.id===actividad.topicId)) actividad.archived=true;
+                    }
                     asigActualizada.temas = draftTemas;
                     savePlan(plan);
                 });
@@ -829,14 +872,15 @@ function renderNavegacion() {
         const filas = PlannerModel.metricasPorConvocatoria(planCache, Domain.getFechaHoy());
         main.innerHTML = `<div class="ep-metrics">
             <h2>Progreso por convocatoria</h2>
-            <p>Revisión confirmada ${planCache.revision}. Cumplimiento de sesiones hasta hoy. El trabajo pendiente descuenta únicamente tareas completadas del tema y convocatoria correspondientes.</p>
+            <p>Revisión confirmada ${planCache.revision}. El historial y su cumplimiento incluyen las sesiones hasta hoy. La preparación descuenta únicamente trabajo del tema y convocatoria realizado en fechas anteriores al examen. Las sesiones del mismo día se conservan en el historial.</p>
             ${filas.map(f => `<section class="ep-card" data-examen-metrics="${escapeHtml(f.examenId || 'sin-convocatoria')}">
                 <h3>${escapeHtml(f.nombre)}</h3>
                 <p>Estimado · ${f.estimado == null ? 'Sin estimación asociada' : f.estimado} pomodoros</p>
                 <p>Planificado pendiente · ${f.planificado} pomodoros</p>
-                <p>Completado hasta hoy · ${f.completado} pomodoros</p>
+                <p>Historial completado hasta hoy · ${f.completado} pomodoros</p>
+                <p>Preparación completada antes del examen · ${f.preparacionCompletada} pomodoros</p>
                 <p>Trabajo pendiente · ${f.pendiente == null ? 'Sin estimación asociada' : f.pendiente} pomodoros</p>
-                <p>Cumplimiento · ${f.sesiones ? Math.round(100 * f.realizadas / f.sesiones) + '%' : 'Sin sesiones vencidas'}</p>
+                <p>Cumplimiento histórico · ${f.sesiones ? Math.round(100 * f.realizadas / f.sesiones) + '%' : 'Sin sesiones vencidas'}</p>
                 <p>Sesiones fallidas · ${f.fallidas}</p>
                 ${f.sinEstimacion ? '<p>Hay temas cuya estimación total requiere confirmación.</p>' : ''}
             </section>`).join('')}
@@ -852,8 +896,8 @@ function renderNavegacion() {
             const formatFecha = typeof Domain !== 'undefined' && Domain.formatearFechaES ? Domain.formatearFechaES(fecha) : fecha;
             const tareas = plan.schedule[fecha] || [];
 
-            const optsTipos = (plan.studyTypes || []).map(t => `<option value="${t.id}">${t.name}</option>`).join('');
-            const optsAsig = (plan.asignaturasPlanificadas || []).map(a => `<option value="${a.id}">${a.nombre}</option>`).join('');
+            const optsTipos = (plan.studyTypes || []).map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join('');
+            const optsAsig = (plan.asignaturasPlanificadas || []).map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.nombre)}</option>`).join('');
 
             overlay = document.createElement('div');
             overlay.id = 'ep-dia-overlay';
@@ -865,6 +909,7 @@ function renderNavegacion() {
                     <button id="ep-btn-close-dia" style="background:none; border:none; color:var(--text-main); cursor:pointer; font-size:1.2rem;"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 
+                <p id="ep-dia-source" role="status" class="ep-source">${borradorRecuperable ? 'Borrador sin guardar · los cambios de este editor están pendientes de confirmación.' : 'Revisión confirmada ' + planCache.revision}</p>
                 <div id="ep-tasks-list" style="padding:15px; overflow-y:auto; flex:1;">
                     ${tareas.length === 0 ? '<div style="color:gray;text-align:center;font-size:12px;padding:20px;"><i class="fa-solid fa-mug-hot"></i> Día libre.</div>' : tareas.map(t => {
                         const icon = plan.studyTypes.find(st => st.id === t.studyTypeId)?.icon || 'fa-book';
@@ -901,6 +946,7 @@ function renderNavegacion() {
                         <option value="">Selecciona asignatura primero</option>
                     </select>
                     
+                    <label>Actividad<select id="ep-dia-activity" class="ep-inp"><option value="">Sin actividad asociada</option></select></label>
                     <div style="display:flex; align-items:center; gap:15px; margin-bottom:15px; background:rgba(0,0,0,0.2); padding:10px; border-radius:6px; border:1px solid var(--border);">
                         <span style="font-size:11px; color:gray;"><i class="fa-solid fa-stopwatch"></i> Pomodoros:</span>
                         <input type="range" id="ep-dia-pomos" min="1" max="12" value="2" style="flex:1; accent-color:var(--accent); cursor:pointer;">
@@ -987,6 +1033,15 @@ function renderNavegacion() {
             return;
         }
         selectTema.innerHTML = asig.temas.map(t => `<option value="${t.id}">${escapeHtml(t.nombre)}</option>`).join('');
+        const actualizarActividades = () => {
+            const disponibles = (plan.activities || []).filter(a=>a.subjectId===asigId && a.topicId===selectTema.value && !a.archived);
+            document.getElementById('ep-dia-activity').innerHTML='<option value="">Sin actividad asociada</option>' +
+                disponibles.map(a=>'<option value="'+escapeHtml(a.id)+'">'+escapeHtml(plan.studyTypes.find(t=>t.id===a.type)?.name || a.type)+'</option>').join('');
+            if (disponibles.length===1) document.getElementById('ep-dia-activity').value=disponibles[0].id;
+        };
+        selectTema.onchange=actualizarActividades;
+        actualizarActividades();
+
     }
 
     function guardarTareaDia(fecha) {
@@ -1018,6 +1073,7 @@ function renderNavegacion() {
             const nuevaTarea = {
                 id: idTarea,
                 idTarea,
+                activityId: document.getElementById('ep-dia-activity').value || null,
                 examenId: document.getElementById('ep-dia-examen').value || null,
                 asigId: asig.id,
                 asigNombre: asig.nombre,
@@ -1073,19 +1129,47 @@ function renderNavegacion() {
 
 
 
-    async function lanzarAutoplan(plan) {
-        if (typeof PlannerEngine === 'undefined') return;
-        const resultado = PlannerEngine.generar(PlannerModel.migrar(plan), Domain.getFechaHoy());
-        
-        plan.schedule = resultado.scheduleGenerado;
-        try {
-            await savePlan(plan);
-        } catch {
-            return; // savePlan ya comunica el fallo de escritura.
-        }
-        Toast.show(resultado.log, resultado.excedido ? 'warning' : 'success', resultado.excedido ? 12000 : 3000);
-        UIState.view = 'calendar'; // Forzamos el salto a la vista calendario por UX
-        renderWorkspace();
+    async function lanzarAutoplan(original) {
+        const plan = PlannerModel.migrar(original);
+        const resultado = PlannerEngine.generar(plan, Domain.getFechaHoy());
+        document.getElementById('ep-preview')?.remove();
+        const overlay = document.createElement('div');
+        overlay.id = 'ep-preview';
+        overlay.className = 'ep-modal';
+        const antes = Object.entries(plan.schedule).flatMap(([fecha,tareas])=>tareas.map(t=>({fecha,...t})));
+        const despues = Object.entries(resultado.scheduleGenerado).flatMap(([fecha,tareas])=>tareas.map(t=>({fecha,...t})));
+        const anterior = new Map(antes.map(t=>[t.idTarea,t]));
+        const actual = new Map(despues.map(t=>[t.idTarea,t]));
+        const cambios = despues.filter(t=>JSON.stringify(t)!==JSON.stringify(anterior.get(t.idTarea)));
+        const retiradas = antes.filter(t=>!actual.has(t.idTarea));
+        overlay.innerHTML = `<div class="ep-modal-content">
+            <h2>Vista previa de planificación</h2>
+            <p>${resultado.excedido ? 'Propuesta parcial con conflictos o trabajo pendiente.' : resultado.sinHolgura ? 'Propuesta viable con reserva reducida.' : 'Propuesta viable con la disponibilidad declarada.'}</p>
+            <p>Heurística determinista. Revisión de origen ${plan.revision}. ${cambios.length} sesiones añadidas o modificadas, ${retiradas.length} retiradas.</p>
+            <p>Trabajo único pendiente estimado · ${Math.ceil(resultado.uniqueWorkRemainingMinutes)} min${resultado.unknownActivityCount ? ' + ' + resultado.unknownActivityCount + ' actividades sin estimación' : ''}. Incluye trabajo aún por realizar aunque ya figure en la propuesta. El historial completado hasta hoy se descuenta una vez por actividad.</p>
+            <p>Los déficits siguientes corresponden al plazo de cada convocatoria. Una actividad compartida puede aparecer en varias; sus déficits no se suman como trabajo adicional. Un plazo incumplido permanece en el informe aunque ese trabajo se haya completado después.</p>
+            <pre class="ep-preview-log">${escapeHtml(resultado.log)}</pre>
+            <details><summary>Sesiones propuestas y cambios</summary>
+                ${cambios.map(t=>`<p>Propuesta · ${t.fecha} · ${escapeHtml(t.asigNombre)} · ${escapeHtml(t.temaNombre)} · ${Math.round(t.plannedMinutes)} min</p>`).join('')}
+                ${retiradas.map(t=>`<p>Retirada · ${t.fecha} · ${escapeHtml(t.temaNombre)}</p>`).join('')}
+            </details>
+            <button class="ep-btn" id="ep-preview-cancel">Cancelar</button>
+            <button class="ep-btn acc" id="ep-preview-apply">${resultado.excedido ? 'Guardar propuesta parcial' : 'Aplicar propuesta'}</button>
+        </div>`;
+        document.body.appendChild(overlay);
+        overlay.querySelector('#ep-preview-cancel').onclick=()=>overlay.remove();
+        overlay.querySelector('#ep-preview-apply').onclick=async event=>{
+            event.currentTarget.disabled=true;
+            plan.schedule=resultado.scheduleGenerado;
+            try {
+                await savePlan(plan);
+                overlay.remove();
+                UIState.view='calendar';
+                renderWorkspace();
+            } catch {
+                event.currentTarget.disabled=false;
+            }
+        };
     }
 
     function guardarAsigExamen() {
@@ -1814,7 +1898,7 @@ function exportarCalendarioPDF() {
                         ${done ? 'opacity:0.5; text-decoration:line-through;' : ''}
                         ${fail ? 'border-color:#f44336; color:#f44336;' : ''}">
                         <span>${emoji}</span>
-                        <strong style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${acro}</strong>
+                        <strong style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(acro)}</strong>
                     </div>`;
                 }).join('');
                 const overflow = restantes > 0

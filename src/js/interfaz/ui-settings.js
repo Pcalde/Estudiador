@@ -136,13 +136,13 @@ const UISettings = (() => {
             modeloSeleccionado = f('set-groq-modelo')?.value || 'llama-3.3-70b-versatile';
         }
         
-        // Guardar modelo en localStorage
+        // Guardar modelo en Perfil.local
         if (modeloSeleccionado) {
-            localStorage.setItem('estudiador_ia_model', modeloSeleccionado);
+            Perfil.local.setItem('estudiador_ia_model', modeloSeleccionado);
         }
         
-        // Guardar proveedor en localStorage
-        localStorage.setItem('estudiador_ia_proveedor', proveedorSeleccionado);
+        // Guardar proveedor en Perfil.local
+        Perfil.local.setItem('estudiador_ia_proveedor', proveedorSeleccionado);
         
         const formData = {
             pomo: {

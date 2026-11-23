@@ -42,15 +42,15 @@ const UIExamPlanner = (() => {
             Logger.warn('[UIExamPlanner] getPlan: error leyendo IndexedDB:', e);
         }
         
-        // INTENTAR 2: Fallback a localStorage
+        // INTENTAR 2: Fallback a Perfil.local
         if (!plan) {
             try {
-                const planGuardado = localStorage.getItem('estudiador_planificador_pro');
+                const planGuardado = Perfil.local.getItem('estudiador_planificador_pro');
                 if (planGuardado) {
                     plan = JSON.parse(planGuardado);
                 }
             } catch(e) {
-                Logger.warn('[UIExamPlanner] getPlan: error leyendo localStorage:', e);
+                Logger.warn('[UIExamPlanner] getPlan: error leyendo Perfil.local:', e);
             }
         }
         
@@ -235,11 +235,11 @@ const UIExamPlanner = (() => {
                 .catch(e => Logger.error('[UIExamPlanner] Error guardando en IndexedDB:', e));
         }
         
-        // Guardar también en localStorage como fallback
+        // Guardar también en Perfil.local como fallback
         try {
-            localStorage.setItem('estudiador_planificador_pro', JSON.stringify(planCache));
+            Perfil.local.setItem('estudiador_planificador_pro', JSON.stringify(planCache));
         } catch(e) {
-            Logger.error('[UIExamPlanner] savePlan: error al guardar en localStorage:', e);
+            Logger.error('[UIExamPlanner] savePlan: error al guardar en Perfil.local:', e);
         }
         
         // Emitir evento para que otros handlers se enteren

@@ -5,7 +5,8 @@
 const UIFeynman = (() => {
     let montado = false;
     let desuscribir = null;
-    const ICONOS = { abuelo: 'fa-person-cane', padre: 'fa-user', companero: 'fa-user-graduate' };
+    const ICONOS = { abuelo: 'fa-person-cane', padre: 'fa-user', companero: 'fa-user-graduate', bachiller: 'fa-book-open-reader' };
+    const RETOS_ICONOS = { libre: 'fa-comments', analogia: 'fa-lightbulb', ejemplo: 'fa-calculator', breve: 'fa-bolt', detectar: 'fa-magnifying-glass' };
 
     function el(id) { return document.getElementById(id); }
     function textoSeguro(valor) { return String(valor ?? ''); }
@@ -27,40 +28,101 @@ const UIFeynman = (() => {
         }
     }
 
+    function ponerEstilos() {
+        if (el('feynman-css')) return;
+        const style = document.createElement('style');
+        style.id = 'feynman-css';
+        style.textContent = `
+            #ex-feynman-config { margin-top:16px; padding:14px; border:1px solid var(--border-light,#444); border-radius:10px; background:rgba(255,255,255,.025); }
+            #ex-feynman-config h4 { color:var(--text-main,#eee); margin:0 0 10px; font-size:.85rem; }
+            #examen-feynman { display:none; background:var(--card-bg,#1e1e1e); border:1px solid var(--border-light,#444); border-radius:14px; padding:24px; max-width:760px; width:100%; box-sizing:border-box; margin:auto; color:var(--text-main,#eee); }
+            .fey-top { display:flex; justify-content:space-between; align-items:start; gap:14px; }
+            .fey-sub { color:var(--text-muted,#999); font-size:.8rem; }
+            .fey-title { font-size:1.18rem; line-height:1.5; margin:8px 0 15px; }
+            .fey-progress { height:11px; border-radius:8px; overflow:hidden; background:var(--surface-2,#333); }
+            .fey-progress > div { height:100%; background:var(--accent,#4caf50); transition:width .25s ease; }
+            .fey-progress-caption { display:flex; align-items:baseline; justify-content:space-between; margin:14px 0 6px; }
+            .fey-progress-caption strong { font-size:1.45rem; }
+            .fey-log { display:flex; flex-direction:column; gap:12px; max-height:345px; min-height:125px; overflow-y:auto; margin:15px 0; padding:4px; }
+            .fey-bubble { max-width:88%; padding:12px; border-radius:12px; line-height:1.55; white-space:pre-wrap; overflow-wrap:anywhere; }
+            .fey-bubble.personaje { align-self:flex-start; background:var(--surface-2,#292929); border:1px solid var(--border-light,#444); }
+            .fey-bubble.estudiante { align-self:flex-end; background:rgba(76,175,80,.1); border:1px solid rgba(76,175,80,.35); }
+            .fey-bubble-label { font-size:.69rem; color:var(--text-muted,#999); font-weight:700; margin-bottom:6px; }
+            .fey-error { color:#ffb3ad; background:#60222240; padding:10px; border-radius:8px; font-size:.85rem; }
+            .fey-feedback { background:var(--surface-1,#222); border-left:3px solid var(--accent,#4caf50); padding:10px; margin:12px 0; font-size:.85rem; color:var(--text-main,#ccc); }
+            .fey-entry { width:100%; min-height:115px; resize:vertical; box-sizing:border-box; background:var(--surface-1,#171717); color:var(--text-main,#fff); border:1px solid var(--border-light,#444); border-radius:9px; padding:12px; font:inherit; }
+            .fey-actions { display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap; margin-top:10px; }
+            .fey-btn { cursor:pointer; border-radius:8px; padding:10px 14px; border:1px solid var(--border-light,#444); background:var(--surface-2,#333); color:var(--text-main,#eee); }
+            .fey-btn.primary { background:var(--accent,#4caf50); color:#101010; border-color:transparent; font-weight:700; }
+            .fey-btn:disabled { opacity:.42; cursor:not-allowed; }
+            .fey-metas { margin-top:16px; border-top:1px solid var(--border-light,#444); padding-top:12px; }
+            .fey-meta { margin:9px 0; font-size:.79rem; }
+            .fey-meta-bar { height:5px; background:var(--surface-2,#333); margin-top:5px; border-radius:5px; overflow:hidden; }
+            .fey-meta-bar > span { display:block; background:var(--accent,#4caf50); height:100%; }
+            .fey-report-item { border:1px solid var(--border-light,#444); border-radius:8px; padding:12px; margin:10px 0; }
+            .fey-report-item summary { cursor:pointer; }
+            .fey-report-item li { margin:5px 0; }
+            .fey-status { font-size:.75rem; color:var(--text-muted,#999); }
+            .fey-memory { border-left:3px solid #e3a04b; padding:9px 11px; background:rgba(227,160,75,.07); border-radius:7px; font-size:.8rem; margin:10px 0; }
+            .fey-verify { font-weight:600; margin:10px 0; }
+            @media(max-width:520px){ #examen-feynman{padding:14px;} .fey-bubble{max-width:96%;} }
+        `;
+        document.head.appendChild(style);
+    }
 
     function montar() {
         if (montado) return;
         const modal = el('examen-modal');
         const config = el('examen-config');
         if (!modal || !config) return;
+        ponerEstilos();
         const bloque = nodo('section');
         bloque.id = 'ex-feynman-config';
         const titulo = nodo('h4', '', '¿A quién quieres enseñárselo?');
         bloque.appendChild(titulo);
-        const opciones = nodo('div', 'fey-personajes');
+        const opciones = nodo('div', 'exam-quiz-choices fey-personajes');
+        const perfilesDesc = {
+            abuelo: 'Sin tecnicismos; explicación intuitiva',
+            padre: 'Conexiones con situaciones cotidianas',
+            companero: 'Resumen matemático antes del examen',
+            bachiller: 'Conectar con matemáticas de instituto'
+        };
         Object.entries(FEYNMAN.PERSONAJES).forEach(([id, perfil]) => {
-            const lab = nodo('label', 'fey-persona');
+            const lab = nodo('label', 'exam-mode-card exam-quiz-choice fey-persona');
             const radio = document.createElement('input');
             radio.type = 'radio'; radio.name = 'feynman-personaje'; radio.value = id;
             radio.checked = id === 'abuelo';
-            const icono = nodo('i', `fa-solid ${ICONOS[id]}`);
-            const texto = nodo('strong', '', perfil.nombre);
-            const mini = nodo('small', '', id === 'companero' ? 'Repaso antes del examen' : id === 'padre' ? 'Aplicaciones prácticas' : 'Sin tecnicismos');
-            lab.append(radio, icono, texto, mini);
+            const iconoWrap = nodo('span', 'exam-mode-icon');
+            iconoWrap.appendChild(nodo('i', `fa-solid ${ICONOS[id] || 'fa-user'}`));
+            lab.append(radio, iconoWrap, nodo('strong', '', perfil.nombre),
+                nodo('small', '', perfilesDesc[id] || perfil.objetivo));
             opciones.appendChild(lab);
         });
         bloque.appendChild(opciones);
-        bloque.appendChild(nodo('p', 'fey-sub', 'La cobertura conceptual no es una nota. La comprensión del personaje se comprueba en el diálogo. Se recomiendan 1–3 tarjetas.'));
-        const retoBox = nodo('label', 'fey-challenge');
-        retoBox.appendChild(nodo('span', '', 'Desafío opcional:'));
-        const retoSelect = nodo('select'); retoSelect.id = 'fey-reto';
-        Object.entries(FEYNMAN.RETOS).forEach(([key, nombre]) => {
-            const op = document.createElement('option'); op.value=key; op.textContent=nombre; retoSelect.appendChild(op);
+
+        const retoTitulo = nodo('h4', 'fey-reto-title', 'Desafío opcional');
+        bloque.appendChild(retoTitulo);
+        const retos = nodo('div', 'exam-quiz-choices fey-retos');
+        Object.entries(FEYNMAN.RETOS).forEach(([id, nombre]) => {
+            const lab = nodo('label', 'exam-mode-card exam-quiz-choice fey-reto-card');
+            const radio = document.createElement('input');
+            radio.type = 'radio'; radio.name = 'feynman-reto'; radio.value = id;
+            radio.checked = id === 'libre';
+            const iconoWrap = nodo('span', 'exam-mode-icon');
+            iconoWrap.appendChild(nodo('i', `fa-solid ${RETOS_ICONOS[id] || 'fa-star'}`));
+            lab.append(radio, iconoWrap, nodo('strong', '', id === 'libre' ? 'Libre' : ({analogia:'Analogía',ejemplo:'Ejemplo',breve:'Brevedad',detectar:'Detectar error'}[id] || id)), nodo('small','',nombre));
+            retos.appendChild(lab);
         });
-        retoBox.appendChild(retoSelect); bloque.appendChild(retoBox);
+        bloque.appendChild(retos);
+        bloque.appendChild(nodo('p', 'fey-sub', 'La cobertura conceptual no es una nota. Se recomiendan 1–3 tarjetas.'));
+        // Montaje en el área de configuración: no desplazar el pie del modal.
         const slot = el('ex-feynman-slot');
         if (slot) slot.appendChild(bloque);
-        else config.appendChild(bloque);
+        else {
+            const btnInicio = el('btn-iniciarexamen');
+            if (btnInicio && btnInicio.parentNode === config) config.insertBefore(bloque, btnInicio);
+            else config.appendChild(bloque);
+        }
 
         const root = nodo('section');
         root.id = 'examen-feynman';
@@ -81,7 +143,8 @@ const UIFeynman = (() => {
     function actualizarConfiguracion(modo) {
         const bloque = el('ex-feynman-config');
         if (bloque) bloque.style.display = modo === 'feynman' ? 'block' : 'none';
-        // El panel compartido decide cuándo mostrar el temporizador.
+        const tiempo = el('ex-tiempo')?.parentElement;
+        if (tiempo) tiempo.style.display = modo === 'feynman' ? 'none' : '';
     }
 
     function leerPersonaje() {
@@ -94,7 +157,6 @@ const UIFeynman = (() => {
         if (accion === 'enviar') FEYNMAN.responder(el('fey-respuesta')?.value || '');
         else if (accion === 'siguiente') FEYNMAN.avanzar();
         else if (accion === 'terminar') FEYNMAN.terminar();
-        else if (accion === 'cerrar-demo' && typeof EXAM !== 'undefined') EXAM.abrir();
         else if (accion === 'reintentar-preparacion') FEYNMAN.reintentarPreparacion();
         else if (accion === 'cerrar') {
             if (typeof window.cerrarExamen === 'function') window.cerrarExamen();
@@ -109,65 +171,12 @@ const UIFeynman = (() => {
         root.replaceChildren();
         if (estado.fase === 'resultados') {
             pintarResultados(root, estado);
-            if (typeof EXAM !== 'undefined') {
-                const r = estado.resumen;
-                const detalles = nodo('div', 'fey-shared-report');
-                while (root.firstChild) detalles.appendChild(root.firstChild);
-                // Los controles de resultados pertenecen ahora al panel común.
-                detalles.querySelectorAll('[data-fey-accion]').forEach(b => b.remove());
-                EXAM.mostrarResultadoExterno({
-                    origen:'feynman', nota: r.coberturaMedia === null ? NaN : r.coberturaMedia / 10,
-                    bien:r.verificados, mal:r.total - r.verificados,
-                    etiqueta:'Cobertura /10 · no nota',
-                    descripcion:`Feynman · ${r.evaluados}/${r.total} conceptos trabajados · La cobertura no es una calificación`,
-                    detalles
-                });
-                matematicas(detalles);
-                return;
-            }
         } else if (estado.fase === 'preparando') {
             pintarPreparacion(root, estado);
         } else {
             pintarDialogo(root, estado);
         }
         matematicas(root);
-    }
-
-    // Demostración completamente estática: ni FEYNMAN.iniciar ni llamadas de IA.
-    function mostrarDemo() {
-        const root = el('examen-feynman');
-        if (!root) return;
-        root.replaceChildren();
-        const cab = nodo('div', 'fey-top');
-        const encabezado = nodo('div');
-        encabezado.append(nodo('div', 'fey-sub', 'FEYNMAN · ABUELO · DEMOSTRACIÓN'),
-                          nodo('div', 'fey-title', 'Explica el teorema de Pitágoras'));
-        cab.append(encabezado, boton('Cerrar ✕', 'cerrar'));
-        root.appendChild(cab);
-        const aviso = nodo('p', 'fey-demo-notice', 'Ejemplo preestablecido. No utiliza IA, no consume tokens y no guarda resultados.');
-        root.appendChild(aviso);
-        const progreso = nodo('div', 'fey-progress-caption');
-        progreso.append(nodo('span', 'fey-sub', 'Cobertura conceptual (ejemplo)'), nodo('strong', '', '75%'));
-        root.appendChild(progreso);
-        const barra = nodo('div', 'fey-progress');
-        const avance = nodo('div'); avance.style.width = '75%';
-        barra.appendChild(avance); root.appendChild(barra);
-        root.appendChild(nodo('div', 'fey-verify', 'Comprensión del personaje: En comprobación (simulada)'));
-        const log = nodo('div', 'fey-log');
-        [
-          ['personaje', 'ABUELO', '¿Me explicas qué es el teorema de Pitágoras?'],
-          ['estudiante', 'TÚ', 'En un triángulo rectángulo, la suma de los cuadrados de los dos catetos es igual al cuadrado de la hipotenusa.'],
-          ['personaje', 'ABUELO', 'Entonces, si los catetos miden 3 y 4, ¿la hipotenusa mide 5?']
-        ].forEach(([rol, autor, mensaje]) => {
-            const burbuja = nodo('div', `fey-bubble ${rol}`);
-            burbuja.append(nodo('div', 'fey-bubble-label', autor), nodo('div', '', mensaje));
-            log.appendChild(burbuja);
-        });
-        root.appendChild(log);
-        root.appendChild(nodo('p', 'fey-sub', 'Esta conversación es una muestra de la interfaz, no una evaluación real.'));
-        const acciones = nodo('div', 'fey-actions');
-        acciones.appendChild(boton('Volver a configuración', 'cerrar-demo', 'primary'));
-        root.appendChild(acciones);
     }
 
     function pintarPreparacion(root, e) {
@@ -238,11 +247,9 @@ const UIFeynman = (() => {
         const siguiente = boton(e.indice === e.total - 1 ? 'Finalizar sesión' : 'Siguiente concepto', 'siguiente');
         siguiente.disabled = e.ocupado;
         acciones.appendChild(siguiente);
-        if (e.indice < e.total - 1) {
-            const terminar = boton('Terminar sesión anticipadamente', 'terminar');
-            terminar.disabled = e.ocupado;
-            acciones.appendChild(terminar);
-        }
+        const terminar = boton('Terminar ahora', 'terminar');
+        terminar.disabled = e.ocupado;
+        acciones.appendChild(terminar);
         root.appendChild(acciones);
 
 
@@ -283,7 +290,7 @@ const UIFeynman = (() => {
         root.appendChild(acciones);
     }
 
-    function leerReto() { return el('fey-reto')?.value || 'libre'; }
+    function leerReto() { return document.querySelector('input[name="feynman-reto"]:checked')?.value || 'libre'; }
 
-    return { montar, actualizarConfiguracion, leerPersonaje, leerReto, mostrarDemo };
+    return { montar, actualizarConfiguracion, leerPersonaje, leerReto };
 })();

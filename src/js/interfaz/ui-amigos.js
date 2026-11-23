@@ -225,7 +225,7 @@ const UIAmigos = (() => {
             loginForm?.classList.add('hidden');
             loggedInForm?.classList.remove('hidden');
         } else {
-            if (statusDiv) statusDiv.innerText = 'Estado: Desconectado (Modo Offline)';
+            if (statusDiv) statusDiv.innerText = 'Perfil de invitado · Los datos se guardan en este navegador';
             loginForm?.classList.remove('hidden');
             loggedInForm?.classList.add('hidden');
         }

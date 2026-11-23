@@ -2,6 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <script src="src/js/perfil.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Estudiador Pro</title>
     <script>
@@ -129,6 +130,7 @@
 </button>
     </div>
 
+    <button type="button" id="btn-reintentar-guardado" hidden>Reintentar guardado local</button>
     <div class="sidebar-header-row">
         <span class="sidebar-label">ASIGNATURAS</span>
         <div style="display:flex;gap:4px;">
@@ -1270,7 +1272,8 @@
             </p>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;">
                 <button id="btn-exportarbackup" class="btn-modern btn-reveal" style="padding: 10px; background: transparent; color: #ddd; border: 1px solid #666; border-radius: 4px; cursor: pointer;">Exportar JSON</button>
-                <button id="btn-document" class="btn-modern btn-reveal" style="padding: 10px; background: transparent; color: #ddd; border: 1px solid #666; border-radius: 4px; cursor: pointer;">Importar JSON</button>
+                <button id="btn-document" class="btn-modern btn-reveal" style="padding: 10px; background: transparent; color: #ddd; border: 1px solid #666; border-radius: 4px; cursor: pointer;">Restaurar copia</button>
+                <button id="btn-copia-anterior" class="btn-modern btn-reveal" style="grid-column: 1 / -1;">Descargar copia anterior al último reemplazo</button>
             </div>
             <input type="file" id="backup-input-unico" accept=".json" style="display:none;">
             <div style="margin-top:20px; text-align:center;">
@@ -1483,78 +1486,47 @@
      MODAL: MODO EXAMEN  (v1.16)
      ---------------------------------------- -->
 <div id="examen-modal" style="display:none; position:fixed; inset:0; z-index:10000; background:rgba(0,0,0,0.88); backdrop-filter:blur(6px); align-items:flex-start; justify-content:center; overflow-y:auto; padding:20px 10px;">
-    <!--  PANTALLA: Configuración  -->
-    <div id="examen-config" style="
-        background:#1e1e1e; border:1px solid #444; border-radius:14px;
-        padding:28px 32px; max-width:480px; width:100%; margin:auto;
-        animation: popIn 0.3s cubic-bezier(0.34,1.56,0.64,1);">
-
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-            <h3 style="margin:0; color:#eee;">Modo Examen</h3>
-            <button onclick="cerrarExamen()" class="btn-cerrar-modal" style="background: transparent; border: none; color: var(--text-muted); font-size: 1.2em; cursor: pointer; padding: 5px; transition: color 0.2s;" onmouseover="this.style.color='var(--status-red)'" onmouseout="this.style.color='#888'">✕</button>
+    <!-- PANTALLA: Configuración de examen — interfaz vinculada a EXAM -->
+    <div id="examen-config" class="exam-setup-panel">
+        <header class="exam-setup-header">
+            <div><h3>Modo Examen</h3><p>Selecciona cómo quieres practicar y delimita el contenido.</p></div>
+            <button type="button" class="btn-modern btn-neutral exam-setup-close" onclick="cerrarExamen()" aria-label="Cerrar examen">✕</button>
+        </header>
+        <div class="exam-mode-selector" aria-label="Modalidad del examen">
+            <button type="button" id="ex-mode-btn-flash" class="exam-mode-card" data-action="setModoExamen" data-modo="flash"><span class="exam-mode-icon"><i class="fa-solid fa-jet-fighter-up"></i></span><strong>Flash</strong></button>
+            <button type="button" id="ex-mode-btn-real" class="exam-mode-card" data-action="setModoExamen" data-modo="real"><span class="exam-mode-icon"><i class="fa-solid fa-person-military-rifle"></i></span><strong>Real</strong></button>
+            <button type="button" id="ex-mode-btn-feynman" class="exam-mode-card" data-action="setModoExamen" data-modo="feynman"><span class="exam-mode-icon"><i class="fa-solid fa-brain"></i></span><strong>Feynman</strong></button>
+            <button type="button" id="ex-mode-btn-graph" class="exam-mode-card" data-action="setModoExamen" data-modo="graph" title="Examinar relaciones del mapa activo"><span class="exam-mode-icon"><i class="fa-solid fa-diagram-project"></i></span><strong>Relaciones</strong></button>
+            <button type="button" id="ex-mode-btn-quiz" class="exam-mode-card" data-action="setModoExamen" data-modo="quiz" title="Tipo Test"><span class="exam-mode-icon"><i class="fa-solid fa-list-check"></i></span><strong>Tipo Test</strong></button>
         </div>
-
-        <div class="exam-mode-selector">
-            <label id="ex-mode-btn-flash" class="exam-mode-card" data-action="setModoExamen" data-modo="flash">
-                <span class="exam-mode-icon"><i class="fa-solid fa-jet-fighter-up"></i></span>
-                <strong>Flash</strong>
-            </label>
-
-            <label id="ex-mode-btn-real" class="exam-mode-card" data-action="setModoExamen" data-modo="real">
-                <span class="exam-mode-icon"><i class="fa-solid fa-person-military-rifle"></i></span>
-                <strong>Real</strong>
-            </label>
-
-            <label id="ex-mode-btn-feynman" class="exam-mode-card" data-action="setModoExamen" data-modo="feynman">
-                <span class="exam-mode-icon"><i class="fa-solid fa-brain"></i></span>
-                <strong>Feynman</strong>
-            </label>
-            <button type="button" id="ex-mode-btn-graph" class="exam-mode-card" title="Examen de relaciones del mapa activo">
-                <span class="exam-mode-icon"><i class="fa-solid fa-diagram-project"></i></span>
-                <strong>Relaciones</strong>
-            </button>
-            <button type="button" class="exam-mode-card" data-action="quiz" title="Tipo Test">
-                <span class="exam-mode-icon"><i class="fa-solid fa-bomb fa-swing"></i></span>
-                <strong>Tipo Test</strong>
-            </button>
-            
-        </div>
-
-        <div style="display:flex; flex-direction:column; gap:12px;">
-            <div>
-                <label style="font-size:0.8em; color:#888; display:block; margin-bottom:4px;">ASIGNATURA</label>
-                <select id="ex-asig" style="width:100%; padding:8px; background:#2a2a2a; color:#eee; border:1px solid #444; border-radius:6px; box-sizing:border-box;"></select>
-            </div>
-
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                <div>
-                    <label style="font-size:0.8em; color:#888; display:block; margin-bottom:4px;">Nº TARJETAS</label>
-                    <input type="number" id="ex-num" value="10" min="1" style="width:100%; padding:8px; background:#2a2a2a; color:#eee; border:1px solid #444; border-radius:6px; box-sizing:border-box;">
+        <div class="exam-setup-columns">
+            <section aria-label="Opciones generales">
+                <div class="exam-setup-fields">
+                    <label>Asignatura<select id="ex-asig" class="form-input"></select></label>
+                    <label><span id="ex-num-label">Número de tarjetas</span><input id="ex-num" class="form-input" type="number" value="10" min="1" max="100"></label>
                 </div>
-                <div>
-                    <label id="ex-tiempo-label" style="font-size:0.8em; color:#888; display:block; margin-bottom:4px;">TIEMPO/TARJETA (s, 0=libre)</label>
-                    <input type="number" id="ex-tiempo" value="0" min="0" style="width:100%; padding:8px; background:#2a2a2a; color:#eee; border:1px solid #444; border-radius:6px; box-sizing:border-box;">
+                <fieldset class="exam-setup-group"><legend>Tipos de contenido</legend><div id="ex-tipos-grid" class="exam-quiz-type-grid"></div></fieldset>
+                <fieldset class="exam-setup-group"><legend>Contenido incluido</legend><div id="ex-contenido" class="exam-quiz-filter-grid"></div><small>Si no eliges temas o apartados, se incluyen todos.</small></fieldset>
+                <fieldset class="exam-setup-group" id="ex-tramo"><legend>Tramo de tarjetas</legend><div class="exam-setup-fields"><label>Desde<select id="ex-desde" class="form-input"></select></label><label>Hasta (incluido)<select id="ex-hasta" class="form-input"></select></label></div></fieldset>
+                <label class="exam-setup-switch"><input type="checkbox" id="ex-repaso"> Solo conceptos difíciles o con fallos</label>
+                <p id="ex-disponibles" class="exam-setup-available" role="status"></p>
+            </section>
+            <section aria-labelledby="ex-mode-title">
+                <section class="exam-setup-description" aria-live="polite">
+                    <h4 id="ex-mode-title">Repaso Flash</h4>
+                    <p id="ex-mode-description">Recuperación rápida de conceptos.</p>
+                </section>
+                <div class="exam-setup-fields">
+                    <label id="ex-tiempo-wrap"> <span id="ex-tiempo-label">Tiempo por tarjeta (segundos, 0 = libre)</span><input id="ex-tiempo" class="form-input" type="number" value="0" min="0"></label>
                 </div>
-            </div>
-
-            <div>
-                <label style="font-size:0.8em; color:#888; display:block; margin-bottom:6px;">TIPOS (vacío = todos)</label>
-                <div id="ex-tipos-grid" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
-            </div>
-
-            <div>
-                <label style="font-size:0.8em; color:#888; display:block; margin-bottom:4px;">TEMAS (ej: 1,3,5 — vacío = todos)</label>
-                <input type="text" id="ex-temas" placeholder="1,2,3 o vacío" style="width:100%; padding:8px; background:#2a2a2a; color:#eee; border:1px solid #444; border-radius:6px; box-sizing:border-box;">
-            </div>
+                <div id="ex-quiz-specific" class="exam-quiz-form" hidden></div>
+                <div id="ex-feynman-slot"></div>
+            </section>
         </div>
-
-        <button id="btn-iniciarexamen" style="
-            margin-top:20px; width:100%; padding:12px;
-            background:linear-gradient(135deg,#4CAF50,#2e7d32);
-            border:none; border-radius:8px; color:white;
-            font-size:1em; font-weight:bold; cursor:pointer;">
-            Comenzar →
-        </button>
+        <footer class="exam-setup-footer">
+            <button type="button" class="btn-modern btn-reveal" onclick="EXAM.iniciarDemo()">Probar modo</button>
+            <button type="button" id="btn-iniciarexamen" class="btn-modern btn-success">Comenzar examen</button>
+        </footer>
     </div>
 
     <!--  PANTALLA: Tarjeta Flash (modo repaso)  -->
@@ -1563,6 +1535,8 @@
         padding:26px 30px; max-width:650px; width:100%; margin:auto;
         animation: popIn 0.25s ease;">
 
+        <nav id="ex-f-nav" class="exam-question-nav" aria-label="Tarjetas del examen Flash"></nav>
+        <div class="exam-setup-flash-actions"><button type="button" id="ex-f-anterior" class="btn-modern btn-neutral" onclick="EXAM.flashAnterior()">Anterior</button><button type="button" id="ex-f-saltar" class="btn-modern btn-reveal" onclick="EXAM.flashSaltar()">Siguiente</button></div>
         <!-- Progreso + timer -->
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
             <div style="flex-grow:1; height:5px; background:#333; border-radius:3px; overflow:hidden;">
@@ -1694,6 +1668,7 @@
             <button id="btn-cerrarexamen-6" style="flex:1; padding:10px; background:linear-gradient(135deg,#4CAF50,#2e7d32); border:none; border-radius:8px; color:white; font-weight:bold; cursor:pointer;">Cerrar</button>
         </div>
     </div>
+    <section id="graph-exam-screen" class="exam-quiz-panel" style="display:none"></section>
     <section id="quiz-config" class="exam-quiz-panel" style="display:none"></section>
     <section id="quiz-pregunta" class="exam-quiz-panel" style="display:none"></section>
     <section id="quiz-resultados" class="exam-quiz-panel" style="display:none"></section>
@@ -2009,7 +1984,7 @@
         </div>
     </div>
 </div>
-<div id="modal-montecarlo" class="modal-overlay"></div>
+<!-- Se ha eliminado el segundo modal-montecarlo vacío (ID duplicado). -->
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.9/standalone/umd/vis-network.min.js"></script>
 <!-- Módulos cargados en orden de dependencias -->

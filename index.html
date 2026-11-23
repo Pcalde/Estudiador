@@ -100,7 +100,7 @@
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
     <style>
         input[type="range"] {
-            appearance: none; -webkit-appearance: none; width: 100%; height: 6px; border-radius: 3px; background: #333; outline: none; padding: 0; margin: 0;
+            appearance: none; -webkit-appearance: none; width: 100%; height: 6px; border-radius: 3px; background: var(--surface-2); outline: none; padding: 0; margin: 0;
         }
         input[type="range"]::-webkit-slider-thumb {
             -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #4481ff; cursor: pointer; border: none;
@@ -124,7 +124,7 @@
     <div style="margin-bottom: 10px; display:flex; justify-content:space-between; align-items:center;">
         <h2 class="sidebar-title"><i class="fa-solid fa-horse-head"></i> ESTUDIADOR <span id="app-version-badge" class="sidebar-version"></span></h2>
         <button id="btn-abrirajustes" 
-        style="background:none; border:none; color:#666; cursor:pointer; font-size:1.2em; transition:color 0.3s, transform 0.3s;" 
+        style="background:none; border:none; color:var(--text-subtle);; cursor:pointer; font-size:1.2em; transition:color 0.3s, transform 0.3s;" 
         title="Ajustes">
     <i class="fa-solid fa-gear"></i>
 </button>
@@ -139,7 +139,7 @@
         </div>
     </div>
     <ul id="lista-asignaturas" class="section-list">
-        <li style="padding:10px; color: #555; font-style: italic; font-size: 0.8em;">Vacío.</li>
+        <li style="padding:10px; color: var(--surface-4); font-style: italic; font-size: 0.8em;">Vacío.</li>
     </ul>
 
     <div class="sidebar-header-row">
@@ -147,7 +147,7 @@
         <button id="btn-crearproyecto" class="btn-header-add" title="Nuevo proyecto">+</button>
     </div>
     <ul id="lista-proyectos" class="section-list">
-        <li style="padding:10px; color: #555; font-style: italic; font-size: 0.8em;">Sin proyectos.</li>
+        <li style="padding:10px; color: var(--surface-4); font-style: italic; font-size: 0.8em;">Sin proyectos.</li>
     </ul>
 
     <div class="sidebar-footer" style="display: flex; flex-direction: column; gap: 8px; padding: 5px; width: 100%; box-sizing: border-box;">
@@ -194,7 +194,7 @@
         
         <div class="left-col" style="display:flex; flex-direction:column; gap:20px;">
             
-            <div id="welcome-screen" style="text-align: center; color: #666; margin-top: 50px;">
+            <div id="welcome-screen" style="text-align: center; color: var(--text-subtle);; margin-top: 50px;">
                 <h2>Bienvenid@</h2>
                 <p>Selecciona una asignatura en el menú izquierdo, o creala con los botones de abajo a la izquierda.</p>
             </div>
@@ -265,8 +265,15 @@
                 </div>
             </div>
             
+            <div class="resource-dock" aria-label="Herramientas de consulta">
+                <button type="button" id="pdf-toggle-mini" class="resource-dock-btn" title="Mostrar visor PDF">
+                    <i class="fa-regular fa-file-pdf" aria-hidden="true"></i> Lector PDF
+                </button>
+                <button type="button" id="btn-open-chat" class="resource-dock-btn" title="Abrir Omnisciente" aria-controls="ai-chat-widget" aria-expanded="false">
+                    <i class="fa-regular fa-eye" aria-hidden="true"></i> Omnisciente
+                </button>
+            </div>
             <div id="modulo-pdf" class="pdf-collapsed">
-                <button id="pdf-toggle-mini" title="Mostrar visor PDF">Lector de PDF</button>
                 
                 <div id="pdf-inner-wrapper">
                     <div id="pdf-inner-content">
@@ -280,11 +287,11 @@
 
                         <div id="pdf-body-content">
                             <div class="recursos-container">
-                                <span style="font-size: 0.75em; color: #555; text-transform: uppercase; letter-spacing: 1px; margin-right: 10px;">LIBROS:</span>
+                                <span style="font-size: 0.75em; color: var(--surface-4); text-transform: uppercase; letter-spacing: 1px; margin-right: 10px;">LIBROS:</span>
                                 
                                 <div id="lista-recursos-slots" style="display: flex; gap: 8px; flex-wrap: wrap;"></div>
 
-                                <button id="btn-crearslotrecurso" class="btn-mini_2" style="margin-left: auto; border: 1px dashed #444; color: #666;" title="Añadir nuevo hueco de libro">+ Añadir documento</button>
+                                <button id="btn-crearslotrecurso" class="btn-mini_2" style="margin-left: auto; border: 1px dashed #444; color: var(--text-subtle);;" title="Añadir nuevo hueco de libro">+ Añadir documento</button>
                             </div>
 
                             <div id="visor-pdf-container">
@@ -387,10 +394,14 @@
                 </div>
 
                 <label class="form-label">Título <strong style="color:var(--status-yellow); font-weight:normal;">(Nombres únicos para evitar solapamientos)</strong></label>
-                <input type="text" id="edit-titulo" placeholder="Ej: Teorema de Bolzano-Weierstrass" class="form-input" style="margin-bottom: 18px;">
+                <div class="titulo-ia-controles">
+                    <input type="text" id="edit-titulo" placeholder="Ej: Teorema de Bolzano-Weierstrass" class="form-input">
+                    <button type="button" id="btn-regenerar-titulo" class="btn-modern btn-reveal" title="Solicitar otra propuesta sin guardar todavía"><i class="fa-solid fa-rotate"></i> Regenerar</button>
+                </div>
+                <button type="button" id="btn-reintentar-titulos" class="btn-titulos-fallidos" title="Reintentar todos los títulos con Error de IA (Editar) de esta asignatura"><i class="fa-solid fa-arrows-rotate"></i> Reintentar títulos fallidos de la asignatura</button>
                 
                 <label class="form-label">Contenido (Reverso) - Admite LaTeX completo</label>
-                <textarea id="edit-contenido" placeholder="Sea $f$ una función..." style="height: 220px; width: 100%; font-family: monospace; font-size: 0.95em; background: #111; border: 1px solid #333; border-radius: 8px; padding: 12px; color: #ddd; resize: vertical; box-sizing: border-box; line-height: 1.5;"></textarea>
+                <textarea id="edit-contenido" placeholder="Sea $f$ una función..." style="height: 220px; width: 100%; font-family: monospace; font-size: 0.95em; background: #111; border: 1px solid var(--surface-2); border-radius: 8px; padding: 12px; color: #ddd; resize: vertical; box-sizing: border-box; line-height: 1.5;"></textarea>
                 
                 <div style="display:flex; gap:15px; margin-top: 15px;">
                     <div style="flex:1;">
@@ -419,7 +430,7 @@
                     </div>
                 </div>
 
-                <div style="margin-top: 30px; display: flex; flex-direction: column; gap: 15px; border-top: 1px solid #333; padding-top: 20px;">
+                <div style="margin-top: 30px; display: flex; flex-direction: column; gap: 15px; border-top: 1px solid var(--surface-2); padding-top: 20px;">
     
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                         <div style="display: flex; gap: 10px;">
@@ -471,7 +482,7 @@
                 
                 <textarea id="json-editor-area" style="height:450px; width:100%; font-family: 'Courier New', Courier, monospace; font-size: 0.9em; background: #0a0a0a; border: 1px solid #2a2a2a; border-radius: 8px; padding: 12px; color: #a9b7c6; resize: vertical; box-sizing: border-box;"></textarea>
                 
-                <div style="margin-top:20px; display:flex; justify-content:space-between; align-items:center; border-top: 1px solid #333; padding-top: 15px;">
+                <div style="margin-top:20px; display:flex; justify-content:space-between; align-items:center; border-top: 1px solid var(--surface-2); padding-top: 15px;">
                     <button id="btn-descargarasignaturaactual" class="btn-ghost" style="display:flex; align-items:center; gap:8px;">
                         <i class="fa-solid fa-download"></i> Copia local
                     </button>
@@ -490,13 +501,13 @@
             <div id="import-card" class="card hidden">
                 <h3>Importar Contenido</h3>
                 
-                <div style="display:flex; gap:10px; margin-bottom:15px; border-bottom:1px solid #333; padding-bottom:10px;">
+                <div style="display:flex; gap:10px; margin-bottom:15px; border-bottom:1px solid var(--surface-2); padding-bottom:10px;">
                     <button id="tab-import-json" style="background:none; border:none; color:var(--accent); font-weight:bold; cursor:pointer; border-bottom: 2px solid var(--accent);">JSON</button>
-                    <button id="tab-import-latex" style="background:none; border:none; color:#666; cursor:pointer;">LaTeX</button>
+                    <button id="tab-import-latex" style="background:none; border:none; color:var(--text-subtle);; cursor:pointer;">LaTeX</button>
                 </div>
 
                 <div id="panel-import-json">
-                    <p style="font-size:0.8em; color:#888; margin-top:0;">Pega aquí el array de objetos JSON `[...]`.</p>
+                    <p style="font-size:0.8em; color:var(--text-muted); margin-top:0;">Pega aquí el array de objetos JSON `[...]`.</p>
                     <textarea id="import-area" placeholder='[{"Titulo": "...", "Contenido": "..."}]' style="height:200px; font-family:monospace;"></textarea>
                     <div style="margin-top:15px; text-align:right;">
                         <button id="btn-cancelaredicion-3" class="btn-cancel">Cancelar</button>
@@ -505,14 +516,14 @@
                 </div>
 
                 <div id="panel-import-latex" class="hidden">
-                    <p style="font-size:0.8em; color:#888; margin-top:0;">
+                    <p style="font-size:0.8em; color:var(--text-muted); margin-top:0;">
                         El parser creará tarjetas de <code>\defi</code>, <code>\prop</code>, <code>\teorema</code>, <code>\lema</code>, <code>\coro</code>, <code>\ejemplo</code> y demostraciones
                         <br>Detecta automáticamente <code>\begin{demostración}</code> y la anexa al concepto anterior.
                         <br> Tú tira el código y que sea lo que Dios quiera.
                     </p>
                     <div style="display:flex; gap:10px; margin-bottom:10px;">
                         <input type="number" id="latex-tema-input" placeholder="Nº Tema" value="1" style="width:50px;">
-                        <span style="font-size:0.8em; color:#666; align-self:center;">Tema (asignado a todas las tarjetas)</span>
+                        <span style="font-size:0.8em; color:var(--text-subtle);; align-self:center;">Tema (asignado a todas las tarjetas)</span>
                     </div>
                     <textarea id="import-area-latex" placeholder="\defi[Título]{Contenido...}" style="height:200px; font-family:monospace; color:#a9b7c6; background:#0f0e0e;"></textarea>
                     <div style="margin-top:15px; text-align:right;">
@@ -530,7 +541,7 @@
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:5px;">
                     <div style="display:flex; flex-direction:column;">
                         <span id="mini-mode-label" style="font-weight:bold; color:var(--pomo-work); font-size:0.9em; text-transform:uppercase;">WORK</span>
-                        <span id="mini-cycle-info" style="font-size:0.7em; color:#666;">Largo en: 4</span>
+                        <span id="mini-cycle-info" style="font-size:0.7em; color:var(--text-subtle);;">Largo en: 4</span>
                     </div>
                     <button id="btn-abrirmodalpomodoro" 
                             style="background:none; border:none; cursor:pointer; font-size:1.4em; padding:0; line-height:1; opacity:0.7; transition:transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); color: var(--pomo-work);" 
@@ -555,7 +566,7 @@
                         <span id="mini-finish-time" title="Hora estimada de fin" style="color: rgb(87, 144, 115);">--:--</span>
                     </div>
                     
-                    <div style="border-top:1px solid #333; padding-top:5px;">
+                    <div style="border-top:1px solid var(--surface-2); padding-top:5px;">
                         <select id="mini-task-select" style="width:100%; background:#1a1a1a; border:none; font-size:0.67em; color:#aaa; padding:5px; outline:none; border-radius:4px;">
                             <option value="-1">-- Seleccionar tarea --</option>
                         </select>
@@ -583,19 +594,19 @@
                     </div>
                 </div>
 
-                <div style="font-size:0.8em; color:#bbb; margin-top:15px; display:flex; justify-content:space-around;">
+                <div style="font-size:0.8em; color:var(--text-explicacion);; margin-top:15px; display:flex; justify-content:space-around;">
                     <div style="text-align:center;">
                         <div id="pomo-done-today" style="font-size:1.2em; font-weight:bold; color:white;">0</div>
-                        <div style="font-size:0.7em; color:#666;">HECHOS</div>
+                        <div style="font-size:0.7em; color:var(--text-subtle);;">HECHOS</div>
                     </div>
                     <div style="width:1px; background:#444;"></div>
                     <div style="text-align:center;">
-                        <div id="pomo-goal-today" style="font-size:1.2em; font-weight:bold; color:#888;">6</div>
-                        <div style="font-size:0.7em; color:#666;">META</div>
+                        <div id="pomo-goal-today" style="font-size:1.2em; font-weight:bold; color:var(--text-muted);">6</div>
+                        <div style="font-size:0.7em; color:var(--text-subtle);;">META</div>
                     </div>
                 </div>
                 
-                <div id="today-breakdown" style="margin-top:10px; font-size:0.7em; color:#666; text-align:left; padding-left:10px;">
+                <div id="today-breakdown" style="margin-top:10px; font-size:0.7em; color:var(--text-subtle);; text-align:left; padding-left:10px;">
                     </div>
             </div>
             <div class="stat-widget" data-widget-id="widget-constancia">
@@ -604,25 +615,25 @@
                     
                     <div style="flex:1;">
                         <div id="stat-streak" style="font-size:2em; font-weight:bold; color:#FFC107;">0</div>
-                        <div style="font-size:0.7em; color:#888; text-transform:uppercase;">Días Racha</div>
+                        <div style="font-size:0.7em; color:var(--text-muted); text-transform:uppercase;">Días Racha</div>
                     </div>
                     
                     <div style="width:1px; background:#444;"></div>
                     
                     <div style="flex:1;">
                         <div id="stat-total-days" style="font-size:2em; font-weight:bold; color:#2196F3;">0</div>
-                        <div style="font-size:0.7em; color:#888; text-transform:uppercase;">Días Totales</div>
+                        <div style="font-size:0.7em; color:var(--text-muted); text-transform:uppercase;">Días Totales</div>
                     </div>
 
                     <div style="width:1px; background:#444;"></div>
 
                     <div style="flex:1;">
                         <div id="stat-avg" style="font-size:2em; font-weight:bold; color:#4CAF50;">0</div>
-                        <div style="font-size:0.7em; color:#888; text-transform:uppercase;">Tarjetas/Día</div>
+                        <div style="font-size:0.7em; color:var(--text-muted); text-transform:uppercase;">Tarjetas/Día</div>
                     </div>
                 </div>
                 
-                <div id="streak-msg" style="text-align:center; margin-top:10px; font-size:0.75em; font-style:italic; color:#666;">
+                <div id="streak-msg" style="text-align:center; margin-top:10px; font-size:0.75em; font-style:italic; color:var(--text-subtle);;">
                     Calculando...
                 </div>
             </div>
@@ -631,12 +642,12 @@
                 
                 <div id="dist-bars"></div>
                 
-                <div style="margin-top:10px; font-size:0.75em; color:#666; display:flex; justify-content:space-between; align-items:center;">
+                <div style="margin-top:10px; font-size:0.75em; color:var(--text-subtle);; display:flex; justify-content:space-between; align-items:center;">
                     <span title="Tarjetas pendientes para hoy">
                         Hoy: <strong id="today-cards-count" style="color:var(--status-yellow);">0</strong>
                     </span>
                     <span>
-                        Total: <strong id="total-cards-count" style="color:#e0e0e0;">0</strong>
+                        Total: <strong id="total-cards-count" style="color:var(--text-main);">0</strong>
                     </span>
                 </div>
             </div>
@@ -650,7 +661,7 @@
                 </div>
                 <div style="display:flex; height:100px; align-items:flex-end; gap:5px; padding-top:10px; position:relative;" id="weekly-chart-container">
                     </div>
-                <div style="display:flex; justify-content:space-between; margin-top:10px; font-size:0.7em; color:#888;">
+                <div style="display:flex; justify-content:space-between; margin-top:10px; font-size:0.7em; color:var(--text-muted);">
                     <span>Meta cumplida: <strong id="weekly-goals-met" style="color:#FFC107">0/7</strong> días</span>
                     <span>Total: <strong id="weekly-total" style="color:white">0</strong> pomos</span>
                 </div>
@@ -667,7 +678,7 @@
                 <div class="stat-title">Deuda de Estudio</div>
                 <div style="text-align:center;">
                     <div id="deuda-score" style="color:#f44336;">0</div>
-                    <div style="font-size:0.65em; color:#888; text-transform:uppercase; margin-top:2px;">puntos de deuda</div>
+                    <div style="font-size:0.65em; color:var(--text-muted); text-transform:uppercase; margin-top:2px;">puntos de deuda</div>
                 </div>
                 <div id="deuda-breakdown" class="deuda-breakdown"></div>
             </div>
@@ -676,7 +687,7 @@
                 <div style="position: relative; height: 180px; width: 100%;">
                     <canvas id="olvido-chart"></canvas>
                 </div>
-                <div id="olvido-empty-msg" style="display: none; font-size: 0.75em; color: #888; text-align: center; margin-top: 30px;">
+                <div id="olvido-empty-msg" style="display: none; font-size: 0.75em; color: var(--text-muted); text-align: center; margin-top: 30px;">
                     <i class="fa-solid fa-chart-line"></i> Faltan datos (n>3) para proyectar la curva.
                 </div>
             </div>
@@ -707,21 +718,21 @@
             <!-- WIDGET: Mapa de Calor por Hora -->
             <div class="stat-widget" data-widget-id="widget-horas">
                 <div class="stat-title">Actividad por Hora</div>
-                <div style="display:flex; justify-content:space-between; font-size:0.6em; color:#555; margin-bottom:2px;">
+                <div style="display:flex; justify-content:space-between; font-size:0.6em; color:var(--surface-4); margin-bottom:2px;">
                     <span>00h</span><span>06h</span><span>12h</span><span>18h</span><span>23h</span>
                 </div>
                 <div id="hora-heatmap-container" class="hora-heatmap"></div>
-                <div id="hora-best" style="text-align:center; font-size:0.7em; color:#888; margin-top:6px;"></div>
+                <div id="hora-best" style="text-align:center; font-size:0.7em; color:var(--text-muted); margin-top:6px;"></div>
             </div>
 
             <!-- WIDGET: Calendario -->
             <div class="stat-widget" data-widget-id="widget-calendario">
                 <div class="stat-title" style="display:flex; justify-content:space-between; align-items:center;">
-                    <button id="btn-cambiarmes" style="background:none; border:none; color:#888; cursor:pointer;">&#9668;</button>
+                    <button id="btn-cambiarmes" style="background:none; border:none; color:var(--text-muted); cursor:pointer;">&#9668;</button>
                     <span id="calendar-month-title">Cargando...</span>
                     <div style="display:flex; align-items:center; gap:6px;">
                         <button id="btn-add-fecha" title="Añadir fecha clave"><i class="fa-regular fa-calendar-plus"></i></button>
-                        <button id="btn-cambiarmes-2" style="background:none; border:none; color:#888; cursor:pointer;">&#9658;</button>
+                        <button id="btn-cambiarmes-2" style="background:none; border:none; color:var(--text-muted); cursor:pointer;">&#9658;</button>
                     </div>
                 </div>
                 
@@ -735,11 +746,11 @@
                     <div id="calendar-heatmap" class="heatmap-grid"></div>
                 </div>
                 <!-- Leyenda de eventos -->
-                <div id="calendar-legend" style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; font-size:0.65em; color:#888;"></div>
+                <div id="calendar-legend" style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; font-size:0.65em; color:var(--text-muted);"></div>
 
                 <!-- Próximos eventos -->
                 <div id="upcoming-events-section" style="margin-top:10px; display:none;">
-                    <div style="font-size:0.72em; color:#666; text-transform:uppercase; letter-spacing:1px; margin-bottom:5px;">Próximos eventos</div>
+                    <div style="font-size:0.72em; color:var(--text-subtle);; text-transform:uppercase; letter-spacing:1px; margin-bottom:5px;">Próximos eventos</div>
                     <ul id="upcoming-events-list"></ul>
                 </div>
             </div>
@@ -749,7 +760,7 @@
                 <div class="stat-title">Ventana de Pendientes</div>
                 
                 <div style="text-align:center; margin-bottom:5px; height: 50px;"><span id="pending-total-count" style="font-size:2.5em; font-weight:bold; line-height: 1;">0</span>
-                    <div style="font-size:0.7em; color:#888; text-transform:uppercase;">Tarjetas</div>
+                    <div style="font-size:0.7em; color:var(--text-muted); text-transform:uppercase;">Tarjetas</div>
                 </div>
 
                 <ul id="pending-list-items" class="section-list"></ul>
@@ -779,7 +790,7 @@
             </div>
         </div>
         <div id="rsm-breakdown" class="resumen-breakdown"></div>
-        <div id="rsm-mensaje" style="font-size:0.8em; color:#888; font-style:italic; margin-bottom:8px;"></div>
+        <div id="rsm-mensaje" style="font-size:0.8em; color:var(--text-muted); font-style:italic; margin-bottom:8px;"></div>
         <button id="btn-cerrarresumensesion" class="btn-modern btn-danger">
             <div class="btn-content"><i class="fa-solid fa-xmark"></i> <span>Cerrar Resumen</span></div>
         </button>
@@ -790,7 +801,7 @@
 <div id="fechas-modal">
     <div class="fechas-card">
         <div style="display:flex; justify-content:space-between; align-items:center;">
-            <span style="font-size:1em; font-weight:bold; color:#eee;"><i class="fa-solid fa-calendar-days"></i> Fechas Clave</span>
+            <span style="font-size:1em; font-weight:bold; color:var(--text-eee);"><i class="fa-solid fa-calendar-days"></i> Fechas Clave</span>
             <button id="btn-cerrarfechasmodal" class="btn-modern btn-danger">
                 <div class="btn-content"><i class="fa-solid fa-xmark"></i> <span>Cerrar</span></div>
             </button>
@@ -817,7 +828,7 @@
 
         <!-- Lista de eventos guardados -->
         <div class="fechas-list" id="fechas-list-container">
-            <div style="text-align:center; color:#555; font-size:0.8em; padding:20px 0;" id="fechas-empty-msg">
+            <div style="text-align:center; color:var(--surface-4); font-size:0.8em; padding:20px 0;" id="fechas-empty-msg">
                 Aún no hay eventos. Añade el primero arriba.
             </div>
         </div>
@@ -850,7 +861,7 @@
              TAB: HORARIO
         ══════════════════════════════════════════════ -->
         <div id="tab-horario" class="stab-panel">
-            <p style="font-size:0.8em; color:#888; margin-bottom:10px;">Haz clic en un día para editar tus objetivos.</p>
+            <p style="font-size:0.8em; color:var(--text-muted); margin-bottom:10px;">Haz clic en un día para editar tus objetivos.</p>
             <div id="schedule-grid-container" class="schedule-grid"></div>
             <div id="day-editor-panel" class="hidden">
                 <h5 id="day-editor-title" style="margin:0 0 10px 0; color:var(--accent);">Editar Lunes</h5>
@@ -859,7 +870,7 @@
                     <input type="number" id="sch-pomo-input" value="1" style="width:50px; text-align:center; padding:5px;">
                     <button id="btn-guardarhorariodia" style="padding:5px 10px; background:var(--accent); border:none; cursor:pointer; font-weight:bold;">Guardar</button>
                 </div>
-                <p style="font-size:0.7em; color:#666; margin-top:5px;">* Poner 0 para eliminar la asignatura de este día.</p>
+                <p style="font-size:0.7em; color:var(--text-subtle);; margin-top:5px;">* Poner 0 para eliminar la asignatura de este día.</p>
             </div>
         </div>
 
@@ -867,10 +878,10 @@
              TAB: APARIENCIA
         ══════════════════════════════════════════════ -->
         <div id="tab-apariencia" class="stab-panel hidden">
-            <h5 style="color:var(--accent); border-bottom:1px solid #333; margin-bottom:12px;">Colores de asignaturas</h5>
+            <h5 style="color:var(--accent); border-bottom:1px solid var(--surface-2); margin-bottom:12px;">Colores de asignaturas</h5>
             <div id="settings-colors-list" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;"></div>
 
-            <h5 style="color:var(--accent); border-bottom:1px solid #333; margin-bottom:12px;">Estilo visual</h5>
+            <h5 style="color:var(--accent); border-bottom:1px solid var(--surface-2); margin-bottom:12px;">Estilo visual</h5>
             <div class="setting-row">
                 <label>Estilo Visual de Botones</label>
                 <select id="set-visual-theme" style="width:190px; text-align:left;">
@@ -908,7 +919,7 @@
                     <option value="custom">Personalizado...</option>
                 </select>
             </div>
-                <h5 style="color:var(--accent); border-bottom:1px solid #333; margin-bottom:12px;"><i class="fa-solid fa-palette"></i> Personalización atómica</h5>
+                <h5 style="color:var(--accent); border-bottom:1px solid var(--surface-2); margin-bottom:12px;"><i class="fa-solid fa-palette"></i> Personalización atómica</h5>
                 <div style="background:rgba(0,0,0,0.2); padding:15px; border-radius:6px; border: 1px solid var(--border); max-height: 400px; overflow-y: auto;">
                     <h4 style="margin: 0 0 10px 0; color: var(--accent); font-size: 0.85em; text-transform: uppercase;">Base del Sistema</h4>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom: 20px;">
@@ -936,7 +947,7 @@
                     </div>
                 
             </div>
-            <div style="margin-top: 15px; border-top: 1px solid #333; padding-top: 15px;">
+            <div style="margin-top: 15px; border-top: 1px solid var(--surface-2); padding-top: 15px;">
                 <h4 style="margin-top: 0; color: var(--accent);">Gestión de Interfaz</h4>
                 <button id="btn-restaurar-widgets" class="btn-modern btn-neutral" style="width: 100%; padding: 10px;">
                     <i class="fa-solid fa-rotate-left"></i> Restaurar diseño de Widgets por defecto
@@ -948,7 +959,7 @@
              TAB: SONIDO
         ══════════════════════════════════════════════ -->
         <div id="tab-sonido" class="stab-panel hidden">
-            <h5 style="color:var(--accent); border-bottom:1px solid #333; margin-bottom:12px; text-transform:uppercase;"><i class="fa-solid fa-volume-high"></i> Control de Audio</h5>
+            <h5 style="color:var(--accent); border-bottom:1px solid var(--surface-2); margin-bottom:12px; text-transform:uppercase;"><i class="fa-solid fa-volume-high"></i> Control de Audio</h5>
             
             <!-- Mute Global -->
             <div style="background:rgba(0,0,0,0.2); padding:12px; border-radius:6px; margin-bottom:15px; border: 1px solid var(--border);">
@@ -1148,7 +1159,7 @@
             <!-- Selector de Proveedor -->
             <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px;">
                 <label style="font-weight: bold; color: var(--accent);">Proveedor de IA:</label>
-                <select id="set-ia-proveedor" style="padding:8px; background: #1a1a1a; border: 1px solid #333; color: #eee; border-radius: 4px; min-width: 150px;">
+                <select id="set-ia-proveedor" style="padding:8px; background: #1a1a1a; border: 1px solid var(--surface-2); color: var(--text-eee); border-radius: 4px; min-width: 150px;">
                     <option value="groq">Groq (Rápido)</option>
                     <option value="openrouter">OpenRouter (Modelos Gratis)</option>
                 </select>
@@ -1171,7 +1182,7 @@
                 
                 <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; margin-top: 10px;">
                     <label>Modelo Groq:</label>
-                    <select id="set-groq-modelo" style="padding:8px; background: #1a1a1a; border: 1px solid #333; color: #eee; border-radius: 4px; min-width: 200px;">
+                    <select id="set-groq-modelo" style="padding:8px; background: #1a1a1a; border: 1px solid var(--surface-2); color: var(--text-eee); border-radius: 4px; min-width: 200px;">
                     </select>
                 </div>
             </div>
@@ -1183,7 +1194,7 @@
                     <input type="password" id="set-openrouter-key" placeholder="sk-or-..." style="padding:5px; width: 60%;">
                 </div>
                 <div class="setting-row">
-                    <p style="font-size:0.75em; color:#888; margin: 5px 0 0 0;">
+                    <p style="font-size:0.75em; color:var(--text-muted); margin: 5px 0 0 0;">
                         <i class="fa-solid fa-circle-info"></i> 
                         Consigue tu API key gratis en 
                         <a href="https://openrouter.ai/keys" target="_blank" style="color: #4CAF50; text-decoration: underline;">openrouter.ai/keys</a>.
@@ -1193,17 +1204,17 @@
                 
                 <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; margin-top: 10px;">
                     <label>Modelo OpenRouter:</label>
-                    <select id="set-openrouter-modelo" style="padding:8px; background: #1a1a1a; border: 1px solid #333; color: #eee; border-radius: 4px; min-width: 200px;">
+                    <select id="set-openrouter-modelo" style="padding:8px; background: #1a1a1a; border: 1px solid var(--surface-2); color: var(--text-eee); border-radius: 4px; min-width: 200px;">
                         <option value="">Cargando modelos...</option>
                     </select>
                     <button id="btn-cargar-modelos-openrouter" class="btn-modern btn-reveal" style="padding: 6px 12px; font-size: 0.8em;" title="Recargar lista de modelos">
                         <i class="fa-solid fa-rotate"></i>
                     </button>
                 </div>
-                <p id="openrouter-modelos-info" style="font-size:0.7em; color:#666; margin-top:5px;"></p>
+                <p id="openrouter-modelos-info" style="font-size:0.7em; color:var(--text-subtle);; margin-top:5px;"></p>
             </div>
 
-            <p style="font-size:0.7em; color:#888; margin-top:15px;">
+            <p style="font-size:0.7em; color:var(--text-muted); margin-top:15px;">
                 <i class="fa-solid fa-lightbulb"></i> 
                 Groq ofrece inferencia ultra-rápida. OpenRouter proporciona acceso a múltiples modelos, incluyendo versiones gratuitas.
             </p>
@@ -1213,16 +1224,16 @@
              TAB: CUENTA
         ══════════════════════════════════════════════ -->
         <div id="tab-cuenta" class="stab-panel hidden">
-            <h5 style="color:var(--accent); border-bottom:1px solid #333; margin-bottom:12px;">Inicio de sesión</h5>
+            <h5 style="color:var(--accent); border-bottom:1px solid var(--surface-2); margin-bottom:12px;">Inicio de sesión</h5>
             <div id="auth-status" style="margin-bottom: 15px; font-size: 0.85em; color: var(--text-muted);">
                 Estado: Desconectado (Modo Offline)
             </div>
             <div id="auth-login-form">
-                <input type="email" id="login-email" placeholder="Correo electrónico" style="width: 100%; padding: 10px; margin-bottom: 10px; background: #1a1a1a; border: 1px solid #333; color: #eee; border-radius: 4px; outline: none; box-sizing: border-box;">
-                <input type="password" id="login-password" placeholder="Contraseña (mín. 6 caracteres)" style="width: 100%; padding: 10px; margin-bottom: 15px; background: #1a1a1a; border: 1px solid #333; color: #eee; border-radius: 4px; outline: none; box-sizing: border-box;">
+                <input type="email" id="login-email" placeholder="Correo electrónico" style="width: 100%; padding: 10px; margin-bottom: 10px; background: #1a1a1a; border: 1px solid var(--surface-2); color: var(--text-eee); border-radius: 4px; outline: none; box-sizing: border-box;">
+                <input type="password" id="login-password" placeholder="Contraseña (mín. 6 caracteres)" style="width: 100%; padding: 10px; margin-bottom: 15px; background: #1a1a1a; border: 1px solid var(--surface-2); color: var(--text-eee); border-radius: 4px; outline: none; box-sizing: border-box;">
                 <div style="display: flex; gap: 10px; margin-bottom: 10px;">
                     <button id="btn-login" class="btn-modern btn-reveal" style="flex: 1; padding: 10px; background: rgba(33, 150, 243, 0.1); color: var(--status-blue, #2196F3); border: 1px solid var(--status-blue, #2196F3); border-radius: 4px; font-weight: bold; cursor: pointer;">Acceder</button>
-                    <button id="btn-register" class="btn-modern btn-reveal" style="flex: 1; padding: 10px; background: transparent; color: var(--text-muted); border: 1px solid #555; border-radius: 4px; cursor: pointer;">Registrar</button>
+                    <button id="btn-register" class="btn-modern btn-reveal" style="flex: 1; padding: 10px; background: transparent; color: var(--text-muted); border: 1px solid var(--surface-4); border-radius: 4px; cursor: pointer;">Registrar</button>
                 </div>
                 <button id="btn-login-google" class="btn-modern" style="width: 100%; padding: 10px; background: #fff; color: var(--bg-color); border: none; border-radius: 4px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
                     <i class="fa-brands fa-google"></i> Acceder con Google
@@ -1237,10 +1248,10 @@
 
             <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #2a2a2a;">
                 <h5 style="color: var(--accent); margin-bottom: 10px; font-size: 0.9em;"><i class="fa-solid fa-user-shield"></i> Privacidad</h5>
-                <label style="display:flex; align-items:center; justify-content:space-between; background:#1a1a1a; padding:12px 14px; border-radius:8px; border:1px solid #333; cursor:pointer; transition: border 0.3s ease;">
+                <label style="display:flex; align-items:center; justify-content:space-between; background:#1a1a1a; padding:12px 14px; border-radius:8px; border:1px solid var(--surface-2); cursor:pointer; transition: border 0.3s ease;">
                     <div>
-                        <div id="privacy-title" style="color:#eee; font-size:0.95em; font-weight:500; transition: color 0.2s ease, opacity 0.2s ease;">Modo Extrovertido</div>
-                        <div id="privacy-desc" style="color:#888; font-size:0.8em; margin-top:2px; transition: opacity 0.2s ease;">Tus estadísticas son visibles para todos</div>
+                        <div id="privacy-title" style="color:var(--text-eee); font-size:0.95em; font-weight:500; transition: color 0.2s ease, opacity 0.2s ease;">Modo Extrovertido</div>
+                        <div id="privacy-desc" style="color:var(--text-muted); font-size:0.8em; margin-top:2px; transition: opacity 0.2s ease;">Tus estadísticas son visibles para todos</div>
                     </div>
                     <div style="display:flex; align-items:center; gap:10px;">
                         <i id="privacy-icon" class="fa-solid fa-user" style="font-size:1.5em; color:#00b6ca; transition: opacity 0.5s ease, filter 0.15s ease, color 0.6s ease;"></i>
@@ -1271,13 +1282,13 @@
                 <strong style="color: var(--status-blue, #2196F3);">Respaldo Físico (Local):</strong> Mecanismo estricto offline. Genera un archivo JSON en tu disco duro inmune a cortes de red o servidores caídos.
             </p>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;">
-                <button id="btn-exportarbackup" class="btn-modern btn-reveal" style="padding: 10px; background: transparent; color: #ddd; border: 1px solid #666; border-radius: 4px; cursor: pointer;">Exportar JSON</button>
-                <button id="btn-document" class="btn-modern btn-reveal" style="padding: 10px; background: transparent; color: #ddd; border: 1px solid #666; border-radius: 4px; cursor: pointer;">Restaurar copia</button>
+                <button id="btn-exportarbackup" class="btn-modern btn-reveal" style="padding: 10px; background: transparent; color: #ddd; border: 1px solid var(--text-subtle);; border-radius: 4px; cursor: pointer;">Exportar JSON</button>
+                <button id="btn-document" class="btn-modern btn-reveal" style="padding: 10px; background: transparent; color: #ddd; border: 1px solid var(--text-subtle);; border-radius: 4px; cursor: pointer;">Restaurar copia</button>
                 <button id="btn-copia-anterior" class="btn-modern btn-reveal" style="grid-column: 1 / -1;">Descargar copia anterior al último reemplazo</button>
             </div>
             <input type="file" id="backup-input-unico" accept=".json" style="display:none;">
             <div style="margin-top:20px; text-align:center;">
-                <button id="btn-borrartodolocal" style="background:#333; color:#ff5252; border:1px solid #ff5252; padding:5px 10px; cursor:pointer; font-size:0.8em;">(!!!) Resetear Toda la Base de Datos</button>
+                <button id="btn-borrartodolocal" style="background:var(--surface-2); color:#ff5252; border:1px solid #ff5252; padding:5px 10px; cursor:pointer; font-size:0.8em;">(!!!) Resetear Toda la Base de Datos</button>
             </div>
             
         </div>
@@ -1289,17 +1300,17 @@
                 <h5 style="color: var(--accent); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
                     <i class="fa-solid fa-keyboard"></i> Atajos de Teclado (Power User)
                 </h5>
-                <p style="font-size: 0.9em; color: #bbb; margin-bottom: 10px;">
+                <p style="font-size: 0.9em; color: var(--text-explicacion);; margin-bottom: 10px;">
                     Optimiza tu flujo de trabajo y mantén el "estado de foco" utilizando los controles globales:
                 </p>
-                <ul style="list-style: none; padding: 0; font-size: 0.85em; color: #eee; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                    <li><kbd style="background: #333; padding: 2px 5px; border-radius: 3px;">Espacio</kbd> Pausar/Reanudar Pomodoro</li>
-                    <li><kbd style="background: #333; padding: 2px 5px; border-radius: 3px;">Enter</kbd> Revelar/Ocultar respuesta</li>
-                    <li><kbd style="background: #333; padding: 2px 5px; border-radius: 3px;">←/→</kbd> Navegar entre tarjetas</li>
-                    <li><kbd style="background: #333; padding: 2px 5px; border-radius: 3px;">1 - 4</kbd> Calificar dificultad</li>
-                    <li><kbd style="background: #333; padding: 2px 5px; border-radius: 3px;">L</kbd> Alternar Modo Lectura</li>
-                    <li><kbd style="background: #333; padding: 2px 5px; border-radius: 3px;">S</kbd> Alternar Modo Secuencial</li>
-                    <li><kbd style="background: #333; padding: 2px 5px; border-radius: 3px;">Alt + ←/→</kbd> Navegar en Editor</li>
+                <ul style="list-style: none; padding: 0; font-size: 0.85em; color: var(--text-eee); display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                    <li><kbd style="background: var(--surface-2); padding: 2px 5px; border-radius: 3px;">Espacio</kbd> Pausar/Reanudar Pomodoro</li>
+                    <li><kbd style="background: var(--surface-2); padding: 2px 5px; border-radius: 3px;">Enter</kbd> Revelar/Ocultar respuesta</li>
+                    <li><kbd style="background: var(--surface-2); padding: 2px 5px; border-radius: 3px;">←/→</kbd> Navegar entre tarjetas</li>
+                    <li><kbd style="background: var(--surface-2); padding: 2px 5px; border-radius: 3px;">1 - 4</kbd> Calificar dificultad</li>
+                    <li><kbd style="background: var(--surface-2); padding: 2px 5px; border-radius: 3px;">L</kbd> Alternar Modo Lectura</li>
+                    <li><kbd style="background: var(--surface-2); padding: 2px 5px; border-radius: 3px;">S</kbd> Alternar Modo Secuencial</li>
+                    <li><kbd style="background: var(--surface-2); padding: 2px 5px; border-radius: 3px;">Alt + ←/→</kbd> Navegar en Editor</li>
                 </ul>
             </div>
 
@@ -1309,7 +1320,7 @@
                 <h5 style="color: var(--accent); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
                     <i class="fa-solid fa-database"></i> Arquitectura de Persistencia Híbrida
                 </h5>
-                <p style="font-size: 0.85em; color: #bbb; line-height: 1.5;">
+                <p style="font-size: 0.85em; color: var(--text-explicacion);; line-height: 1.5;">
                     La aplicación utiliza un modelo <strong>Local-First</strong> diseñado para garantizar la disponibilidad absoluta de tus datos:
                 </p>
                 <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; margin-top: 10px;">
@@ -1330,15 +1341,15 @@
                 </h5>
             </div>
 
-            <div style="background: --menu-color; padding: 15px; border-radius: 8px; border: 1px solid #333; margin-top: 20px;">
+            <div style="background: --menu-color; padding: 15px; border-radius: 8px; border: 1px solid var(--surface-2); margin-top: 20px;">
             <h4 style="margin: 0 0 10px 0; color: var(--accent); display: flex; align-items: center; gap: 8px;">
                 <span style="font-size: 1.2em;"><i class="fa-solid fa-hexagon-nodes"></i></span> Motor de Retención: FSRS-6
             </h4>
-            <p style="font-size: 0.85em; color: #bbb; line-height: 1.5; margin-bottom: 12px;">
+            <p style="font-size: 0.85em; color: var(--text-explicacion);; line-height: 1.5; margin-bottom: 12px;">
                 "Estudiador Pro" no usa fechas fijas. Utiliza el <strong>Free Spaced Repetition Scheduler (FSRS)</strong>, un modelo matemático que calcula el decaimiento exacto de tus sinapsis en base a 21 parámetros de memoria. En particular este programa utiliza parámetros medios obtenidos por grupos de investigación
                 a lo largo de millones de repasos y miles de usuarios. A la larga, se pueden recopilar los datos para producir parámetros personales y conseguir resultados óptimos.
             </p>
-            <p style="font-size: 0.85em; color: #bbb; line-height: 1.5; margin-bottom: 12px;">
+            <p style="font-size: 0.85em; color: var(--text-explicacion);; line-height: 1.5; margin-bottom: 12px;">
                 El propósito de este modelo es predecir el momento exacto en el que deberías volver a repasar un concepto en base a su dificultad, tu historial de recuperación de contenidos, tu estabilidad, entre muchos otros.
             </p>
 
@@ -1375,7 +1386,7 @@
                 <h5 style="color:var(--accent); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
                     <i class="fa-solid fa-chart-bar"></i> Widget de Distribución de Tarjetas
                 </h5>
-                <p style="font-size:0.85em; color:#bbb; line-height:1.5; margin-bottom:10px;">
+                <p style="font-size:0.85em; color:var(--text-explicacion);; line-height:1.5; margin-bottom:10px;">
                     El widget muestra en qué fase del aprendizaje se encuentra cada tarjeta según el algoritmo FSRS-6:
                 </p>
                 <div style="display:flex; flex-direction:column; gap:8px; font-size:0.82em;">
@@ -1440,21 +1451,21 @@
             <ul id="task-list" class="task-list" style="max-height:200px; overflow-y:auto;"></ul>
             <div id="add-task-trigger" class="add-task-btn"><i class="fa-solid fa-star"></i> Nueva tarea</div>
             <div id="finish-time-display" style="margin-top: 15px;">
-                <div id="pomo-empty-msg" style="display: none; color: #666; text-align: center; padding: 10px;">
+                <div id="pomo-empty-msg" style="display: none; color: var(--text-subtle);; text-align: center; padding: 10px;">
                     Todo al día
                 </div>
 
                 <div id="pomo-status-content" style="display: block;">
                     <div style="display:flex; justify-content:space-between; border-bottom:1px solid #444; padding-bottom:5px; margin-bottom:5px; font-size:0.9em;">
-                        <span>Restan: <strong id="pomo-remain-count" style="color:#eee">--</strong></span>
-                        <span>Tiempo: <strong id="pomo-remain-time" style="color:#eee">--</strong></span>
+                        <span>Restan: <strong id="pomo-remain-count" style="color:var(--text-eee)">--</strong></span>
+                        <span>Tiempo: <strong id="pomo-remain-time" style="color:var(--text-eee)">--</strong></span>
                     </div>
 
                     <div style="background: linear-gradient(145deg, rgba(76,175,80,0.1) 0%, rgba(76,175,80,0.05) 100%); border-radius: 12px; padding: 10px 15px; margin-top: 8px; display: flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid rgba(76,175,80,0.2);">
                         <div style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: var(--accent); border-radius: 8px;">
                             <i class="fa-solid fa-plane-arrival" style="font-size: 16px; color: var(--bg-color);"></i>
                         </div>
-                        <span style="color: #e0e0e0; font-weight: 500;">
+                        <span style="color: var(--text-main); font-weight: 500;">
                             Fin estimado: <strong id="pomo-eta-value" style="color: var(--accent); font-size: 1.1em;">--:--</strong>
                         </span>
                     </div>
@@ -1540,20 +1551,20 @@
         <div class="exam-setup-flash-actions"><button type="button" id="ex-f-anterior" class="btn-modern btn-neutral" onclick="EXAM.flashAnterior()">Anterior</button><button type="button" id="ex-f-saltar" class="btn-modern btn-reveal" onclick="EXAM.flashSaltar()">Siguiente</button></div>
         <!-- Progreso + timer -->
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
-            <div style="flex-grow:1; height:5px; background:#333; border-radius:3px; overflow:hidden;">
+            <div style="flex-grow:1; height:5px; background:var(--surface-2); border-radius:3px; overflow:hidden;">
                 <div id="ex-f-bar" style="height:100%; background:#4CAF50; width:0%; transition:width 0.3s;"></div>
             </div>
-            <span id="ex-f-label" style="font-size:0.78em; color:#888; white-space:nowrap;">0/0</span>
+            <span id="ex-f-label" style="font-size:0.78em; color:var(--text-muted); white-space:nowrap;">0/0</span>
             <span id="ex-f-timer" style="display:none; font-size:0.9em; font-weight:bold; color:#FF9800; background:#1a1100; border-radius:5px; padding:2px 8px;">--</span>
-            <button id="btn-cerrarexamen-3" style="background:none;border:none;color:#555;cursor:pointer;font-size:1.1em; flex-shrink:0;">✕</button>
+            <button id="btn-cerrarexamen-3" style="background:none;border:none;color:var(--surface-4);cursor:pointer;font-size:1.1em; flex-shrink:0;">✕</button>
         </div>
 
         <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
             <span id="ex-f-tipo" style="font-size:0.7em; font-weight:bold; padding:2px 10px; border-radius:12px; background:#4CAF5022; color:#4CAF50; border:1px solid #4CAF50;">Tipo</span>
-            <span id="ex-f-tema" style="font-size:0.75em; color:#555;">Tema</span>
+            <span id="ex-f-tema" style="font-size:0.75em; color:var(--surface-4);">Tema</span>
         </div>
 
-        <div id="ex-f-titulo" style="font-size:1.25em; font-weight:bold; color:#eee; line-height:1.4; margin-bottom:18px;"></div>
+        <div id="ex-f-titulo" style="font-size:1.25em; font-weight:bold; color:var(--text-eee); line-height:1.4; margin-bottom:18px;"></div>
 
         <div id="ex-f-contenido" style="display:none; border-top:1px solid #2a2a2a; padding-top:14px; color:#ccc; line-height:1.7; font-size:0.95em; margin-bottom:14px;"></div>
 
@@ -1565,7 +1576,7 @@
 
         <!-- Valoración 1-4 -->
         <div id="ex-f-valoracion" style="display:none; flex-direction:column; gap:8px; margin-top:10px;">
-            <div style="font-size:0.75em; color:#888; text-align:center; margin-bottom:2px;">¿Cómo ha ido? [1-4]</div>
+            <div style="font-size:0.75em; color:var(--text-muted); text-align:center; margin-bottom:2px;">¿Cómo ha ido? [1-4]</div>
             <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:8px;">
                 <button id="btn-examenflashpuntuar" style="padding:10px 4px; background:rgba(33,150,243,0.15); border:1px solid #2196F3; color:#2196F3; border-radius:8px; cursor:pointer; font-size:0.85em; font-weight:bold;">1<br><span style="font-weight:normal; font-size:0.8em;">Fácil</span></button>
                 <button id="btn-examenflashpuntuar-2" style="padding:10px 4px; background:rgba(76,175,80,0.15); border:1px solid #4CAF50; color:#4CAF50; border-radius:8px; cursor:pointer; font-size:0.85em; font-weight:bold;">2<br><span style="font-weight:normal; font-size:0.8em;">Bien</span></button>
@@ -1584,11 +1595,11 @@
         <!-- Cabecera: timer global + progreso -->
         <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
             <span id="ex-r-timer" style="font-size:1.1em; font-weight:bold; color:#FF9800; background:#1a1100; border-radius:6px; padding:3px 12px; min-width:60px; text-align:center; display:none;">--:--</span>
-            <div style="flex-grow:1; height:5px; background:#333; border-radius:3px; overflow:hidden;">
+            <div style="flex-grow:1; height:5px; background:var(--surface-2); border-radius:3px; overflow:hidden;">
                 <div id="ex-r-bar" style="height:100%; background:#2196F3; width:0%; transition:width 0.3s;"></div>
             </div>
-            <span id="ex-r-label" style="font-size:0.78em; color:#888; white-space:nowrap;">P 1/0</span>
-            <button id="btn-cerrarexamen-4" style="background:none;border:none;color:#555;cursor:pointer;font-size:1.1em; flex-shrink:0;">✕</button>
+            <span id="ex-r-label" style="font-size:0.78em; color:var(--text-muted); white-space:nowrap;">P 1/0</span>
+            <button id="btn-cerrarexamen-4" style="background:none;border:none;color:var(--surface-4);cursor:pointer;font-size:1.1em; flex-shrink:0;">✕</button>
         </div>
 
         <!-- Navegador de preguntas -->
@@ -1597,9 +1608,9 @@
         <!-- Pregunta actual -->
         <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
             <span id="ex-r-tipo" style="font-size:0.7em; font-weight:bold; padding:2px 10px; border-radius:12px; background:#2196F322; color:#2196F3; border:1px solid #2196F3;">Tipo</span>
-            <span id="ex-r-tema" style="font-size:0.75em; color:#555;">Tema</span>
+            <span id="ex-r-tema" style="font-size:0.75em; color:var(--surface-4);">Tema</span>
         </div>
-        <div id="ex-r-titulo" style="font-size:1.2em; font-weight:bold; color:#eee; line-height:1.4; margin-bottom:16px;"></div>
+        <div id="ex-r-titulo" style="font-size:1.2em; font-weight:bold; color:var(--text-eee); line-height:1.4; margin-bottom:16px;"></div>
 
         <textarea id="ex-r-respuesta" placeholder="Escribe tu respuesta aquí... (puedes usar LaTeX: $...$)" style="
             width:100%; min-height:120px; padding:12px;
@@ -1610,8 +1621,8 @@
 ></textarea>
 
         <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
-            <button id="btn-examenrealanterior" style="padding:8px 16px; background:#2a2a2a; border:1px solid #444; color:#888; border-radius:6px; cursor:pointer;">&#x2190;  Anterior</button>
-            <button id="btn-examenrealsiguiente" style="padding:8px 16px; background:#2a2a2a; border:1px solid #444; color:#888; border-radius:6px; cursor:pointer;">Siguiente &#x2192;</button>
+            <button id="btn-examenrealanterior" style="padding:8px 16px; background:#2a2a2a; border:1px solid #444; color:var(--text-muted); border-radius:6px; cursor:pointer;">&#x2190;  Anterior</button>
+            <button id="btn-examenrealsiguiente" style="padding:8px 16px; background:#2a2a2a; border:1px solid #444; color:var(--text-muted); border-radius:6px; cursor:pointer;">Siguiente &#x2192;</button>
             <div style="flex-grow:1;"></div>
             <button id="btn-examenrealentregar" style="
                 padding:8px 22px;
@@ -1629,10 +1640,10 @@
         padding:24px 28px; max-width:700px; width:100%; margin:auto;">
 
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-            <h3 style="margin:0; color:#eee;">Corrección — puntúate cada respuesta</h3>
-            <button id="btn-cerrarexamen-5" style="background:none;border:none;color:#555;cursor:pointer;font-size:1.1em;">✕</button>
+            <h3 style="margin:0; color:var(--text-eee);">Corrección — puntúate cada respuesta</h3>
+            <button id="btn-cerrarexamen-5" style="background:none;border:none;color:var(--surface-4);cursor:pointer;font-size:1.1em;">✕</button>
         </div>
-        <p style="font-size:0.8em; color:#888; margin:0 0 16px 0;">
+        <p style="font-size:0.8em; color:var(--text-muted); margin:0 0 16px 0;">
             Compara tu respuesta con la solución y puntúate 1-4. La nota final pondera:
             <strong style="color:#2196F3">1=100%</strong>, <strong style="color:#4CAF50">2=75%</strong>,
             <strong style="color:#FF9800">3=40%</strong>, <strong style="color:#f44336">4=0%</strong>.
@@ -1653,13 +1664,13 @@
         padding:28px 32px; max-width:500px; width:100%; margin:auto; text-align:center;">
 
         <div style="font-size:2.5em; margin-bottom:8px;" id="ex-res-emoji"><i class="fa-solid fa-flag-checkered"></i></div>
-        <h3 style="margin:0 0 4px 0; color:#eee;" id="ex-res-titulo">Completado</h3>
-        <p style="color:#888; font-size:0.85em; margin-bottom:20px;" id="ex-res-asig"></p>
+        <h3 style="margin:0 0 4px 0; color:var(--text-eee);" id="ex-res-titulo">Completado</h3>
+        <p style="color:var(--text-muted); font-size:0.85em; margin-bottom:20px;" id="ex-res-asig"></p>
 
         <div style="display:flex; justify-content:center; gap:20px; margin-bottom:16px;">
-            <div><div id="ex-res-nota" style="font-size:3em; font-weight:bold; color:#2196F3;">-</div><div style="font-size:0.65em; color:#888; text-transform:uppercase;">Nota</div></div>
-            <div><div id="ex-res-ok" style="font-size:3em; font-weight:bold; color:#4CAF50;">0</div><div style="font-size:0.65em; color:#888; text-transform:uppercase;">Bien</div></div>
-            <div><div id="ex-res-fail" style="font-size:3em; font-weight:bold; color:#f44336;">0</div><div style="font-size:0.65em; color:#888; text-transform:uppercase;">A repasar</div></div>
+            <div><div id="ex-res-nota" style="font-size:3em; font-weight:bold; color:#2196F3;">-</div><div style="font-size:0.65em; color:var(--text-muted); text-transform:uppercase;">Nota</div></div>
+            <div><div id="ex-res-ok" style="font-size:3em; font-weight:bold; color:#4CAF50;">0</div><div style="font-size:0.65em; color:var(--text-muted); text-transform:uppercase;">Bien</div></div>
+            <div><div id="ex-res-fail" style="font-size:3em; font-weight:bold; color:#f44336;">0</div><div style="font-size:0.65em; color:var(--text-muted); text-transform:uppercase;">A repasar</div></div>
         </div>
 
         <div id="ex-res-lista" style="text-align:left; font-size:0.8em; max-height:220px; overflow-y:auto; border-top:1px solid #2a2a2a; padding-top:12px; margin-bottom:16px;"></div>
@@ -1684,38 +1695,38 @@
         
         <!-- MODOS -->
         <div style="display:flex; flex-direction:column; gap:4px; width:100%;">
-            <button id="pz-btn-lapiz" title="Lápiz" style="background:#333; color:white; border:1px solid #555; padding:6px; border-radius:6px; cursor:pointer; font-size:1em; transition:0.2s;">✏️</button>
-            <button id="pz-btn-resaltador" title="Resaltador" style="background:#333; color:white; border:1px solid #555; padding:6px; border-radius:6px; cursor:pointer; font-size:1em; transition:0.2s;">🖊️</button>
-            <button id="pz-btn-linea" title="Línea recta" style="background:#333; color:white; border:1px solid #555; padding:6px; border-radius:6px; cursor:pointer; font-size:1em; transition:0.2s;">📏</button>
-            <button id="pz-btn-borrador" title="Borrador" style="background:#333; color:white; border:1px solid #555; padding:6px; border-radius:6px; cursor:pointer; font-size:1em; transition:0.2s;"><i class="fa-solid fa-eraser"></i></button>
+            <button id="pz-btn-lapiz" title="Lápiz" style="background:var(--surface-2); color:white; border:1px solid var(--surface-4); padding:6px; border-radius:6px; cursor:pointer; font-size:1em; transition:0.2s;">✏️</button>
+            <button id="pz-btn-resaltador" title="Resaltador" style="background:var(--surface-2); color:white; border:1px solid var(--surface-4); padding:6px; border-radius:6px; cursor:pointer; font-size:1em; transition:0.2s;">🖊️</button>
+            <button id="pz-btn-linea" title="Línea recta" style="background:var(--surface-2); color:white; border:1px solid var(--surface-4); padding:6px; border-radius:6px; cursor:pointer; font-size:1em; transition:0.2s;">📏</button>
+            <button id="pz-btn-borrador" title="Borrador" style="background:var(--surface-2); color:white; border:1px solid var(--surface-4); padding:6px; border-radius:6px; cursor:pointer; font-size:1em; transition:0.2s;"><i class="fa-solid fa-eraser"></i></button>
         </div>
 
         <!-- SEPARADOR -->
-        <div style="width:100%; height:1px; background:#333;"></div>
+        <div style="width:100%; height:1px; background:var(--surface-2);"></div>
 
         <!-- PALETA RÁPIDA -->
         <div style="display:flex; flex-direction:column; gap:4px;">
-            <div id="pz-color-amarillo" title="Amarillo" style="width:28px;height:28px;border-radius:50%;background:#ffff00;cursor:pointer;border:2px solid #666;"></div>
-            <div id="pz-color-blanco" title="Blanco"   style="width:28px;height:28px;border-radius:50%;background:#ffffff;cursor:pointer;border:2px solid #555;"></div>
-            <div id="pz-color-cyan" title="Cian"     style="width:28px;height:28px;border-radius:50%;background:#00e5ff;cursor:pointer;border:2px solid #555;"></div>
-            <div id="pz-color-salmon" title="Rojo"     style="width:28px;height:28px;border-radius:50%;background:#ff6b6b;cursor:pointer;border:2px solid #555;"></div>
-            <div id="pz-color-verde" title="Verde"    style="width:28px;height:28px;border-radius:50%;background:#69ff47;cursor:pointer;border:2px solid #555;"></div>
-            <input type="color" id="pizarra-color" value="#ffff00" title="Color personalizado" style="width:28px;height:28px;padding:1px;border:2px solid #555;border-radius:50%;cursor:pointer;background:#333;">
+            <div id="pz-color-amarillo" title="Amarillo" style="width:28px;height:28px;border-radius:50%;background:#ffff00;cursor:pointer;border:2px solid var(--text-subtle);;"></div>
+            <div id="pz-color-blanco" title="Blanco"   style="width:28px;height:28px;border-radius:50%;background:#ffffff;cursor:pointer;border:2px solid var(--surface-4);"></div>
+            <div id="pz-color-cyan" title="Cian"     style="width:28px;height:28px;border-radius:50%;background:#00e5ff;cursor:pointer;border:2px solid var(--surface-4);"></div>
+            <div id="pz-color-salmon" title="Rojo"     style="width:28px;height:28px;border-radius:50%;background:#ff6b6b;cursor:pointer;border:2px solid var(--surface-4);"></div>
+            <div id="pz-color-verde" title="Verde"    style="width:28px;height:28px;border-radius:50%;background:#69ff47;cursor:pointer;border:2px solid var(--surface-4);"></div>
+            <input type="color" id="pizarra-color" value="#ffff00" title="Color personalizado" style="width:28px;height:28px;padding:1px;border:2px solid var(--surface-4);border-radius:50%;cursor:pointer;background:var(--surface-2);">
         </div>
 
         <!-- SEPARADOR -->
-        <div style="width:100%; height:1px; background:#333;"></div>
+        <div style="width:100%; height:1px; background:var(--surface-2);"></div>
 
         <!-- GROSOR -->
         <input type="range" id="pizarra-grosor" min="1" max="30" value="3" style="writing-mode:vertical-lr; direction:rtl; width:28px; height:70px; cursor:pointer;" title="Grosor">
 
         <!-- SEPARADOR -->
-        <div style="width:100%; height:1px; background:#333;"></div>
+        <div style="width:100%; height:1px; background:var(--surface-2);"></div>
 
         <!-- ACCIONES -->
-        <button id="btn-undopizarra" title="Deshacer (Ctrl+Z)" style="background:#333; color:#aaa; border:1px solid #555; padding:6px; border-radius:6px; cursor:pointer; font-size:0.9em; width:100%;">&hookleftarrow;</button>
+        <button id="btn-undopizarra" title="Deshacer (Ctrl+Z)" style="background:var(--surface-2); color:#aaa; border:1px solid var(--surface-4); padding:6px; border-radius:6px; cursor:pointer; font-size:0.9em; width:100%;">&hookleftarrow;</button>
         <button id="btn-limpiarpizarra" title="Borrar todo" style="background:#5a1a1a; color:#ff6b6b; border:1px solid #7a2a2a; padding:6px; border-radius:6px; cursor:pointer; font-size:0.9em; width:100%;"><i class="fa-regular fa-trash-can"></i></button>
-        <button id="btn-togglepizarra-2" title="Cerrar" style="background:#333; color:#888; border:1px solid #555; padding:6px; border-radius:6px; cursor:pointer; font-size:0.9em; width:100%;">&times;</button>
+        <button id="btn-togglepizarra-2" title="Cerrar" style="background:var(--surface-2); color:var(--text-muted); border:1px solid var(--surface-4); padding:6px; border-radius:6px; cursor:pointer; font-size:0.9em; width:100%;">&times;</button>
     </div>
 </div>
 <div id="mobile-nav-bar">
@@ -1732,44 +1743,56 @@
 </div>
 <div id="ai-chat-widget" class="hidden">
     <div class="chat-header">
-        <div class="omni-header-content">
-            <i class="fa-regular fa-eye"></i>
-            <span>EL OMNISCIENTE ESCUCHA</span>
+        <div class="omni-header-content omni-drag-handle" title="Arrastrar para mover" aria-label="Arrastrar la ventana de Omnisciente">
+            <i class="fa-regular fa-eye" aria-hidden="true"></i>
+            <span>Omnisciente</span>
+            <i class="fa-solid fa-grip-lines omni-drag-icon" aria-hidden="true"></i>
         </div>
         <div class="omni-controls">
             <select id="selector-modelo-ia" class="omni-model-select">
                 <option value="" disabled selected>Cargando modelos...</option>
             </select>
-            <button id="btn-togglechat" class="btn-close-chat" title="Cerrar">&times;</button>
+            <button type="button" id="btn-chat-expand" class="btn-close-chat" title="Ampliar chat" aria-label="Ampliar chat" aria-pressed="false"><i class="fa-solid fa-up-right-and-down-left-from-center" aria-hidden="true"></i></button>
+            <button type="button" id="btn-chat-reset" class="btn-close-chat" title="Restablecer tamaño y posición" aria-label="Restablecer tamaño y posición"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i></button>
+            <button id="btn-togglechat" class="btn-close-chat" title="Cerrar chat" aria-label="Cerrar chat">&times;</button>
         </div>
     </div>
     <div id="chat-messages">
-        <div class="chat-msg system">
-            Mi nombre es Omnisciente, funciono gracias a una API que puedes enlazar en ajustes. Si no tienes, puedes conseguirla gratis en <a href="https://console.groq.com/keys" target="_blank" style="color: #4CAF50; text-decoration: underline; cursor: pointer;">Groq</a> o <a href="https://openrouter.ai/keys" target="_blank" style="color: #4CAF50; text-decoration: underline; cursor: pointer;">OpenRouter</a>.<br>Es una llave privada, no la compartas a la ligera. Puedo leer el contenido de lo que estás estudiando ahora mismo y en base a eso contestarte, no necesitas enlazar nada.<br>Recuerda que lo que compartas con la IA ya no es privado.
+        <div class="omni-welcome" id="omni-welcome">
+            <div class="omni-welcome-mark"><i class="fa-regular fa-eye" aria-hidden="true"></i></div>
+            <strong>¿Qué quieres comprender?</strong>
+            <p>Pregunta sobre el concepto que estudias o utiliza una sugerencia para empezar.</p>
+            <div class="omni-quick-actions" aria-label="Preguntas sugeridas">
+                <button type="button" class="omni-quick-prompt" data-prompt="Explícame la intuición del concepto que estoy estudiando."><i class="fa-solid fa-lightbulb" aria-hidden="true"></i> Intuición</button>
+                <button type="button" class="omni-quick-prompt" data-prompt="Dame un ejemplo concreto del concepto que estoy estudiando."><i class="fa-solid fa-flask" aria-hidden="true"></i> Ejemplo</button>
+                <button type="button" class="omni-quick-prompt" data-prompt="Explica paso a paso la demostración del resultado actual."><i class="fa-solid fa-list-ol" aria-hidden="true"></i> Demostración</button>
+                <button type="button" class="omni-quick-prompt" data-prompt="Hazme una pregunta breve para comprobar si he entendido este concepto."><i class="fa-solid fa-circle-question" aria-hidden="true"></i> Comprensión</button>
+            </div>
+            <details class="omni-privacy-help">
+                <summary>Configuración y privacidad</summary>
+                <p>Configura tu clave de IA en Ajustes. Puedes usar <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer">Groq</a> o <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">OpenRouter</a>. Los mensajes enviados al proveedor pueden ser procesados externamente; evita compartir datos sensibles.</p>
+            </details>
         </div>
     </div>
     <div class="chat-input-area">
-        <textarea id="ai-user-input" placeholder="Dile algo al todopoderoso..." rows="1"></textarea>
-        <button id="btn-send-ai" title="Enviar">
+        <textarea id="ai-user-input" placeholder="Pregunta sobre tus apuntes…" aria-label="Mensaje para Omnisciente" rows="1"></textarea>
+        <button id="btn-send-ai" title="Enviar mensaje" aria-label="Enviar mensaje">
             <i class="fa-solid fa-paper-plane"></i>
         </button>
     </div>
     <div class="chat-footer-note">La IA puede cometer errores. Verifica la información importante.</div>
+    <div id="omni-resize-grip" role="separator" aria-label="Redimensionar ventana" aria-orientation="horizontal" title="Arrastrar para cambiar tamaño"><i class="fa-solid fa-up-right-and-down-left-from-center" aria-hidden="true"></i></div>
 </div>
-
-<button id="btn-open-chat" title="Invocar fuerza divina">
-    <i class="fa-regular fa-eye"></i>
-</button>
 
 <!-- MODAL AMIGOS -->
 <div id="modal-amigos" class="hidden" style="position:fixed; inset:0; background:rgba(0,0,0,0.85); display:flex; justify-content:center; align-items:center;">
     <div style="background:var(--card-bg); border:1px solid #444; border-radius:8px; padding:25px; width:95%; max-width:500px; max-height:82vh; overflow-y:auto; box-sizing:border-box;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; border-bottom:1px solid #333; padding-bottom:15px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; border-bottom:1px solid var(--surface-2); padding-bottom:15px;">
             <h3 style="margin:0; color:var(--accent); font-size:1.1em;">Social</h3>
-            <button id="btn-cerrarmodalamigos" style="background:none; border:none; color:#888; cursor:pointer; font-size:1.3em; line-height:1;">✕</button>
+            <button id="btn-cerrarmodalamigos" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1.3em; line-height:1;">✕</button>
         </div>
         <div id="amigos-contenido">
-            <p style="color:#888; text-align:center;">Cargando...</p>
+            <p style="color:var(--text-muted); text-align:center;">Cargando...</p>
         </div>
     </div>
 </div>
@@ -1779,7 +1802,7 @@
     <div style="background:var(--card-bg); border:1px solid #444; border-radius:10px; width:95%; max-width:400px; max-height:88vh; display:flex; flex-direction:column; overflow:hidden;">
 
         <!-- Header fijo -->
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-bottom:1px solid #333; flex-shrink:0;">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-bottom:1px solid var(--surface-2); flex-shrink:0;">
             <h3 style="margin:0; font-size:0.9em; color:var(--text-main);">
                 <i class="fa-solid fa-filter" style="color:var(--accent); margin-right:6px;"></i>Filtros de estudio
             </h3>
@@ -1788,26 +1811,26 @@
 
         <!-- Cuerpo scrolleable -->
         <div style="overflow-y:auto; padding:10px 14px; display:flex; flex-direction:column; gap:7px;">
-            <p style="font-size:0.8em; color:#888; margin-top:0;">
+            <p style="font-size:0.8em; color:var(--text-muted); margin-top:0;">
             Pulsa los apartados para aplicar los filtros. En gris, no se aplican; en otro color, sí.</p>
 
             <!-- checkbox oculto, fila clicable, icono como indicador -->
             <input type="checkbox" id="check-filtro-hoy" style="display:none;">
             <div id="btn-document-2" style="display:flex; align-items:center; gap:10px; cursor:pointer; padding:7px 10px; border-radius:6px; background:#1a1a1a; border:1px solid #2a2a2a; user-select:none;">
-                <i id="icon-hoy" class="fa-solid fa-globe" style="color:#555; font-size:1em; transition:color 0.2s; width:16px; text-align:center;"></i>
+                <i id="icon-hoy" class="fa-solid fa-globe" style="color:var(--surface-4); font-size:1em; transition:color 0.2s; width:16px; text-align:center;"></i>
                 <span style="font-size:0.82em; color:#ccc;">Pendientes hoy</span>
             </div>
 
             <input type="checkbox" id="check-filtro-nuevas" style="display:none;">
             <div id="btn-document-3" style="display:flex; align-items:center; gap:10px; cursor:pointer; padding:7px 10px; border-radius:6px; background:#1a1a1a; border:1px solid #2a2a2a; user-select:none;">
-                <i id="icon-nuevas" class="fa-solid fa-user-astronaut" style="color:#555; font-size:1em; transition:color 0.2s; width:16px; text-align:center;"></i>
+                <i id="icon-nuevas" class="fa-solid fa-user-astronaut" style="color:var(--surface-4); font-size:1em; transition:color 0.2s; width:16px; text-align:center;"></i>
                 <span style="font-size:0.82em; color:#ccc;">Nunca repasadas</span>
             </div>
 
             <div style="padding:7px 10px; border-radius:6px; background:#1a1a1a; border:1px solid #2a2a2a;">
                 <input type="checkbox" id="check-filtro-tema" style="display:none;">
                 <div id="btn-document-4" style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:5px; user-select:none;">
-                    <i id="icon-tema" class="fa-solid fa-shuttle-space" style="color:#555; font-size:1em; transition:color 0.2s; width:16px; text-align:center;"></i>
+                    <i id="icon-tema" class="fa-solid fa-shuttle-space" style="color:var(--surface-4); font-size:1em; transition:color 0.2s; width:16px; text-align:center;"></i>
                     <span style="font-size:0.82em; color:#ccc;">Temas</span>
                 </div>
                 <input type="text" id="filtro-tema-val" placeholder="1,2  ó  1-5  ó  1-3,7" style="width:100%; box-sizing:border-box; background:#111; border:1px solid #444; border-radius:4px; color:#ddd; font-size:0.78em; padding:4px 7px; outline:none;">
@@ -1816,7 +1839,7 @@
             <div style="padding:7px 10px; border-radius:6px; background:#1a1a1a; border:1px solid #2a2a2a;">
                 <input type="checkbox" id="check-filtro-rango" style="display:none;">
                 <div id="btn-document-5" style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:5px; user-select:none;">
-                    <i id="icon-rango" class="fa-solid fa-moon" style="color:#555; font-size:1em; transition:color 0.2s; width:16px; text-align:center;"></i>
+                    <i id="icon-rango" class="fa-solid fa-moon" style="color:var(--surface-4); font-size:1em; transition:color 0.2s; width:16px; text-align:center;"></i>
                     <span style="font-size:0.82em; color:#ccc;">Rango de índices</span>
                 </div>
                 <input type="text" id="filtro-rango-val" placeholder="5-12  ó  1,3,7-10" style="width:100%; box-sizing:border-box; background:#111; border:1px solid #444; border-radius:4px; color:#ddd; font-size:0.78em; padding:4px 7px; outline:none;">
@@ -1825,7 +1848,7 @@
             <div style="padding:7px 10px; border-radius:6px; background:#1a1a1a; border:1px solid #2a2a2a;">
                 <input type="checkbox" id="check-filtro-tipo" style="display:none;">
                 <div id="btn-document-6" style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:7px; user-select:none;">
-                    <i id="icon-tipo" class="fa-solid fa-satellite" style="color:#555; font-size:1em; transition:color 0.2s; width:16px; text-align:center;"></i>
+                    <i id="icon-tipo" class="fa-solid fa-satellite" style="color:var(--surface-4); font-size:1em; transition:color 0.2s; width:16px; text-align:center;"></i>
                     <span style="font-size:0.82em; color:#ccc;">Tipo / Apartado</span>
                 </div>
                 <div id="filtro-tipo-grid" style="display:flex; flex-wrap:wrap; gap:5px;"></div>
@@ -1834,7 +1857,7 @@
             <div style="padding:7px 10px; border-radius:6px; background:#1a1a1a; border:1px solid #2a2a2a;">
                 <input type="checkbox" id="check-filtro-dificultad" style="display:none;">
                 <div id="btn-document-7" style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:7px; user-select:none;">
-                    <i id="icon-dificultad" class="fa-solid fa-meteor" style="color:#555; font-size:1em; transition:color 0.2s; width:16px; text-align:center;"></i>
+                    <i id="icon-dificultad" class="fa-solid fa-meteor" style="color:var(--surface-4); font-size:1em; transition:color 0.2s; width:16px; text-align:center;"></i>
                     <span style="font-size:0.82em; color:#ccc;">Por Fase de Aprendizaje (FSRS)</span>
                 </div>
                 <div style="display:flex; gap:5px; flex-wrap:wrap;">
@@ -1855,9 +1878,9 @@
         </div>
 
         <!-- Footer fijo -->
-        <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 14px; border-top:1px solid #333; flex-shrink:0;">
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 14px; border-top:1px solid var(--surface-2); flex-shrink:0;">
             <button id="btn-limpiarfiltros" class="btn-ghost">✕ Resetear</button>
-            <span id="contador-filtro-modal" style="font-size:0.78em; color:#666; font-family:monospace;"></span>
+            <span id="contador-filtro-modal" style="font-size:0.78em; color:var(--text-subtle);; font-family:monospace;"></span>
             <button id="btn-cerrarmodalfiltros-2" style="background:rgba(143, 47, 162,0.15); border:1px solid #AE39C6; color:#AE39C6; font-size:0.8em; cursor:pointer; padding:5px 14px; border-radius:6px; font-weight:bold;">Aplicar</button>
         </div>
     </div>
@@ -1876,21 +1899,21 @@
         <div id="mc-config-panel">
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 15px;">
                 <div>
-                    <label style="font-size: 0.75em; color: #888;">Fecha del examen</label>
+                    <label style="font-size: 0.75em; color: var(--text-muted);">Fecha del examen</label>
                     <input type="date" id="mc-fecha-examen" class="form-input" style="padding: 6px;">
                 </div>
                 <div>
-                    <label style="font-size: 0.75em; color: #888;">Nota de corte</label>
+                    <label style="font-size: 0.75em; color: var(--text-muted);">Nota de corte</label>
                     <input type="number" id="mc-umbral" value="5.0" step="0.5" class="form-input" style="padding: 6px;">
                 </div>
                 <div>
-                    <label style="font-size: 0.75em; color: #888;">Filtrar por tema</label>
+                    <label style="font-size: 0.75em; color: var(--text-muted);">Filtrar por tema</label>
                     <select id="mc-filtro-tema" class="form-input" style="padding: 6px;">
                         <option value="">-- Todos --</option>
                     </select>
                 </div>
                 <div>
-                    <label style="font-size: 0.75em; color: #888;">Filtrar por tipo</label>
+                    <label style="font-size: 0.75em; color: var(--text-muted);">Filtrar por tipo</label>
                     <select id="mc-filtro-apartado" class="form-input" style="padding: 6px;">
                         <option value="">-- Todos --</option>
                     </select>
@@ -1919,7 +1942,7 @@
                 <!-- Aquí se listarán las tarjetas recomendadas -->
             </div>
 
-            <div style="font-size: 0.7em; color: #666; text-align: center; border-top: 1px solid #333; padding-top: 10px;">
+            <div style="font-size: 0.7em; color: var(--text-subtle);; text-align: center; border-top: 1px solid var(--surface-2); padding-top: 10px;">
                 <i class="fa-solid fa-info-circle"></i> Haz clic en una tarjeta para añadirla al principio de tu cola de estudio.
             </div>
         </div>
@@ -1933,52 +1956,52 @@
 <div id="modo-estudio-modal" style="display:none; position:fixed; inset:0; z-index:10000; background:rgba(0,0,0,0.85); backdrop-filter:blur(4px); justify-content:center; align-items:center;">
     <div class="modal-content" style="max-width:500px; width:95%; border:1px solid #444; background:var(--card-bg); border-radius:12px; padding:20px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-            <h3 style="margin:0; color:#eee;">Modo de Estudio</h3>
+            <h3 style="margin:0; color:var(--text-eee);">Modo de Estudio</h3>
             <button id="btn-cerrar-modo-estudio" style="background:transparent; border:none; color:var(--text-muted); font-size:1.2em; cursor:pointer;">✕</button>
         </div>
         
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
             <!-- Aleatorio -->
             <input type="radio" name="radio-modo-estudio" id="check-modo-aleatorio" value="aleatorio" style="display:none;">
-            <label for="check-modo-aleatorio" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px; background:#1a1a1a; border:2px solid #333; border-radius:10px; cursor:pointer; text-align:center; user-select:none; transition:all 0.2s;">
-                <i id="icon-modo-aleatorio" class="fa-solid fa-shuffle" style="font-size:2em; color:#555; transition:color 0.2s;"></i>
+            <label for="check-modo-aleatorio" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px; background:#1a1a1a; border:2px solid var(--surface-2); border-radius:10px; cursor:pointer; text-align:center; user-select:none; transition:all 0.2s;">
+                <i id="icon-modo-aleatorio" class="fa-solid fa-shuffle" style="font-size:2em; color:var(--surface-4); transition:color 0.2s;"></i>
                 <strong style="color:#ccc; font-size:0.95em;">Aleatorio</strong>
                 <span style="color:#777; font-size:0.75em;">Baraja activo</span>
             </label>
 
             <!-- Secuencial c/ Retraso -->
             <input type="radio" name="radio-modo-estudio" id="check-modo-retraso" value="secuencial_retraso" style="display:none;">
-            <label for="check-modo-retraso" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px; background:#1a1a1a; border:2px solid #333; border-radius:10px; cursor:pointer; text-align:center; user-select:none; transition:all 0.2s;">
-                <i id="icon-modo-retraso" class="fa-solid fa-sort-amount-down" style="font-size:2em; color:#555; transition:color 0.2s;"></i>
+            <label for="check-modo-retraso" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px; background:#1a1a1a; border:2px solid var(--surface-2); border-radius:10px; cursor:pointer; text-align:center; user-select:none; transition:all 0.2s;">
+                <i id="icon-modo-retraso" class="fa-solid fa-sort-amount-down" style="font-size:2em; color:var(--surface-4); transition:color 0.2s;"></i>
                 <strong style="color:#ccc; font-size:0.95em;">Retraso</strong>
                 <span style="color:#777; font-size:0.75em;">Atrasadas 1º</span>
             </label>
 
             <!-- Secuencial Puro -->
             <input type="radio" name="radio-modo-estudio" id="check-modo-puro" value="secuencial_puro" style="display:none;">
-            <label for="check-modo-puro" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px; background:#1a1a1a; border:2px solid #333; border-radius:10px; cursor:pointer; text-align:center; user-select:none; transition:all 0.2s;">
-                <i id="icon-modo-puro" class="fa-solid fa-list-ol" style="font-size:2em; color:#555; transition:color 0.2s;"></i>
+            <label for="check-modo-puro" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px; background:#1a1a1a; border:2px solid var(--surface-2); border-radius:10px; cursor:pointer; text-align:center; user-select:none; transition:all 0.2s;">
+                <i id="icon-modo-puro" class="fa-solid fa-list-ol" style="font-size:2em; color:var(--surface-4); transition:color 0.2s;"></i>
                 <strong style="color:#ccc; font-size:0.95em;">Secuencial</strong>
                 <span style="color:#777; font-size:0.75em;">Orden temario</span>
             </label>
 
             <input type="checkbox" id="check-modo-lectura" style="display:none;">
-            <label for="check-modo-lectura" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px; background:#1a1a1a; border:2px solid #333; border-radius:10px; cursor:pointer; text-align:center; user-select:none; transition:all 0.2s;">
-                <i id="icon-modo-lectura" class="fa-solid fa-book-open" style="font-size:2em; color:#555; transition:color 0.2s;"></i>
+            <label for="check-modo-lectura" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px; background:#1a1a1a; border:2px solid var(--surface-2); border-radius:10px; cursor:pointer; text-align:center; user-select:none; transition:all 0.2s;">
+                <i id="icon-modo-lectura" class="fa-solid fa-book-open" style="font-size:2em; color:var(--surface-4); transition:color 0.2s;"></i>
                 <strong style="color:#ccc; font-size:0.95em;">Lectura</strong>
                 <span style="color:#777; font-size:0.75em;">Mostrar respuesta siempre</span>
             </label>
 
             <input type="radio" name="radio-modo-estudio" id="check-modo-anki" value="anki" style="display:none;">
-            <label for="check-modo-anki" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px; background:#1a1a1a; border:2px solid #333; border-radius:10px; cursor:pointer; text-align:center; user-select:none; transition:all 0.2s;">
-                <i id="icon-modo-anki" class="fa-solid fa-stopwatch" style="font-size:2em; color:#555; transition:color 0.2s;"></i>
+            <label for="check-modo-anki" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px; background:#1a1a1a; border:2px solid var(--surface-2); border-radius:10px; cursor:pointer; text-align:center; user-select:none; transition:all 0.2s;">
+                <i id="icon-modo-anki" class="fa-solid fa-stopwatch" style="font-size:2em; color:var(--surface-4); transition:color 0.2s;"></i>
                 <strong style="color:#ccc; font-size:0.95em;">Anki</strong>
                 <span style="color:#777; font-size:0.75em;">Pasos cortos (1m, 10m, 1h, 1d)</span>
             </label>
 
             <input type="radio" name="radio-modo-estudio" id="check-modo-montecarlo" value="montecarlo" style="display:none;">
-            <label for="check-modo-montecarlo" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px; background:#1a1a1a; border:2px solid #333; border-radius:10px; cursor:pointer; text-align:center; user-select:none; transition:all 0.2s;">
-                <i id="icon-modo-montecarlo" class="fa-solid fa-chart-line" style="font-size:2em; color:#555; transition:color 0.2s;"></i>
+            <label for="check-modo-montecarlo" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px; background:#1a1a1a; border:2px solid var(--surface-2); border-radius:10px; cursor:pointer; text-align:center; user-select:none; transition:all 0.2s;">
+                <i id="icon-modo-montecarlo" class="fa-solid fa-chart-line" style="font-size:2em; color:var(--surface-4); transition:color 0.2s;"></i>
                 <strong style="color:#ccc; font-size:0.95em;">Máx. Utilidad</strong>
                 <span style="color:#777; font-size:0.75em;">Top Impacto (FSRS)</span>
             </label>

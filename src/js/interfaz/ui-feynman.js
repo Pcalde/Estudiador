@@ -76,7 +76,7 @@ const UIFeynman = (() => {
         const config = el('examen-config');
         if (!modal || !config) return;
         ponerEstilos();
-        const bloque = nodo('section');
+        const bloque = nodo('section', 'fey-opciones');
         bloque.id = 'ex-feynman-config';
         const titulo = nodo('h4', '', '¿A quién quieres enseñárselo?');
         bloque.appendChild(titulo);

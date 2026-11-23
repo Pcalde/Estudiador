@@ -5,7 +5,6 @@ const UIGraph = (() => {
     let _preview = null, _selected = null, _connectFrom = null, _pathFrom = null;
     let _mode = 'normal', _emphasis = null, _hiddenTypes = new Set(), _fsrs = false;
     let _searchBound = false, _toolbarBound = false, _showIslands = true;
-    let _dataNodes = null, _dataEdges = null;
     const $ = id => document.getElementById(id);
     const _css = (name, fallback) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
     const _escaped = value => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -58,23 +57,14 @@ const UIGraph = (() => {
         return { nodes, edges };
     }
     function _redraw(fit = false) {
-        if (!_network || !_dataNodes || !_dataEdges) return;
+        if (!_network) return;
         const { nodes, edges } = _visible();
         _hideTooltip();
-        // Conserva las instancias DataSet y las coordenadas del lienzo.
-        // setData() recreaba la simulación y cambiaba posiciones al filtrar.
-        const ids = new Set(nodes.map(n=>String(n.id)));
-        const edgeIds = new Set(edges.map(e=>String(e.id)));
-        const removedEdges=_dataEdges.getIds().filter(id=>!edgeIds.has(String(id)));
-        if(removedEdges.length)_dataEdges.remove(removedEdges);
-        const removedNodes=_dataNodes.getIds().filter(id=>!ids.has(String(id)));
-        if(removedNodes.length)_dataNodes.remove(removedNodes);
-        _dataNodes.update(nodes.map(_toNode));
-        _dataEdges.update(edges.map(_toEdge));
+        _network.setData({ nodes: new vis.DataSet(nodes.map(_toNode)), edges: new vis.DataSet(edges.map(_toEdge)) });
         if (fit && nodes.length) _network.fit({ animation: false });
-        _fillTypes();_renderMaps();_renderIslands();
+        _fillTypes();
+        _renderMaps();
         const count = $('graph-count'); if (count) count.textContent = `${nodes.length} nodos · ${edges.length} relaciones`;
-        _network.redraw();
     }
     function _setMode(mode) {
         _mode = _mode === mode ? 'normal' : mode;
@@ -116,13 +106,51 @@ const UIGraph = (() => {
             row.append(checked, document.createTextNode(' Relación verificada por mí'));
             const note = document.createElement('p'); note.className = 'graph-help';
             note.textContent = 'Las relaciones propuestas por IA se señalan con líneas discontinuas hasta verificarlas.';
+            // Metadatos opcionales para que el examen pueda contrastar implicaciones y recíprocos.
+            const tipoLabel = document.createElement('label'); tipoLabel.textContent = 'Naturaleza de la conexión (opcional)';
+            const tipo = document.createElement('select');
+            for (const [value, text] of [
+                ['', 'Sin clasificar'], ['asociacion', 'Asociación'], ['implicacion', 'Implicación'],
+                ['equivalencia', 'Equivalencia'], ['construccion', 'Construcción'], ['dependencia', 'Dependencia']
+            ]) {
+                const opt = document.createElement('option'); opt.value = value; opt.textContent = text;
+                tipo.append(opt);
+            }
+            tipo.value = edge.tipo || '';
+            const reversibleLabel = document.createElement('label'); reversibleLabel.textContent = '¿Es reversible? (solo si está fundamentado)';
+            const reversible = document.createElement('select');
+            for (const [value, text] of [['','Sin determinar'],['true','Sí'],['false','No']]) {
+                const opt = document.createElement('option'); opt.value = value; opt.textContent = text;
+                reversible.append(opt);
+            }
+            reversible.value = edge.tipo === 'equivalencia' ? 'true' : (typeof edge.reversible === 'boolean' ? String(edge.reversible) : '');
+            tipo.addEventListener('change', () => {
+                if (tipo.value === 'equivalencia') reversible.value = 'true';
+                reversible.disabled = tipo.value === 'equivalencia';
+            });
+            reversible.disabled = tipo.value === 'equivalencia';
+            const explanationLabel = document.createElement('label'); explanationLabel.textContent = 'Justificación o contraejemplo (opcional)';
+            const explanation = document.createElement('textarea');
+            explanation.rows = 4; explanation.maxLength = 3000;
+            explanation.placeholder = 'Hipótesis, explicación de la relación, contraejemplo si procede...';
+            explanation.value = edge.explicacion || '';
             const actions = document.createElement('div'); actions.className = 'graph-actions';
             const del = document.createElement('button'); del.className = 'graph-danger'; del.textContent = 'Eliminar';
             del.onclick = () => { _cb.onRemoveEdge?.(id); close(); };
             const cancel = document.createElement('button'); cancel.className = 'graph-secondary'; cancel.textContent = 'Cancelar'; cancel.onclick = close;
             const save = document.createElement('button'); save.textContent = 'Guardar';
-            save.onclick = () => { _cb.onEditEdge?.(id, {label: input.value, reviewed: checked.checked}); close(); };
-            actions.append(del, cancel, save); box.append(label, input, row, note, actions); input.focus();
+            save.onclick = () => {
+                _cb.onEditEdge?.(id, {
+                    label: input.value, reviewed: checked.checked, tipo: tipo.value,
+                    reversible: reversible.value === '' ? null : reversible.value === 'true',
+                    explicacion: explanation.value
+                });
+                close();
+            };
+            actions.append(del, cancel, save);
+            box.append(label, input, row, note, tipoLabel, tipo, reversibleLabel, reversible,
+                explanationLabel, explanation, actions);
+            input.focus();
         });
     }
     function _clickNode(id) {
@@ -189,7 +217,6 @@ const UIGraph = (() => {
         if (!_showIslands || !_network || typeof GraphLayout === 'undefined') return;
         const visible=_visible();
         const components=GraphLayout.components(visible.nodes,visible.edges);
-        const names=_cb.onGetIslandNames?.() || {};
         if(!components.length)return;
         const palette=[_css('--accent','#4caf50'),_css('--status-blue','#256ca5'),
             _css('--status-green','#4caf50'),_css('--status-yellow','#cdcd00')];
@@ -212,17 +239,15 @@ const UIGraph = (() => {
             ctx.globalAlpha=.65;ctx.strokeStyle=color;ctx.lineWidth=1.7;
             ctx.setLineDash([10,7]);ctx.stroke();ctx.setLineDash([]);
             ctx.globalAlpha=.85;ctx.fillStyle=color;ctx.font='bold 13px sans-serif';
-            const name=group.map(n=>names[String(n.id)]).find(Boolean) || `Isla ${index+1}`;
-            ctx.fillText(`${name} · ${group.length} nodos`,left+13,top+23);
+            ctx.fillText(`Isla ${index+1} · ${group.length} nodos`,left+13,top+23);
         });
         ctx.restore();
     }
     function _initNetwork() {
         if (_network) _network.destroy();
         $('graph-node-tooltip')?.remove();
-        _dataNodes = new vis.DataSet([]); _dataEdges = new vis.DataSet([]);
         _network = new vis.Network($('graph-canvas-container'),
-            { nodes: _dataNodes, edges: _dataEdges },
+            { nodes: new vis.DataSet([]), edges: new vis.DataSet([]) },
             { physics: { enabled: false }, interaction: { hover: true, multiselect: true, tooltipDelay: 250 },
               manipulation: { enabled: false }, nodes: { widthConstraint: { maximum: 215 } } });
         _network.on('beforeDrawing',ctx=>_drawIslandBorders(ctx));
@@ -280,35 +305,14 @@ const UIGraph = (() => {
         for (const m of _cb.onListMaps()) select.add(new Option(`${m.name} (${m.nodes})`, m.id));
         select.value = current;
     }
-    function _getIslandComponents() {
-        const {nodes,edges}=_visible();
-        return typeof GraphLayout==='undefined' ? [] : GraphLayout.components(nodes,edges);
-    }
-    function _getIslandBySelectedOption() {
-        const index=Number($('graph-island-select')?.value);
-        return _getIslandComponents()[index] || null;
-    }
-    function _renderIslands() {
-        const select=$('graph-island-select');if(!select)return;
-        const previous=select.value, groups=_getIslandComponents();
-        const names=_cb.onGetIslandNames?.()||{};
-        select.replaceChildren();
-        groups.forEach((group,index)=>{
-            const name=group.map(n=>names[String(n.id)]).find(Boolean)||`Isla ${index+1}`;
-            select.add(new Option(`${name} (${group.length} nodos)`,String(index)));
-        });
-        if(previous && Number(previous)<groups.length) select.value=previous;
-    }
     function _createTools() {
         if ($('graph-extra-tools')) return;
         const toolbar = $('graph-toolbar');
         const more = document.createElement('div'); more.id = 'graph-extra-tools'; more.className = 'graph-extra-tools';
         more.innerHTML = `<select id="graph-map-select" title="Mapa activo" aria-label="Mapa activo"></select>
-            <details class="graph-menu"><summary>Mapas</summary><div class="graph-menu-panel">
-                <button id="graph-map-new">+ Nuevo mapa</button>
-                <button id="graph-map-rename">Renombrar mapa</button>
-                <button id="graph-map-delete" class="graph-danger">Borrar mapa</button>
-            </div></details>
+            <button id="graph-map-new" title="Nuevo mapa">+ Mapa</button>
+            <button id="graph-map-rename" title="Renombrar mapa">Renombrar</button>
+            <button id="graph-map-delete" class="graph-danger" title="Eliminar mapa activo">Borrar mapa</button>
             <details class="graph-menu"><summary>Visualización</summary>
                 <div class="graph-menu-panel">
                     <div id="graph-filter-types"></div>
@@ -318,46 +322,24 @@ const UIGraph = (() => {
                     <button id="graph-clear-emphasis" class="graph-secondary">Mostrar todo / quitar resaltado</button>
                 </div></details>
             <details class="graph-menu"><summary>Organizar</summary><div class="graph-menu-panel">
-                <p class="graph-help">Primero selecciona los nodos que quieras ordenar (Ctrl + clic para varios). El resto del mapa no se moverá.</p>
+                <p class="graph-help">Opera sobre los nodos seleccionados; sin selección, sobre el mapa entero.</p>
                 <button id="graph-layout-grid">Organizar en cuadrícula</button>
                 <button id="graph-layout-islands">Separar componentes en islas</button>
-                <button id="graph-layout-hierarchy" title="Ordena desde los prerrequisitos hasta los resultados, según relaciones requiere/depende_de">Ordenar por prerrequisitos</button>
-                <button id="graph-layout-generality" title="Ordena resultados generales y casos particulares según generaliza/es_caso_de">Ordenar generalizaciones y casos</button>
-                <p class="graph-help">Prerrequisitos: arriba los conceptos necesarios; debajo los resultados que los usan. Generalizaciones: arriba el concepto más general; debajo sus casos particulares. Solo cuentan las relaciones reconocidas.</p>
+                <button id="graph-layout-hierarchy">Jerarquía de dependencias</button>
+                <button id="graph-layout-generality">Jerarquía de generalidad</button>
                 <button id="graph-layout-undo">Deshacer organización</button>
             </div></details>
-            <details class="graph-menu"><summary>Conexiones</summary><div class="graph-menu-panel">
-                <button id="graph-btn-explore" title="Destacar relaciones de un nodo">Ver entorno del nodo</button>
-                <select id="graph-explore-direction" title="Dirección de exploración"><option value="entrantes">Entrantes</option><option value="salientes">Salientes</option><option value="ambos">Ambos</option></select>
-                <button id="graph-btn-path" title="Escoger dos nodos y mostrar el camino">Buscar camino</button>
-                <label class="graph-inline"><input id="graph-path-directed" type="checkbox" checked>Camino dirigido</label>
-                <button id="graph-reset-highlight">Quitar resaltado</button>
-            </div></details>
-            <details class="graph-menu"><summary>Islas</summary><div class="graph-menu-panel">
-                <label for="graph-island-select" class="graph-help">Componente conexa</label>
-                <select id="graph-island-select" aria-label="Elegir isla"></select>
-                <button id="graph-island-select-all">Seleccionar todos sus nodos</button>
-                <button id="graph-island-rename">Renombrar isla</button>
-                <p class="graph-help">Tras seleccionar la isla, arrastra cualquier nodo seleccionado para mover el conjunto. Las islas siguen la conectividad actual del mapa.</p>
-            </div></details>
+            <button id="graph-btn-explore" title="Destacar relaciones entrantes y salientes">Entorno</button>
+            <select id="graph-explore-direction" title="Dirección de exploración"><option value="entrantes">Entrantes</option><option value="salientes">Salientes</option><option value="ambos">Ambos</option></select>
+            <button id="graph-btn-path" title="Buscar el camino entre dos nodos">Camino</button>
+            <button id="graph-reset-highlight" title="Eliminar resaltado de entorno o camino">Limpiar resaltado</button>
+            <label class="graph-inline"><input id="graph-path-directed" type="checkbox" checked>Dirigido</label>
             <details class="graph-menu"><summary>Exportar / Importar</summary><div class="graph-menu-panel">
                 <button id="graph-export-text">Texto editable</button><button id="graph-import-text">Importar texto</button>
                 <button id="graph-export-svg">Imagen SVG</button><button id="graph-export-png">Imagen PNG</button>
             </div></details>
             <span id="graph-count" class="graph-small"></span>`;
         toolbar.insertBefore(more, $('graph-hint'));
-        const search = document.createElement('details');
-        search.className='graph-menu graph-search-menu';
-        search.innerHTML='<summary>Buscar concepto</summary><div class="graph-menu-panel graph-search-panel"></div>';
-        const panel=search.querySelector('.graph-menu-panel');
-        for(const id of ['graph-search-filter','graph-search-tema','graph-search-input']){
-            const element=$(id); if(element) panel.append(id==='graph-search-input' && element.parentElement !== toolbar ? element.parentElement : element);
-        }
-        toolbar.insertBefore(search,more);
-        // El listado flotante permanece junto al campo de búsqueda.
-        const status=$('graph-hint'); if(status) toolbar.append(status);
-        const primary=toolbar.querySelector('#graph-btn-ia')?.parentElement;
-        if(primary) primary.classList.add('graph-primary-actions');
         _applyGraphButtonTheme(more);
         $('graph-map-select').onchange = e => { _emphasis = null; _hiddenTypes.clear(); _cb.onSelectMap?.(e.target.value); _renderMaps(); _network?.fit(); };
         $('graph-map-new').onclick = () => _prompt('Nombre del nuevo mapa', 'Mapa nuevo', name => { if (name) { _cb.onCreateMap?.(name); _emphasis = null; _hiddenTypes.clear(); _network?.fit(); } });
@@ -373,31 +355,14 @@ const UIGraph = (() => {
         $('graph-show-islands').onchange=e=>{_showIslands=e.target.checked;_network?.redraw();};
         const arrange=(type,criterion)=>{
             const ids=_network?.getSelectedNodes() || [];
-            if(!ids.length) return Toast.show('Selecciona primero los nodos que quieras organizar.', 'info');
             const ok=_cb.onOrganize?.(type,ids,{criterion});
-            if(ok) _hint(`Organizados ${ids.length} nodos. El resto conserva su posición.`);
-            else Toast.show(type==='hierarchy' ? 'No hay relaciones reconocidas para esa jerarquía.' : 'No es necesario mover esos nodos.', 'info');
+            if(ok) { _network?.fit({animation:false}); _hint(`Organización aplicada a ${ids.length || 'todos los'} nodos.`); }
         };
         $('graph-layout-grid').onclick=()=>arrange('grid');
         $('graph-layout-islands').onclick=()=>arrange('islands');
         $('graph-layout-hierarchy').onclick=()=>arrange('hierarchy','dependencias');
         $('graph-layout-generality').onclick=()=>arrange('hierarchy','generalidad');
         $('graph-layout-undo').onclick=()=>{if(_cb.onUndoLayout?.())_hint('Organización deshecha.');};
-        $('graph-island-select-all').onclick=()=>{
-            const component=_getIslandBySelectedOption();
-            if(!component) return;
-            _network.selectNodes(component.map(n=>n.id));
-            _hint(`${component.length} nodos seleccionados. Arrastra uno para desplazar la isla.`);
-        };
-        $('graph-island-rename').onclick=()=>{
-            const component=_getIslandBySelectedOption();if(!component)return;
-            const names=_cb.onGetIslandNames?.()||{};
-            const current=component.map(n=>names[String(n.id)]).find(Boolean)||'';
-            _prompt('Nombre de la isla',current,name=>{
-                _cb.onRenameIsland?.(component.map(n=>n.id),name);
-                _renderIslands();_network?.redraw();
-            });
-        };
         $('graph-clear-emphasis').onclick = () => { _emphasis = null; _hiddenTypes.clear(); _redraw(); };
         $('graph-btn-explore').onclick = () => {
             if (!_selected) return Toast.show('Selecciona un nodo primero', 'info');
@@ -649,7 +614,7 @@ const UIGraph = (() => {
         _redraw();
     }
     function cerrarMapa() {
-        if (_network) { _network.destroy(); _network = null; _dataNodes=null; _dataEdges=null; }
+        if (_network) { _network.destroy(); _network = null; }
         $('graph-node-tooltip')?.remove();
         _preview?.remove(); _preview = null;
         $('modal-graph')?.querySelectorAll('.graph-overlay').forEach(el => el.remove());

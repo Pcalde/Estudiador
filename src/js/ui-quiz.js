@@ -52,6 +52,14 @@ const UI_Quiz = (() => {
         </fieldset>`;
     }
 
+    function mostrarOpcionesModo() {
+        const panel = document.getElementById('ex-quiz-specific');
+        if (!panel.hasChildNodes()) {
+            panel.innerHTML = tarjetasOpciones('quiz-dificultad', 'Dificultad', DIFICULTADES, 'recluta') +
+                tarjetasOpciones('quiz-temperatura', 'Creatividad de la IA', TestAI.TEMPERATURAS, 'equilibrado');
+        }
+    }
+
     function renderConfig() {
         const biblioteca = State.get('biblioteca') || {};
         const actual = State.get('nombreAsignaturaActual');
@@ -164,7 +172,7 @@ const UI_Quiz = (() => {
         globalThis.MathJax?.typesetPromise?.([lista]).catch(() => {});
     }
 
-    return { abrir, cerrar, renderConfig, renderCarga, renderPreguntasInsuficientes, renderPregunta, renderResultados };
+    return { abrir, cerrar, mostrarOpcionesModo, renderConfig, renderCarga, renderPreguntasInsuficientes, renderPregunta, renderResultados };
 })();
 
 CommandRegistry.register('quiz', () => UI_Quiz.abrir());

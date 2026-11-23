@@ -175,7 +175,7 @@ const Tasks = (() => {
     // ── Persistencia ──────────────────────────────────────────────
 
     function _persistir() {
-        localStorage.setItem('pomo_tasks', JSON.stringify(State.get('taskList')));
+        Perfil.local.setItem('pomo_tasks', JSON.stringify(State.get('taskList')));
         EventBus.emit('STATE_CHANGED', { keys: ['taskList'] });
     }
 

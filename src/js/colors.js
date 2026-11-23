@@ -55,7 +55,7 @@ let currentCustomPalette = {};
 let currentPresetName = 'default';
 
 function guardarColoresGlobales(basePreset, overrides) {
-    localStorage.setItem('estudiador_paleta_global', JSON.stringify({ basePreset, overrides }));
+    Perfil.local.setItem('estudiador_paleta_global', JSON.stringify({ basePreset, overrides }));
 }
 
 function inyectarVariablesCSS(paleta) {

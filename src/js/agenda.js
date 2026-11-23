@@ -129,7 +129,7 @@ function renderUpcomingEvents() {
 }
 
 function initFechasClave() {
-    let fechasLegacy = JSON.parse(localStorage.getItem('estudiador_fechas_clave') || '[]');
+    let fechasLegacy = JSON.parse(Perfil.local.getItem('estudiador_fechas_clave') || '[]');
     const saneadas   = typeof window.normalizarFechasClave === 'function' ? window.normalizarFechasClave(fechasLegacy) : fechasLegacy;
     State.set('fechasClave', saneadas);
     guardarFechasClave();

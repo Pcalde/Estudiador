@@ -227,7 +227,7 @@ const AI = (() => {
             // Event listener para cambiar modelo
             select.onchange = (e) => {
                 State.set('iaModel', e.target.value);
-                localStorage.setItem('estudiador_ia_model', e.target.value);
+                Perfil.local.setItem('estudiador_ia_model', e.target.value);
             };
             
         } catch (error) {
@@ -538,8 +538,8 @@ const AI = (() => {
         cargarModelosOpenRouter,
         getModelosDisponibles,
         MODELOS_GROQ,
-        setModeloActivo: (m) => { State.set('iaModel', m); localStorage.setItem('estudiador_ia_model', m); },
-        setProveedor: (p) => { State.set('iaProveedor', p); localStorage.setItem('estudiador_ia_proveedor', p); }
+        setModeloActivo: (m) => { State.set('iaModel', m); Perfil.local.setItem('estudiador_ia_model', m); },
+        setProveedor: (p) => { State.set('iaProveedor', p); Perfil.local.setItem('estudiador_ia_proveedor', p); }
     };
 })();
 

@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 
 function guardarProyectos() {
-    localStorage.setItem('estudiador_proyectos', JSON.stringify(State.get('projects') || []));
+    Perfil.local.setItem('estudiador_proyectos', JSON.stringify(State.get('projects') || []));
 }
 
 function actualizarMenuLateral() {
@@ -16,6 +16,7 @@ function actualizarListaProyectos() {
 
 function borrarProyecto(i) {
     const p = State.get('projects') || [];
+    if (!Number.isInteger(i) || i < 0 || i >= p.length) return;
     p.splice(i, 1);
     State.set('projects', p);
     guardarProyectos();
@@ -145,6 +146,7 @@ function actualizarDesplegableMini() {
 
 // Registrar comandos para las nuevas acciones de la sidebar
 if (typeof CommandRegistry !== 'undefined') {
+    CommandRegistry.register('borrarProyecto', ({idx}) => borrarProyecto(Number.parseInt(idx, 10)));
     CommandRegistry.register('renombrarAsignatura', ({nombre}) => renombrarAsignatura(nombre));
     CommandRegistry.register('borrarAsignatura', ({nombre}) => borrarAsignatura(nombre));
     CommandRegistry.register('archivarAsignatura', ({nombre}) => UI.archivarAsignatura(nombre));

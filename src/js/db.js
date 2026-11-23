@@ -4,7 +4,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const DB = (() => {
-    const DB_NAME = 'EstudiadorProDB';
+    const DB_NAME = Perfil.nombreDB;
     const DB_VERSION = 1;
     let dbInstance = null;
 
@@ -27,7 +27,7 @@ const DB = (() => {
                 logStore.createIndex('ts', 'ts', { unique: false });
             }
 
-            // Almacén 2: Key-Value Genérico (Para futura migración de localStorage)
+            // Almacén 2: Key-Value Genérico (Para futura migración de Perfil.local)
             if (!db.objectStoreNames.contains('keyval')) {
                 db.createObjectStore('keyval', { keyPath: 'key' });
             }
@@ -117,6 +117,20 @@ const DB = (() => {
             }
         });
     };
+    async function leerCopia(claves) {
+        const db = await init();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(['keyval', 'fsrs_logs'], 'readonly');
+            const store = tx.objectStore('keyval');
+            const lecturas = claves.map(key => [key, store.get(key)]);
+            const logs = tx.objectStore('fsrs_logs').getAll();
+            tx.onabort = () => reject(tx.error || new Error('Lectura cancelada.'));
+            tx.oncomplete = () => resolve({
+                datos: Object.fromEntries(lecturas.map(([key, req]) => [key, req.result?.value ?? null])),
+                repasos: logs.result
+            });
+        });
+    }
     const setVar = (key, value) => setVars({ [key]: value });
 
     const clearLocalData = async () => {
@@ -151,7 +165,7 @@ const DB = (() => {
     };
 
     return { 
-        init, addRevlog, getUnsyncedRevlogs, markRevlogsAsSynced, setVar, setVars, getVar, clearLocalData,
+        init, leerCopia, addRevlog, getUnsyncedRevlogs, markRevlogsAsSynced, setVar, setVars, getVar, clearLocalData,
         getAll // <--- Añadir aquí
     };
 })();

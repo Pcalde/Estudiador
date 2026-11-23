@@ -44,7 +44,7 @@ const WidgetManager = (() => {
 
     function _saveConfig(cfg) {
         State.set('widgetConfig', cfg);
-        localStorage.setItem('estudiador_widget_config', JSON.stringify(cfg));
+        Perfil.local.setItem('estudiador_widget_config', JSON.stringify(cfg));
     }
 
     // ── Motor Visual: Reordenamiento Virtual (Flexbox) ────────────

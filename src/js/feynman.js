@@ -17,7 +17,7 @@ const FEYNMAN = (() => {
     const str = (x, n=800) => String(x ?? '').trim().slice(0,n);
     const clamp = (x, a=0,b=100) => Math.max(a,Math.min(b,Number.isFinite(Number(x))?Number(x):a));
     const cacheKey = (prefix, key) => `estudiador:feynman:v${VERSION}:${prefix}:${key}`;
-    const storage = () => { try { return typeof localStorage !== 'undefined' ? localStorage : null; } catch { return null; } };
+    const storage = () => { try { return typeof Perfil !== 'undefined' ? Perfil.local : null; } catch { return null; } };
     function read(key) { try { const data = storage()?.getItem(key); return data ? JSON.parse(data) : null; } catch { return null; } }
     function write(key, data) { try { storage()?.setItem(key,JSON.stringify(data)); } catch {} }
     function hash(s) { let h=2166136261; for (let i=0;i<s.length;i++) { h^=s.charCodeAt(i); h=Math.imul(h,16777619); } return (h>>>0).toString(16); }

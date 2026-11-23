@@ -105,12 +105,12 @@
 
         // 1. Log singular del día
         try {
-            const raw = localStorage.getItem('pomo_log_today');
+            const raw = Perfil.local.getItem('pomo_log_today');
             if (raw) {
                 const log = JSON.parse(raw);
                 if (log.date && regexAntiguo.test(log.date)) {
                     log.date = convertirClave(log.date);
-                    localStorage.setItem('pomo_log_today', JSON.stringify(log));
+                    Perfil.local.setItem('pomo_log_today', JSON.stringify(log));
                 }
             }
         } catch(e) { console.error('Error migrando pomo_log_today:', e); }
@@ -118,7 +118,7 @@
         // 2. Extracción DRY para diccionarios
         function migrarDiccionario(key) {
             try {
-                const raw = localStorage.getItem(key);
+                const raw = Perfil.local.getItem(key);
                 if (!raw) return;
                 const dict = JSON.parse(raw);
                 let mod = false;
@@ -128,7 +128,7 @@
                     nuevo[nf] = v;
                     if (nf !== f) mod = true;
                 }
-                if (mod) localStorage.setItem(key, JSON.stringify(nuevo));
+                if (mod) Perfil.local.setItem(key, JSON.stringify(nuevo));
             } catch(e) { console.error(`Error migrando ${key}:`, e); }
         }
 
@@ -358,7 +358,7 @@ const Scheduler = {
         t.UltimoRepaso  = getFechaHoy();
         t.ProximoRepaso = toISODateString(fechaBase);
 
-        if (typeof DB !== 'undefined' && t.id) {
+        if (opts.registrar !== false && typeof DB !== 'undefined' && t.id) {
             DB.addRevlog({
                 cardId: t.id,
                 ts:     Date.now(), 
@@ -432,7 +432,7 @@ const Scheduler = {
         const labels = ['Fácil', 'Bien', 'Difícil', 'Crítica'];
         return [1, 2, 3, 4].map((calidad, i) => {
             const { intervalDias, tarjeta: t, R } =
-                this.calcularSiguienteRepaso(tarjeta, calidad, null, opts);
+                this.calcularSiguienteRepaso(tarjeta, calidad, null, { ...opts, registrar: false });
             return {
                 label:       labels[i],
                 calidad,

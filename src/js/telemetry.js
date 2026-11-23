@@ -74,7 +74,7 @@ const Telemetry = (() => {
         const res = resultadosTotales[asigActual];
         
         const historyKey = `mc_history_${asigActual}`;
-        const history = JSON.parse(localStorage.getItem(historyKey) || '[]');
+        const history = JSON.parse(Perfil.local.getItem(historyKey) || '[]');
 
         if (typeof UI !== 'undefined' && UI.renderWidgetMonteCarlo) {
             UI.renderWidgetMonteCarlo(res, history);
@@ -221,7 +221,7 @@ async function lanzarSimulacionMonteCarlo(config) {
                 const top5 = tarjetasCriticas.slice(0, 5);
 
                 const historyKey = `mc_history_${asigActual}`;
-                let history = JSON.parse(localStorage.getItem(historyKey) || '[]');
+                let history = JSON.parse(Perfil.local.getItem(historyKey) || '[]');
                 history.push({ 
                     ts: Date.now(), 
                     prob: resultadoBase.probabilidad, 
@@ -229,7 +229,7 @@ async function lanzarSimulacionMonteCarlo(config) {
                     ansiedad: config.estresMedia
                 });
                 if (history.length > 30) history.shift();
-                localStorage.setItem(historyKey, JSON.stringify(history));
+                Perfil.local.setItem(historyKey, JSON.stringify(history));
 
                 State.batch(() => {
                     const todos = State.get('resultadosMonteCarlo') || {};
@@ -338,7 +338,7 @@ async function lanzarSimulacionMonteCarlo(config) {
     }
     
     function updatePomoStats() {
-    const pomoLogHoy = JSON.parse(localStorage.getItem('pomo_log_today') || '{"date":"","count":0,"details":{}}');
+    const pomoLogHoy = JSON.parse(Perfil.local.getItem('pomo_log_today') || '{"date":"","count":0,"details":{}}');
     const plan = State.get('planificador') || {};
     const todayStr = window.getFechaHoy();
     const planHoy = (plan.schedule || {})[todayStr] || [];
@@ -359,21 +359,21 @@ async function lanzarSimulacionMonteCarlo(config) {
 }
 
     function registrarPomoCompletado(asignatura) {
-        let todayLog = JSON.parse(localStorage.getItem('pomo_log_today') || '{"date":"","count":0, "details":{}}');
+        let todayLog = JSON.parse(Perfil.local.getItem('pomo_log_today') || '{"date":"","count":0, "details":{}}');
         const todayStr = Domain.getFechaHoy();
         
         if(todayLog.date !== todayStr) { 
             if(todayLog.date && todayLog.count > 0) {
-                let history = JSON.parse(localStorage.getItem('pomo_history') || '{}');
+                let history = JSON.parse(Perfil.local.getItem('pomo_history') || '{}');
                 history[todayLog.date] = todayLog.count;
-                let detailsHistory = JSON.parse(localStorage.getItem('pomo_details_history') || '{}');
+                let detailsHistory = JSON.parse(Perfil.local.getItem('pomo_details_history') || '{}');
                 detailsHistory[todayLog.date] = todayLog.details || {};
                 
                 const keys = Object.keys(history);
                 if(keys.length > 60) { delete history[keys[0]]; delete detailsHistory[keys[0]]; }
                 
-                localStorage.setItem('pomo_history', JSON.stringify(history));
-                localStorage.setItem('pomo_details_history', JSON.stringify(detailsHistory));
+                Perfil.local.setItem('pomo_history', JSON.stringify(history));
+                Perfil.local.setItem('pomo_details_history', JSON.stringify(detailsHistory));
             }
             todayLog = {date: todayStr, count: 0, details: {}}; 
         }
@@ -389,24 +389,24 @@ async function lanzarSimulacionMonteCarlo(config) {
         if (!todayLog.horas) todayLog.horas = {};
         todayLog.horas[hora] = (todayLog.horas[hora] || 0) + 1;
         
-        let horaHistory = JSON.parse(localStorage.getItem('pomo_hora_history') || '{}');
+        let horaHistory = JSON.parse(Perfil.local.getItem('pomo_hora_history') || '{}');
         horaHistory[hora] = (horaHistory[hora] || 0) + 1;
-        localStorage.setItem('pomo_hora_history', JSON.stringify(horaHistory));
+        Perfil.local.setItem('pomo_hora_history', JSON.stringify(horaHistory));
 
-        localStorage.setItem('pomo_log_today', JSON.stringify(todayLog));
+        Perfil.local.setItem('pomo_log_today', JSON.stringify(todayLog));
         
         updatePomoStats();
         updateWeeklyWidget();
         updateGlobalStats();
     }
     function registrarExamen(payload) {
-        let historial = JSON.parse(localStorage.getItem('estudiador_historial_examenes') || '[]');
+        let historial = JSON.parse(Perfil.local.getItem('estudiador_historial_examenes') || '[]');
         historial.push(payload);
         
         // Mantenemos una ventana móvil de los últimos 100 exámenes para no saturar memoria
         if (historial.length > 100) historial.shift();
         
-        localStorage.setItem('estudiador_historial_examenes', JSON.stringify(historial));
+        Perfil.local.setItem('estudiador_historial_examenes', JSON.stringify(historial));
         Logger.info("Historial de examen persistido.");
     }
 
@@ -414,7 +414,7 @@ async function lanzarSimulacionMonteCarlo(config) {
         const asigKey = State.get('nombreAsignaturaActual') || "General";
         const asigNorm = asigKey.trim();
         
-        let todayLog = JSON.parse(localStorage.getItem('pomo_log_today') || '{"date":"","count":0, "details":{}}');
+        let todayLog = JSON.parse(Perfil.local.getItem('pomo_log_today') || '{"date":"","count":0, "details":{}}');
         const keyBuscada = Object.keys(todayLog.details || {}).find(k => k.toLowerCase() === asigNorm.toLowerCase()) || asigNorm;
         const valorActual = (todayLog.details && todayLog.details[keyBuscada]) || 0;
 
@@ -430,7 +430,7 @@ async function lanzarSimulacionMonteCarlo(config) {
                 todayLog.count += diferencia;
                 if(todayLog.count < 0) todayLog.count = 0; 
 
-                localStorage.setItem('pomo_log_today', JSON.stringify(todayLog));
+                Perfil.local.setItem('pomo_log_today', JSON.stringify(todayLog));
                 updateDashboard(); 
             }
         }
@@ -452,7 +452,7 @@ async function lanzarSimulacionMonteCarlo(config) {
             if (c.UltimoRepaso) doneMap[c.UltimoRepaso] = true;
         });
 
-        const todayLog = JSON.parse(localStorage.getItem('pomo_log_today') || '{"count":0, "details":{}}');
+        const todayLog = JSON.parse(Perfil.local.getItem('pomo_log_today') || '{"count":0, "details":{}}');
         const asigKey = asig.toLowerCase().trim();
         if (todayLog.details && (todayLog.details[asigKey] > 0 || todayLog.details["general"] > 0)) {
             doneMap[todayStr] = true;
@@ -485,9 +485,9 @@ async function lanzarSimulacionMonteCarlo(config) {
     }
 
     function updateWeeklyWidget() {
-        const pomoHistory        = JSON.parse(localStorage.getItem('pomo_history') || '{}');
-        const pomoLogHoy         = JSON.parse(localStorage.getItem('pomo_log_today') || '{}');
-        const pomoDetailsHistory = JSON.parse(localStorage.getItem('pomo_details_history') || '{}');
+        const pomoHistory        = JSON.parse(Perfil.local.getItem('pomo_history') || '{}');
+        const pomoLogHoy         = JSON.parse(Perfil.local.getItem('pomo_log_today') || '{}');
+        const pomoDetailsHistory = JSON.parse(Perfil.local.getItem('pomo_details_history') || '{}');
         UI.updateWeeklyWidget(
             State.get('horarioGlobal'), 
             State.get('biblioteca'), 
@@ -562,12 +562,12 @@ async function lanzarSimulacionMonteCarlo(config) {
 }
     
     function updateEficienciaWidget() {
-        const pomoLogHoy = JSON.parse(localStorage.getItem('pomo_log_today') || '{"count":0,"details":{}}');
+        const pomoLogHoy = JSON.parse(Perfil.local.getItem('pomo_log_today') || '{"count":0,"details":{}}');
         UI.updateEficienciaWidget(State.get('biblioteca'), State.get('nombreAsignaturaActual'), pomoLogHoy);
     }
 
     function updateMapaHoras() {
-        const horaHistory = JSON.parse(localStorage.getItem('pomo_hora_history') || '{}');
+        const horaHistory = JSON.parse(Perfil.local.getItem('pomo_hora_history') || '{}');
         UI.updateMapaHoras(horaHistory);
     }
 
@@ -685,14 +685,14 @@ async function updateCurvaOlvidoWidget() {
 
 /**
  * Construye el objeto de estadísticas públicas del usuario para Firestore.
- * Lee únicamente de State y localStorage. Cero DOM, cero efectos secundarios.
+ * Lee únicamente de State y Perfil.local. Cero DOM, cero efectos secundarios.
  * @returns {Object} Resumen público serializable
  */
 function construirResumenPublico() {
-    const isPrivate = localStorage.getItem('estudiador_privacy_stats') === 'true';
+    const isPrivate = Perfil.local.getItem('estudiador_privacy_stats') === 'true';
     if (isPrivate) return { isPrivate: true };
 
-    const todayLog   = JSON.parse(localStorage.getItem('pomo_log_today') || '{"count":0}');
+    const todayLog   = JSON.parse(Perfil.local.getItem('pomo_log_today') || '{"count":0}');
     const biblioteca = State.get('biblioteca') || {};
     const todayVal   = Domain.fechaValor(Domain.getFechaHoy());
 

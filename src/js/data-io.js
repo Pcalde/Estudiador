@@ -42,12 +42,23 @@ const DataIO = (() => {
                 const antes = Graph._cardId(card, nombre);
                 if (!cambios.has(antes)) cambios.set(antes, normalizada[nombre][i].id);
             });
-            const id = value => cambios.get(value) ?? value;
-            return [nombre, {
-                ...grafo,
-                nodes: (grafo.nodes || []).map(node => ({ ...node, id: id(node.id) })),
-                edges: (grafo.edges || []).map(edge => ({ ...edge, source: id(edge.source), target: id(edge.target) }))
-            }];
+            const id = value => cambios.get(String(value)) ?? value;
+            const nodo = n => ({ ...n, id: id(n.id) });
+            function migrarMapa(m) {
+                const actualizado = {
+                    ...m,
+                    nodes: (m.nodes || []).map(nodo),
+                    edges: (m.edges || []).map(e => ({ ...e, source: id(e.source), target: id(e.target) }))
+                };
+                if (m.islandNames) actualizado.islandNames = Object.fromEntries(
+                    Object.entries(m.islandNames).map(([clave, titulo]) => [id(clave), titulo])
+                );
+                if (m.layoutUndo) actualizado.layoutUndo = m.layoutUndo.map(paso => paso.map(nodo));
+                return actualizado;
+            }
+            const activo = migrarMapa(grafo);
+            if (grafo.maps) activo.maps = grafo.maps.map(migrarMapa);
+            return [nombre, activo];
         }));
     }
 
@@ -55,8 +66,13 @@ const DataIO = (() => {
         return new Set(Object.entries(biblioteca).filter(([nombre]) => nombre !== asig).flatMap(([, cards]) => cards.map(c => c.id)));
     }
 
-    async function guardarBiblioteca(biblioteca) {
-        await DB.setVar('biblioteca', biblioteca);
+    async function guardarBiblioteca(biblioteca, guardarCopiaPrevia = false) {
+        if (guardarCopiaPrevia) {
+            const previa = await tomarCopia();
+            await DB.setVars({ biblioteca, copiaPreviaRestauracion: previa });
+        } else {
+            await DB.setVar('biblioteca', biblioteca);
+        }
         State.set('biblioteca', biblioteca);
     }
 
@@ -153,8 +169,14 @@ const DataIO = (() => {
             const biblioteca = State.get('biblioteca') || {};
             const parsed = normalizarTarjetas(JSON.parse(rawJsonString), idsOtrasAsignaturas(biblioteca, asigActual))
                 .map((card, index) => ({ ...card, IndiceGlobal: index + 1 }));
-            await guardarBiblioteca({ ...biblioteca, [asigActual]: parsed });
-            EventBus.emit('UI_ASIGNATURA_CARGADA', { nombre: asigActual });
+            if (!confirm('¿Reemplazar las ' + biblioteca[asigActual].length + ' tarjetas de ' + asigActual +
+                ' por las ' + parsed.length + ' del editor? Se conservará una copia previa.')) {
+                return { success: false, cancelada: true };
+            }
+            await guardarBiblioteca({ ...biblioteca, [asigActual]: parsed }, true);
+            if (State.get('nombreAsignaturaActual') === asigActual) {
+                EventBus.emit('UI_ASIGNATURA_CARGADA', { nombre: asigActual });
+            }
             
             return { success: true };
         } catch (e) {
@@ -181,29 +203,80 @@ const DataIO = (() => {
         'estudiador_hard_track', 'estudiador_alarm_track', 'estudiador_privacy_stats'
     ];
 
-    async function exportarBackup() {
+    async function tomarCopia() {
+        const { datos, repasos } = await DB.leerCopia(clavesDB);
+        datos.biblioteca ??= {};
+        const local = Object.fromEntries(clavesLocales.map(key => [key, Perfil.local.getItem(key)]));
+        return { formato: 'Estudiador', version: 1, datos, local, repasos };
+    }
+
+    async function exportarBackup(anterior = false) {
         try {
-            const datos = Object.fromEntries(await Promise.all(clavesDB.map(async key => [key, await DB.getVar(key)])));
-            const local = Object.fromEntries(clavesLocales.map(key => [key, localStorage.getItem(key)]));
-            const repasos = await DB.getAll('fsrs_logs');
-            const blob = new Blob([JSON.stringify({ formato: 'Estudiador', version: 1, datos, local, repasos }, null, 2)], { type: 'application/json' });
-            _descargar(URL.createObjectURL(blob), 'Estudiador_' + Date.now() + '.json');
+            const copia = anterior ? await DB.getVar('copiaPreviaRestauracion') : await tomarCopia();
+            if (!copia) return Toast.show('Todavía no hay una copia anterior a un reemplazo.', 'info');
+            const blob = new Blob([JSON.stringify(copia, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            _descargar(url, (anterior ? 'Estudiador_anterior_' : 'Estudiador_') + Date.now() + '.json');
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
         } catch (error) { Toast.show('No se pudo exportar la copia: ' + error.message, 'error'); }
+    }
+
+    // Liberar primero las claves modificadas permite deshacer incluso al alcanzar la cuota.
+    function escribirLocales(entries) {
+        const cambios = entries.filter(([key, value]) => Perfil.local.getItem(key) !== value);
+        for (const [key] of cambios) Perfil.local.removeItem(key);
+        for (const [key, value] of cambios) {
+            if (value !== null) Perfil.local.setItem(key, value);
+        }
+    }
+
+    async function revertirRestauracionPendiente() {
+        const pendientes = await DB.getVar('restauracionPendiente');
+        if (pendientes) {
+            escribirLocales(pendientes);
+            await DB.setVar('restauracionPendiente', null);
+        }
+    }
+
+    function conBloqueoRestauracion(fn) {
+        return globalThis.navigator?.locks ? navigator.locks.request('estudiador-restaurar', fn) : fn();
+    }
+
+    async function aplicarRestauracion(datos, locales, repasos, comprobar = () => {}) {
+        await conBloqueoRestauracion(async () => {
+            await revertirRestauracionPendiente();
+            const previa = await tomarCopia();
+            const cambios = locales.filter(([key, value]) => previa.local[key] !== value);
+            if (cambios.length) {
+                await DB.setVar('restauracionPendiente', cambios.map(([key]) => [key, previa.local[key]]));
+            }
+            try {
+                comprobar();
+                escribirLocales(cambios);
+                await DB.setVars({ ...datos, copiaPreviaRestauracion: previa, restauracionPendiente: null }, repasos);
+            } catch (error) {
+                await revertirRestauracionPendiente();
+                throw error;
+            }
+        });
     }
 
     async function importarBackup(el) {
         const file = el.files[0];
-        if (!file) return;
+        if (!file || el.disabled) return;
+        el.disabled = true;
         try {
             const raw = JSON.parse(await file.text());
             const completa = raw?.formato === 'Estudiador';
-            if (completa && (raw.version !== 1 || !raw.datos?.biblioteca || !raw.local)) {
+            if (completa && (raw.version !== 1 || !Array.isArray(raw.repasos) ||
+                !clavesDB.every(key => Object.hasOwn(raw.datos || {}, key)) ||
+                !clavesLocales.every(key => Object.hasOwn(raw.local || {}, key)))) {
                 throw new Error('Formato de copia no compatible.');
             }
             const datos = completa ? Object.fromEntries(clavesDB.map(key => [key, raw.datos[key] ?? null])) : { biblioteca: raw };
             const original = datos.biblioteca ?? (completa ? {} : raw);
             datos.biblioteca = normalizarBiblioteca(original);
-            if (datos.graphData) datos.graphData = migrarIdsMapa(datos.graphData, original, datos.biblioteca);
+
             const locales = completa ? clavesLocales.map(key => [key, raw.local[key] ?? null]) : [];
             const listas = ['estudiador_proyectos', 'pomo_tasks', 'estudiador_historial_examenes'];
             const texto = ['estudiador_asig_actual', 'estudiador_ambient_track', 'estudiador_reward_track',
@@ -222,33 +295,33 @@ const DataIO = (() => {
                     throw new Error('Datos inválidos: ' + key);
                 }
             }
+            if (datos.graphData) datos.graphData = migrarIdsMapa(datos.graphData, original, datos.biblioteca);
             const repasos = completa ? raw.repasos : undefined;
             if (repasos !== undefined && (!Array.isArray(repasos) || repasos.some(log => !log || !Number.isInteger(log.id)))) {
                 throw new Error('Historial de repasos inválido.');
             }
-            if (!confirm('Restaurar la copia y reemplazar ' + (completa ? 'los datos locales incluidos' : 'la biblioteca') + '?')) return;
-            const anteriores = locales.map(([key]) => [key, localStorage.getItem(key)]);
-            const aplicarLocales = entries => entries.forEach(([key, value]) => {
-                if (value === null) localStorage.removeItem(key);
-                else localStorage.setItem(key, value);
-            });
-            try {
-                aplicarLocales(locales);
-                await DB.setVars(datos, repasos);
-            } catch (error) {
-                aplicarLocales(anteriores);
-                throw error;
+            if (repasos && new Set(repasos.map(log => log.id)).size !== repasos.length) {
+                throw new Error('El historial contiene IDs de repaso repetidos.');
             }
+            const asignaturas = Object.values(datos.biblioteca);
+            const resumen = asignaturas.length + ' asignaturas y ' +
+                asignaturas.reduce((n, tarjetas) => n + tarjetas.length, 0) + ' tarjetas';
+            const alcance = completa ? 'los datos de la copia completa (' + repasos.length + ' repasos)' : 'solo la biblioteca';
+            if (!confirm('Se reemplazará ' + alcance + ' con ' + resumen +
+                '. Podrás descargar el estado anterior desde Ajustes. ¿Restaurar?')) return;
+            await aplicarRestauracion(datos, locales, repasos);
             location.reload();
         } catch (error) {
             Toast.show('No se pudo restaurar: ' + error.message, 'error');
-        } finally { el.value = ''; }
+        } finally { el.disabled = false; el.value = ''; }
     }
 
     return {
         nuevoId, normalizarTarjetas, normalizarBiblioteca, migrarIdsMapa, guardarBiblioteca,
         procesarImportacionLatex, procesarImportacion, guardarEdicionJSON,
-        descargarAsignaturaActual, exportarBackup, importarBackup, crearNuevaAsignatura
+        descargarAsignaturaActual, exportarBackup, importarBackup, crearNuevaAsignatura,
+        aplicarRestauracion,
+        recuperarRestauracion: () => conBloqueoRestauracion(revertirRestauracionPendiente)
     };
 })();
 
@@ -302,5 +375,5 @@ window.guardarEdicionJSON = async () => {
     const rawText = document.getElementById('json-editor-area').value;
     const result = await DataIO.guardarEdicionJSON(rawText);
     if (result.success) alert("Cambios guardados.");
-    else alert("Error: " + result.error);
+    else if (!result.cancelada) alert("Error: " + result.error);
 };

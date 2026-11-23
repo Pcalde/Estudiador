@@ -44,7 +44,10 @@ function modoEdicionJSON() {
     if (typeof UI !== 'undefined' && UI.abrirEditorJSON) UI.abrirEditorJSON(tarjetas);
 }
 
+let destinoEditor = null;
+
 function cancelarEdicion() {
+    destinoEditor = null;
     const asigActual = State.get('nombreAsignaturaActual');
     
     if (typeof UI !== 'undefined' && UI.cancelarEdicion) {
@@ -61,6 +64,7 @@ function abrirEditorAmigable() {
     const idx   = State.get('indiceNavegacion') || 0;
     const total = (State.get('colaEstudio') || []).length;
     if (typeof UI !== 'undefined' && UI.abrirEditorAmigable) {
+        destinoEditor = { id: concepto.id, asignatura: State.get('nombreAsignaturaActual') };
         UI.abrirEditorAmigable(concepto, idx, total);
     } else {
         Logger.error("Arquitectura: UI.abrirEditorAmigable no implementado.");
@@ -68,9 +72,12 @@ function abrirEditorAmigable() {
 }
 
 async function guardarDatosEditorAmigable(cerrar = true) {
-    const concepto   = State.get('conceptoActual');
-    const asigActual = State.get('nombreAsignaturaActual');
-    if (!concepto || !asigActual) return false;
+    const destino = destinoEditor;
+    if (!destino?.id) {
+        Toast.show('Vuelve a abrir la tarjeta que quieres editar.', 'error');
+        return false;
+    }
+    const asigActual = destino.asignatura;
 
     if (typeof UI === 'undefined' || !UI.getEditorData) {
         Logger.error("Arquitectura: UI.getEditorData no disponible.");
@@ -85,7 +92,7 @@ async function guardarDatosEditorAmigable(cerrar = true) {
 
     const biblioteca = State.get('biblioteca');
     const tarjetas = biblioteca[asigActual] || [];
-    const idx = tarjetas.findIndex(card => concepto.id && card.id === concepto.id);
+    const idx = tarjetas.findIndex(card => card.id === destino.id);
     if (idx < 0) {
         Toast.show('No se ha encontrado la tarjeta original.', 'error');
         return false;
@@ -104,12 +111,14 @@ async function guardarDatosEditorAmigable(cerrar = true) {
         Toast.show('No se pudo guardar la tarjeta.', 'error');
         return false;
     }
-    if (State.get('conceptoActual')?.id === concepto.id) {
+    if (State.get('nombreAsignaturaActual') === asigActual) {
         State.batch(() => {
-            State.set('conceptoActual', structuredClone(actualizada));
-            State.set('colaEstudio', (State.get('colaEstudio') || []).map(card => card.id === concepto.id ? actualizada : card));
+            if (State.get('conceptoActual')?.id === destino.id) {
+                State.set('conceptoActual', structuredClone(actualizada));
+            }
+            State.set('colaEstudio', (State.get('colaEstudio') || []).map(card => card.id === destino.id ? actualizada : card));
         });
-        if (cerrar) cancelarEdicion();
+        if (cerrar && destinoEditor === destino) cancelarEdicion();
     }
     Toast.show('Tarjeta guardada.', 'success');
     return true;

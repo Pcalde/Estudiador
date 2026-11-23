@@ -501,7 +501,7 @@ const POMODORO = (() => {
     }
 
     function saveTasks() {
-        localStorage.setItem('pomo_tasks', JSON.stringify(State.get('taskList')));
+        Perfil.local.setItem('pomo_tasks', JSON.stringify(State.get('taskList')));
         if (typeof EventBus !== 'undefined') {
             EventBus.emit('STATE_CHANGED', { keys: ['taskList'] });
         }

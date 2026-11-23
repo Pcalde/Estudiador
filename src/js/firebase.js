@@ -7,6 +7,35 @@ let _autoSaveInterval = null;
 let _auth            = null;
 let _db              = null;
 let _cuentaAutoguardado = null;
+let _revisionLocal;
+let _lecturaRevision;
+let _operacion = Promise.resolve();
+let _autenticando = false;
+let _proyecto;
+
+function exigirCuenta(uid) {
+    if (!uid || _auth?.currentUser?.uid !== uid || State.get('currentUser')?.uid !== uid ||
+        Perfil.cuenta !== JSON.stringify([_proyecto, uid])) throw new Error('La cuenta ha cambiado.');
+}
+
+function enCuenta(fn) {
+    const uid = State.get('currentUser')?.uid;
+    const tarea = _operacion.then(async () => {
+        exigirCuenta(uid);
+        if (!await cargaLocalLista) throw new Error('No se pudo abrir el perfil local.');
+        await _lecturaRevision;
+        exigirCuenta(uid);
+        return fn(uid);
+    });
+    _operacion = tarea.catch(() => {});
+    return tarea;
+}
+
+function revision(doc) {
+    if (!doc.exists) return null;
+    const datos = doc.data();
+    return datos.revision || 'anterior:' + JSON.stringify(datos.lastUpdated || null);
+}
 
 const FIREBASE_CONFIG_EMBEBIDA = {
     apiKey: "AIzaSyBZJar5Z82Fb8lvPaYc2BOMpjGMF2PM0jY",
@@ -24,13 +53,15 @@ const INTERVALO_AUTOSAVE_MS = 15 * 60 * 1000; // 15 minutos
 // ─────────────────────────────────────────────────────────────
 function inicializarFirebase(configStr) {
     try {
-        if (typeof firebase === 'undefined') return;
+        if (typeof firebase === 'undefined') { Perfil.activar(null); return; }
         const firebaseConfig = JSON.parse(configStr);
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 
+        _proyecto = firebase.app().options.projectId;
+        if (_auth) return;
         _db   = firebase.firestore();
         _auth = firebase.auth();
-        _auth.onAuthStateChanged(_manejarCambioAuth);
+        _auth.onAuthStateChanged(_manejarCambioAuth, () => Perfil.activar(null));
         _auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
             .catch(err => Logger.warn('setPersistence falló:', err));
         window._fbDB   = _db;
@@ -38,6 +69,7 @@ function inicializarFirebase(configStr) {
 
     } catch (e) {
         Logger.error('Error al inicializar Firebase:', e);
+        Perfil.activar(null);
     }
 }
 window.addEventListener('load', () => {
@@ -52,9 +84,20 @@ window.addEventListener('load', () => {
 // MANEJADOR DE ESTADO DE AUTENTICACIÓN
 // ─────────────────────────────────────────────────────────────
 function _manejarCambioAuth(user) {
+    if (_autenticando) return;
+    if (!Perfil.activar(user ? JSON.stringify([_proyecto, user.uid]) : null)) {
+        _cuentaAutoguardado = null;
+        State.set('currentUser', null);
+        clearTimeout(_syncTimeout);
+        clearInterval(_autoSaveInterval);
+        return;
+    }
     if (user) {
         const esNuevoLogin = State.get('currentUser')?.uid !== user.uid;
-        if (esNuevoLogin) _cuentaAutoguardado = null;
+        if (esNuevoLogin) {
+            _cuentaAutoguardado = null;
+            _lecturaRevision = DB.getVar('revisionNube').then(valor => { _revisionLocal = valor; });
+        }
 
         const pureUser = {
             uid: user.uid,
@@ -103,15 +146,20 @@ async function comprobarNubeAlIniciar() {
     if (!currentUser || !_db) return;
 
     try {
-        const doc = await _db.collection('users').doc(currentUser.uid).get();
-        if (State.get('currentUser')?.uid !== currentUser.uid) return;
-        if (doc.exists) {
-            Toast.ask(
-                'Se ha detectado una copia en la nube. ¿Deseas sobreescribir tus datos locales?',
-                async () => {
-                    if (State.get('currentUser')?.uid === currentUser.uid) await restaurarCopiaNube();
-                }
-            );
+        if (!await cargaLocalLista) return;
+        await _lecturaRevision;
+        const doc = await _db.collection('users').doc(currentUser.uid).get({ source: 'server' });
+        exigirCuenta(currentUser.uid);
+        if (revision(doc) === _revisionLocal) {
+            _cuentaAutoguardado = currentUser.uid;
+        } else if (doc.exists) {
+            const contar = biblioteca => Object.values(biblioteca || {}).reduce((n, cards) => n + (Array.isArray(cards) ? cards.length : 0), 0);
+            const local = contar(State.get('biblioteca'));
+            const remota = contar(doc.data().biblioteca);
+            Toast.ask('Este dispositivo tiene ' + local + ' tarjetas y la copia remota tiene ' + remota +
+                '. ¿Cargar la versión remota? Podrás descargar la versión local desde Ajustes.', () => {
+                if (State.get('currentUser')?.uid === currentUser.uid) restaurarCopiaNube();
+            });
         }
     } catch (error) {
         Logger.error("Error al comprobar la nube:", error);
@@ -121,11 +169,12 @@ async function comprobarNubeAlIniciar() {
 // ─────────────────────────────────────────────────────────────
 // SUBIDA DE DATOS
 // ─────────────────────────────────────────────────────────────
-async function guardarDatosUsuario() {
-    const currentUser = State.get('currentUser');
-    if (!currentUser || !_db) return;
+function guardarDatosUsuario() { return enCuenta(subirDatos); }
 
-    const data = {
+async function subirDatos(uid) {
+    const currentUser = State.get('currentUser');
+
+    const data = structuredClone({
         biblioteca:   State.get('biblioteca')   || {},
         bibliotecaConfig: State.get('bibliotecaConfig') || { carpetas: {}, archivadas: [] },
         projects:     State.get('projects')     || [],
@@ -134,17 +183,30 @@ async function guardarDatosUsuario() {
         userColors:   State.get('userColors')   || {},
         pomoSettings: State.get('pomoSettings') || {},
         taskList:     State.get('taskList')     || [],
-        lastUpdated:  firebase.firestore.FieldValue.serverTimestamp(),
         graphData: State.get('graphData') || {}       
-    };
+    });
+    data.lastUpdated = firebase.firestore.FieldValue.serverTimestamp();
 
+    const publica = { email: currentUser.email, stats: Telemetry.construirResumenPublico(),
+        lastUpdated: firebase.firestore.FieldValue.serverTimestamp() };
+    const ref = _db.collection('users').doc(uid);
+    const nueva = DataIO.nuevoId();
     try {
-        await _db.collection('users').doc(currentUser.uid).set(data, { merge: true });
-        await _db.collection('usersPublic').doc(currentUser.uid).set({
-            email: currentUser.email,
-            stats: Telemetry.construirResumenPublico(),
-            lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
+        await _db.runTransaction(async tx => {
+            const doc = await tx.get(ref);
+            exigirCuenta(uid);
+            if (revision(doc) !== _revisionLocal) {
+                _cuentaAutoguardado = null;
+                const mensaje = 'La copia remota ha cambiado. Cárgala desde Ajustes para conservar ambas versiones.';
+                Toast.show(mensaje, 'warning');
+                throw new Error(mensaje);
+            }
+            tx.set(ref, { ...data, revision: nueva }, { mergeFields: [...Object.keys(data), 'revision'] });
+            tx.set(_db.collection('usersPublic').doc(uid), publica, { mergeFields: Object.keys(publica) });
+        });
+        await DB.setVar('revisionNube', nueva);
+        _revisionLocal = nueva;
+        exigirCuenta(uid);
         Logger.info('Datos guardados en Firebase');
         if (State.get('currentUser')?.uid === currentUser.uid) _cuentaAutoguardado = currentUser.uid;
     } catch (error) {
@@ -156,14 +218,23 @@ async function guardarDatosUsuario() {
 // ─────────────────────────────────────────────────────────────
 // BAJADA DE DATOS
 // ─────────────────────────────────────────────────────────────
-async function cargarDatosUsuario() {
+function cargarDatosUsuario() { return enCuenta(descargarDatos); }
+
+async function descargarDatos(uid) {
     const currentUser = State.get('currentUser');
     if (!currentUser || !_db) throw new Error('Inicia sesion para cargar la copia.');
-    const doc = await _db.collection('users').doc(currentUser.uid).get();
-    if (State.get('currentUser')?.uid !== currentUser.uid) throw new Error('La cuenta ha cambiado.');
+    const doc = await _db.collection('users').doc(currentUser.uid).get({ source: 'server' });
+    exigirCuenta(uid);
     if (!doc.exists) throw new Error('No hay una copia guardada.');
     const data = doc.data();
-    const original = data.biblioteca ?? {};
+    if (!data.biblioteca || typeof data.biblioteca !== 'object') throw new Error('Biblioteca ausente en la copia.');
+    for (const key of ['projects', 'taskList', 'fechasClave']) {
+        if (data[key] != null && !Array.isArray(data[key])) throw new Error('Lista inválida: ' + key);
+    }
+    for (const key of ['graphData', 'horarioGlobal', 'bibliotecaConfig', 'pomoSettings', 'userColors']) {
+        if (data[key] != null && (typeof data[key] !== 'object' || Array.isArray(data[key]))) throw new Error('Datos inválidos: ' + key);
+    }
+    const original = data.biblioteca;
     const biblioteca = DataIO.normalizarBiblioteca(original);
     Domain.normalizarBibliotecaFechas(biblioteca);
     const bibliotecaConfig = data.bibliotecaConfig || { carpetas: {}, archivadas: [] };
@@ -178,14 +249,12 @@ async function cargarDatosUsuario() {
         pomo_settings: data.pomoSettings || State.get('pomoSettings'),
         pomo_tasks: data.taskList || []
     };
-    const anteriores = Object.keys(storage).map(key => [key, localStorage.getItem(key)]);
-    try {
-        Object.entries(storage).forEach(([key, value]) => localStorage.setItem(key, JSON.stringify(value)));
-        await DB.setVars(values);
-    } catch (error) {
-        anteriores.forEach(([key, value]) => value === null ? localStorage.removeItem(key) : localStorage.setItem(key, value));
-        throw error;
-    }
+    const locales = Object.entries(storage).map(([key, value]) => [key, JSON.stringify(value)]);
+    if (!Object.hasOwn(biblioteca, State.get('nombreAsignaturaActual'))) locales.push(['estudiador_asig_actual', null]);
+    const base = revision(doc);
+    await DataIO.aplicarRestauracion({ ...values, revisionNube: base }, locales, undefined, () => exigirCuenta(uid));
+    exigirCuenta(uid);
+    _revisionLocal = base;
     State.batch(() => {
         Object.entries(values).forEach(([key, value]) => State.set(key, value));
         State.set('projects', storage.estudiador_proyectos);
@@ -197,7 +266,6 @@ async function cargarDatosUsuario() {
             State.set('nombreAsignaturaActual', null);
             State.set('colaEstudio', []);
             State.set('conceptoActual', null);
-            localStorage.removeItem('estudiador_asig_actual');
         }
     });
     actualizarListaProyectos();
@@ -240,7 +308,7 @@ async function forzarRespaldoNube() {
         alert("Copia de seguridad guardada en Firebase correctamente.");
     } catch (error) {
         Logger.error("Fallo al subir a la nube:", error);
-        alert("Error al guardar en la nube. Revisa tu conexión.");
+        alert("No se pudo guardar: " + error.message);
     } finally {
         if (btn) btn.innerText = "Guardar en Nube";
     }
@@ -291,7 +359,7 @@ async function sincronizarTelemetriaFSRS() {
 async function asegurarFirebaseInit() {
     if (_auth) return true;
     const configStr = document.getElementById('set-firebase-config')?.value.trim()
-                   || localStorage.getItem('firebase_config');
+                   || localStorage.getItem('firebase_config') || JSON.stringify(FIREBASE_CONFIG_EMBEBIDA);
     if (!configStr) {
         alert("Firebase no configurado. Ve a Ajustes → Cuenta.");
         return false;
@@ -330,23 +398,21 @@ async function procesarRegistro() {
     if (!await asegurarFirebaseInit()) return;
     btn.innerText = "Creando...";
     try {
+        _autenticando = true;
         const cred = await _auth.createUserWithEmailAndPassword(email, pass);
         const ts   = firebase.firestore.FieldValue.serverTimestamp();
-        await _db.collection('users').doc(cred.user.uid).set({
-            biblioteca: {}, projects: [], fechasClave: [], horarioGlobal: {},
-            userColors: {}, pomoSettings: State.get('pomoSettings') || {},
-            taskList: [], createdAt: ts
-        });
         await _db.collection('usersPublic').doc(cred.user.uid).set({
             email, stats: { totalTarjetas: 0, pendientesHoy: 0, dominadas: 0, asignaturas: [] },
             lastUpdated: ts
         });
-        alert("Cuenta creada. Realizando primera subida local...");
-        await guardarDatosUsuario();
+        alert("Cuenta creada. El espacio de estudio de la cuenta está listo.");
     } catch (error) {
         Logger.error("Error registro:", error);
         alert("Fallo de registro: " + error.message);
+    } finally {
         btn.innerText = "Crear Cuenta Nueva";
+        _autenticando = false;
+        _manejarCambioAuth(_auth.currentUser);
     }
 }
 
@@ -367,33 +433,17 @@ async function procesarLoginGoogle() {
         provider.setCustomParameters({ prompt: 'select_account' });
         
         // 2. Uso directo de variables de módulo (ya garantizadas por asegurarFirebaseInit)
+        _autenticando = true;
         const result = await _auth.signInWithPopup(provider);
         const user = result.user;
 
         if (typeof Logger !== 'undefined') Logger.info("Auth: Login Google OK", user.email);
 
-        const userDoc = await _db.collection('usersPublic').doc(user.uid).get();
-        
-        // 3. Inicialización completa del documento de usuario (Evita null pointers en UI)
-        if (!userDoc.exists) {
-            const ts = firebase.firestore.FieldValue.serverTimestamp();
-            
-            await _db.collection('users').doc(user.uid).set({
-                biblioteca: {}, projects: [], fechasClave: [], horarioGlobal: {},
-                userColors: {}, pomoSettings: State.get('pomoSettings') || {},
-                taskList: [], createdAt: ts
-            });
-            
-            await _db.collection('usersPublic').doc(user.uid).set({
-                email: user.email,
-                stats: { totalTarjetas: 0, pendientesHoy: 0, dominadas: 0, asignaturas: [] },
-                lastUpdated: ts
-            });
-            
-            await _db.collection('emailIndex').doc(user.email).set({ uid: user.uid });
-            
-            alert("Cuenta creada con Google. Realizando primera subida local...");
-            await guardarDatosUsuario();
+        if (result.additionalUserInfo?.isNewUser) {
+            const batch = _db.batch();
+            batch.set(_db.collection('usersPublic').doc(user.uid), { email: user.email }, { merge: true });
+            batch.set(_db.collection('emailIndex').doc(user.email), { uid: user.uid });
+            await batch.commit();
         }
     } catch (error) {
         if (typeof Logger !== 'undefined') Logger.error("Error Auth Google:", error);
@@ -403,16 +453,14 @@ async function procesarLoginGoogle() {
         }
     } finally {
         if (btn) btn.innerHTML = textoOriginal;
+        _autenticando = false;
+        _manejarCambioAuth(_auth.currentUser);
     }
 }
 
 function cerrarSesion() {
     if (!confirm("¿Seguro que deseas cerrar sesión? Dejarás de sincronizar con la nube.")) return;
-    if (_autoSaveInterval) { clearInterval(_autoSaveInterval); _autoSaveInterval = null; }
-    _auth.signOut().then(() => {
-        State.set('currentUser', null);
-        location.reload();
-    });
+    _auth.signOut().catch(error => Toast.show('No se pudo cerrar la sesión: ' + error.message, 'error'));
 }
 
 // ─────────────────────────────────────────────────────────────

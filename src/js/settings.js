@@ -5,7 +5,7 @@
 // ════════════════════════════════════════════════════════════════
 
 /**
- * Carga el estado ligero de localStorage e inicializa controles de UI.
+ * Carga el estado ligero de Perfil.local e inicializa controles de UI.
  * Invocada desde el bootloader principal (DOMContentLoaded).
  */
 function initAppState() {
@@ -29,7 +29,7 @@ function initAppState() {
         const tasks = Util.loadLS('pomo_tasks');
         if (tasks) State.set('taskList', tasks);
 
-        const savedModel = localStorage.getItem('estudiador_ia_model');
+        const savedModel = Perfil.local.getItem('estudiador_ia_model');
         if (savedModel) State.set('iaModel', savedModel);
     });
 
@@ -82,7 +82,7 @@ function guardarApariencia() {
         State.set('currentClickEffect', clickEffect);
     });
 
-    localStorage.setItem('estudiador_apariencia', JSON.stringify({
+    Perfil.local.setItem('estudiador_apariencia', JSON.stringify({
         visual: visualTheme,
         click:  clickEffect
     }));
@@ -95,7 +95,7 @@ function togglePrivacidadUI() {
     const cb = document.getElementById('set-privacy-stats');
     if (!cb) return;
     const isPrivate = cb.checked;
-    localStorage.setItem('estudiador_privacy_stats', isPrivate ? 'true' : 'false');
+    Perfil.local.setItem('estudiador_privacy_stats', isPrivate ? 'true' : 'false');
     UI.renderPrivacidadUI(isPrivate);
     if (typeof window.sincronizar === 'function') window.sincronizar();
 }
@@ -220,29 +220,29 @@ function guardarAjustes() {
 
 /** Persistencia pura en storage. Sin efectos secundarios de UI. */
 function _persistirAjustesStorage(formData) {
-    localStorage.setItem('pomo_settings', JSON.stringify(State.get('pomoSettings')));
-    localStorage.setItem('estudiador_sound_settings', JSON.stringify(State.get('soundSettings')));
-    localStorage.setItem('estudiador_ambient_track', State.get('ambientTrack') || 'brownian');
-    localStorage.setItem('estudiador_reward_track', State.get('rewardTrack') || 'warning');
-    localStorage.setItem('estudiador_alarm_track', State.get('alarmTrack') || 'custom');
+    Perfil.local.setItem('pomo_settings', JSON.stringify(State.get('pomoSettings')));
+    Perfil.local.setItem('estudiador_sound_settings', JSON.stringify(State.get('soundSettings')));
+    Perfil.local.setItem('estudiador_ambient_track', State.get('ambientTrack') || 'brownian');
+    Perfil.local.setItem('estudiador_reward_track', State.get('rewardTrack') || 'warning');
+    Perfil.local.setItem('estudiador_alarm_track', State.get('alarmTrack') || 'custom');
 
     if (formData.ia) {
         // Guardar API Key de Groq (sesión o permanente)
         if (formData.ia.sessionOnly) {
-            sessionStorage.setItem('estudiador_groq_key_session', formData.ia.apiKey);
-            localStorage.removeItem('estudiador_groq_key');
+            Perfil.sesion.setItem('estudiador_groq_key_session', formData.ia.apiKey);
+            Perfil.local.removeItem('estudiador_groq_key');
         } else {
-            localStorage.setItem('estudiador_groq_key', formData.ia.apiKey);
-            sessionStorage.removeItem('estudiador_groq_key_session');
+            Perfil.local.setItem('estudiador_groq_key', formData.ia.apiKey);
+            Perfil.sesion.removeItem('estudiador_groq_key_session');
         }
 
         // Guardar proxy de Groq
-        if (formData.ia.proxyUrl) localStorage.setItem('estudiador_groq_proxy_url', formData.ia.proxyUrl);
-        else                       localStorage.removeItem('estudiador_groq_proxy_url');
+        if (formData.ia.proxyUrl) Perfil.local.setItem('estudiador_groq_proxy_url', formData.ia.proxyUrl);
+        else                       Perfil.local.removeItem('estudiador_groq_proxy_url');
         
         // Guardar API Key de OpenRouter
         if (formData.ia.openRouterKey) {
-            localStorage.setItem('estudiador_openrouter_key', formData.ia.openRouterKey);
+            Perfil.local.setItem('estudiador_openrouter_key', formData.ia.openRouterKey);
         }
     }
 
@@ -255,15 +255,15 @@ function _persistirAjustesStorage(formData) {
         localStorage.removeItem('firebase_config');
     }
 
-    localStorage.setItem('estudiador_colores', JSON.stringify(State.get('userColors')));
+    Perfil.local.setItem('estudiador_colores', JSON.stringify(State.get('userColors')));
     
     if (formData.privacidad) {
-        localStorage.setItem('estudiador_privacy_stats', formData.privacidad.shareStats ? 'true' : 'false');
+        Perfil.local.setItem('estudiador_privacy_stats', formData.privacidad.shareStats ? 'true' : 'false');
     }
 
     // FIX ARQUITECTÓNICO: Guardar en disco duro para que sobreviva al recargar la página
     const tiposActivos = State.get('tiposTarjeta');
     if (tiposActivos && Object.keys(tiposActivos).length > 0) {
-        localStorage.setItem('estudiador_tipos_tarjeta', JSON.stringify(tiposActivos));
+        Perfil.local.setItem('estudiador_tipos_tarjeta', JSON.stringify(tiposActivos));
     }
 }

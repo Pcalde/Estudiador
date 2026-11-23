@@ -8,7 +8,7 @@
 //   → ui.js → app.js  ← este archivo
 // ════════════════════════════════════════════════════════════════
 
-const APP_VERSION = "2.3.7";
+const APP_VERSION = "2.6.3";
 
 // ────────────────────────────────────────────────────────────────
 // UTIL — helpers privados reutilizables
@@ -16,7 +16,7 @@ const APP_VERSION = "2.3.7";
 const Util = Object.freeze({
     loadLS(key, fallback = null) {
         try {
-            const raw = localStorage.getItem(key);
+            const raw = Perfil.local.getItem(key);
             return raw !== null ? JSON.parse(raw) : fallback;
         } catch (e) {
             Logger.warn(`loadLS: error leyendo "${key}"`, e);
@@ -56,7 +56,7 @@ async function borrarTodoLocal() {
     if (!confirm('¿Eliminar los datos de Estudiador de este navegador? La copia en la nube se conserva.')) return;
     try {
         await DB.clearLocalData();
-        localStorage.clear();
+        Perfil.local.clear();
         location.reload();
     } catch (error) {
         Toast.show('No se pudo completar el restablecimiento: ' + error.message, 'error');
@@ -77,7 +77,12 @@ EventBus.on('pomodoro:finished', (payload) => {
 });
 
 
-EventBus.on('DATA_REQUIRES_SAVE', async () => {
+let confirmarCargaLocal;
+const cargaLocalLista = new Promise(resolve => { confirmarCargaLocal = resolve; });
+let ultimoGuardado = 0;
+async function guardarEstadoLocal() {
+    const intento = ++ultimoGuardado;
+    const reintentar = document.getElementById('btn-reintentar-guardado');
     const biblioteca = State.get('biblioteca');
     const bibliotecaConfig = State.get('bibliotecaConfig');
     const asigActual = State.get('nombreAsignaturaActual');
@@ -85,13 +90,22 @@ EventBus.on('DATA_REQUIRES_SAVE', async () => {
     const planificador = State.get('planificador');
     try {
         await DB.setVars({ biblioteca, bibliotecaConfig, graphData, ...(planificador && { planificador_pro: planificador }) });
-        if (asigActual) localStorage.setItem('estudiador_asig_actual', asigActual);
-        localStorage.removeItem('estudiador_biblioteca');
+        if (intento !== ultimoGuardado) return;
+        if (planificador) Perfil.local.setItem('estudiador_planificador_pro', JSON.stringify(planificador));
+        if (asigActual) Perfil.local.setItem('estudiador_asig_actual', asigActual);
+        Perfil.local.removeItem('estudiador_biblioteca');
+        if (reintentar && !reintentar.hidden) {
+            reintentar.hidden = true;
+            Toast.show('Cambios guardados en este dispositivo.', 'success');
+        }
     } catch (error) {
-        Logger.error("Error guardando en IndexedDB:", error);
-        Toast.show("No se pudieron guardar los cambios en este dispositivo.", "error");
+        if (intento !== ultimoGuardado) return;
+        Logger.error('Fallo de guardado local:', error);
+        if (reintentar) reintentar.hidden = false;
+        Toast.show('Guardado incompleto. Reintenta antes de cerrar la página.', 'error');
     }
-});
+}
+EventBus.on('DATA_REQUIRES_SAVE', guardarEstadoLocal);
 EventBus.on('DATOS_NUBE_CARGADOS', ({ asigActual }) => {
     Logger.info('Reaccionando a carga de nube: actualizando UI...');
 
@@ -101,7 +115,7 @@ EventBus.on('DATOS_NUBE_CARGADOS', ({ asigActual }) => {
         cargarAsignatura(asigActual);
     }
     
-    // Forzar recarga de bibliotecaConfig desde localStorage si existe
+    // Forzar recarga de bibliotecaConfig desde Perfil.local si existe
     State.set('bibliotecaConfig', State.get('bibliotecaConfig'));
 });
 // REEMPLAZAR EN app.js
@@ -201,8 +215,8 @@ const MigrationEngine = (() => {
         if (biblioActual !== null) return biblioActual;
         Logger.info("Migración: Buscando datos heredados (Legacy)...");
 
-        const legacyV2 = localStorage.getItem('estudiador_db_v2');
-        const legacyV1 = localStorage.getItem('estudiador_biblioteca');
+        const legacyV2 = Perfil.local.getItem('estudiador_db_v2');
+        const legacyV1 = Perfil.local.getItem('estudiador_biblioteca');
         const localDB  = await DB.getVar('biblioteca_local');
 
         let recoveredDB = {};
@@ -212,18 +226,18 @@ const MigrationEngine = (() => {
 
         if (Object.keys(recoveredDB).length > 0) {
             await DB.setVar('biblioteca', recoveredDB);
-            localStorage.removeItem('estudiador_db_v2');
-            localStorage.removeItem('estudiador_biblioteca');
+            Perfil.local.removeItem('estudiador_db_v2');
+            Perfil.local.removeItem('estudiador_biblioteca');
             Logger.info("Migración completada: Biblioteca transferida a IndexedDB.");
         }
         return recoveredDB;
     }
 
     async function migrarConfiguracionesSecundarias() {
-        const fechasLegacy  = localStorage.getItem('estudiador_fechas_clave');
-        if (fechasLegacy)  { await DB.setVar('fechasClave',   JSON.parse(fechasLegacy));  localStorage.removeItem('estudiador_fechas_clave'); }
-        const horarioLegacy = localStorage.getItem('estudiador_horario');
-        if (horarioLegacy) { await DB.setVar('horarioGlobal', JSON.parse(horarioLegacy)); localStorage.removeItem('estudiador_horario'); }
+        const fechasLegacy  = Perfil.local.getItem('estudiador_fechas_clave');
+        if (fechasLegacy)  { await DB.setVar('fechasClave',   JSON.parse(fechasLegacy));  Perfil.local.removeItem('estudiador_fechas_clave'); }
+        const horarioLegacy = Perfil.local.getItem('estudiador_horario');
+        if (horarioLegacy) { await DB.setVar('horarioGlobal', JSON.parse(horarioLegacy)); Perfil.local.removeItem('estudiador_horario'); }
     }
 
     return { migrarBiblioteca, migrarConfiguracionesSecundarias };
@@ -236,6 +250,7 @@ async function arrancarAplicacion() {
     try {
         Logger.info("Iniciando motor de almacenamiento unificado...");
 
+        await DataIO.recuperarRestauracion();
         let biblioDB = await DB.getVar('biblioteca');
         biblioDB     = await MigrationEngine.migrarBiblioteca(biblioDB);
         const normalizada = DataIO.normalizarBiblioteca(biblioDB, false);
@@ -251,9 +266,12 @@ async function arrancarAplicacion() {
         State.set('fechasClave',   await DB.getVar('fechasClave')   || []);
         State.set('horarioGlobal', await DB.getVar('horarioGlobal') || {});
         State.set('graphData', graphData);
-        State.set('planificador', await DB.getVar('planificador_pro') || {});   
+        State.set('bibliotecaConfig', Util.loadLS('estudiador_biblioteca_config', null)
+            ?? await DB.getVar('bibliotecaConfig') ?? { carpetas: {}, archivadas: [] });
+        State.set('planificador', Util.loadLS('estudiador_planificador_pro', null)
+            ?? await DB.getVar('planificador_pro') ?? {});   
 
-        const ultimaAsig = localStorage.getItem('estudiador_asig_actual');
+        const ultimaAsig = Perfil.local.getItem('estudiador_asig_actual');
         if (ultimaAsig && biblioDB[ultimaAsig]) {
             State.set('nombreAsignaturaActual', ultimaAsig);
             EventBus.emit('UI_ASIGNATURA_CARGADA', { nombre: ultimaAsig });
@@ -262,9 +280,11 @@ async function arrancarAplicacion() {
         }
 
         Logger.info("Estado inicial hidratado correctamente.");
+        return true;
     } catch (error) {
         Logger.error("Fallo crítico en hidratación DB:", error);
-        alert("Error de I/O durante el arranque. Revisa la consola.");
+        alert("No se pudieron recuperar los datos locales. Recarga la página para reintentar.");
+        return false;
     }
 }
 
@@ -284,7 +304,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // 1. Arranque asíncrono (DB + migración)
-    await arrancarAplicacion();
+    await Perfil.listo;
+    if (!await arrancarAplicacion()) { confirmarCargaLocal(false); return; }
     document.title = `Estudiador Pro v ${APP_VERSION}`;
     const badge = document.getElementById('app-version-badge');
     if (badge) badge.innerText = APP_VERSION;
@@ -294,11 +315,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (typeof Domain.normalizarBibliotecaFechas === 'function') Domain.normalizarBibliotecaFechas(State.get('biblioteca'));
     if (typeof Domain.normalizarFechasClave === 'function')      State.set('fechasClave', Domain.normalizarFechasClave(State.get('fechasClave')));
 
-    // 3. Estado ligero (localStorage)
-    initAppState();
+    // 3. Estado ligero (Perfil.local)
+    try {
+        initAppState();
+        confirmarCargaLocal(true);
+    } catch (error) {
+        confirmarCargaLocal(false);
+        Logger.error('No se pudo cargar la configuración del perfil:', error);
+        Toast.show('Revisa la copia local antes de sincronizar.', 'error');
+        return;
+    }
     const elPrivacy = document.getElementById('set-privacy-stats');
     if (elPrivacy) {
-        elPrivacy.checked = localStorage.getItem('estudiador_privacy_stats') === 'true';
+        elPrivacy.checked = Perfil.local.getItem('estudiador_privacy_stats') === 'true';
         if (typeof togglePrivacidadUI === 'function') togglePrivacidadUI();
     }
 
@@ -492,18 +521,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
     
-    // Guardar soundSettings y audio tracks en localStorage cuando cambien
+    // Guardar soundSettings y audio tracks en Perfil.local cuando cambien
     function saveAudioSettingsToStorage() {
         const soundSettings = State.get('soundSettings');
         const ambientTrack = State.get('ambientTrack');
         const rewardTrack = State.get('rewardTrack');
         const alarmTrack = State.get('alarmTrack');
         
-        localStorage.setItem('estudiador_sound_settings', JSON.stringify(soundSettings));
-        localStorage.setItem('estudiador_ambient_track', ambientTrack || 'brownian');
-        localStorage.setItem('estudiador_reward_track', rewardTrack || 'warning');
-        localStorage.setItem('estudiador_hard_track', State.get('hardTrack'));
-        localStorage.setItem('estudiador_alarm_track', alarmTrack || 'custom');
+        Perfil.local.setItem('estudiador_sound_settings', JSON.stringify(soundSettings));
+        Perfil.local.setItem('estudiador_ambient_track', ambientTrack || 'brownian');
+        Perfil.local.setItem('estudiador_reward_track', rewardTrack || 'warning');
+        Perfil.local.setItem('estudiador_hard_track', State.get('hardTrack'));
+        Perfil.local.setItem('estudiador_alarm_track', alarmTrack || 'custom');
     }
     
     // Escuchar cambios en STATE para sincronizar UI y guardar settings
@@ -554,10 +583,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (!nombre) throw new Error('Falta el nombre de la asignatura.');
                 const cards = JSON.parse(await file.text());
                 const biblioteca = State.get('biblioteca');
-                if (Object.hasOwn(biblioteca, nombre) && !confirm('Reemplazar la asignatura ' + nombre + '?')) continue;
+                const reemplazo = Object.hasOwn(biblioteca, nombre);
                 const ids = new Set(Object.entries(biblioteca).filter(([asig]) => asig !== nombre)
                     .flatMap(([, tarjetas]) => tarjetas.map(card => card.id)));
-                await DataIO.guardarBiblioteca({ ...biblioteca, [nombre]: DataIO.normalizarTarjetas(cards, ids) });
+                const tarjetas = DataIO.normalizarTarjetas(cards, ids);
+                if (reemplazo && !confirm('¿Reemplazar ' + nombre + ' por ' + tarjetas.length + ' tarjetas? Se conservará una copia previa.')) continue;
+                await DataIO.guardarBiblioteca({ ...biblioteca, [nombre]: tarjetas }, reemplazo);
                 actualizarMenuLateral();
                 if (State.get('nombreAsignaturaActual') === nombre) cargarAsignatura(nombre);
                 Toast.show(nombre + ' importada.', 'success');
@@ -731,34 +762,6 @@ document.addEventListener('click', function(e) {
     }
 });
 
-
-// ────────────────────────────────────────────────────────────────
-// PARCHE DE PERSISTENCIA: PLANIFICADOR AVANZADO
-// ────────────────────────────────────────────────────────────────
-if (typeof EventBus !== 'undefined') {
-    EventBus.on('DATA_REQUIRES_SAVE', () => {
-        const plan = State.get('planificador');
-        if (plan) {
-            localStorage.setItem('estudiador_planificador_pro', JSON.stringify(plan));
-            // Si usas Firebase, aquí es donde Firebase debe leer la clave y subirla
-            Logger.info("Persistencia del Planificador completada en LocalStorage.");
-        }
-    });
-}
-
-// Interceptor de carga inicial (hidratación)
-document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => {
-        try {
-            const planGuardado = localStorage.getItem('estudiador_planificador_pro');
-            if (planGuardado) {
-                State.set('planificador', JSON.parse(planGuardado));
-                Logger.info("Planificador Pro hidratado desde disco.");
-                if (typeof window.updateCalendarHeatmap === 'function') window.updateCalendarHeatmap();
-            }
-        } catch (e) { Logger.error("Fallo al leer planificador:", e); }
-    }, 1000); // Retraso estratégico para dejar que la BD principal cargue primero
-});
 
 // ────────────────────────────────────────────────────────────────
 // EVENT BINDINGS — listeners de elementos estáticos del DOM
@@ -1011,6 +1014,8 @@ document.addEventListener('DOMContentLoaded', () => {
     on('#btn-login-google',    'click', window.procesarLoginGoogle);
     on('#btn-sync-nube',       'click', forzarRespaldoNube);
     on('#btn-forzarbajada',    'click', forzarBajada);
+    on('#btn-reintentar-guardado', 'click', guardarEstadoLocal);
+    on('#btn-copia-anterior', 'click', () => DataIO.exportarBackup(true));
     on('#btn-exportarbackup',  'click', () => window.exportarBackup());
     on('#btn-document',        'click', () => document.getElementById('backup-input-unico').click());
     on('#backup-input-unico',  'change', (e) => importarBackup(e.target));
@@ -1026,7 +1031,6 @@ document.addEventListener('DOMContentLoaded', () => {
     on('#ex-mode-btn-flash',              'click', () => examenSetMode('flash'));
     on('#ex-mode-btn-real',               'click', () => examenSetMode('real'));
     on('#ex-mode-btn-feynman',            'click', () => examenSetMode('feynman'));
-    on('#ex-mode-btn-quiz',               'click', () => examenSetMode('quiz'));
     on('#ex-demo',                        'click', probarExamen);
     on('#btn-iniciarexamen',              'click', iniciarExamen);
     on('#ex-f-btn-revelar',              'click', examenFlashRevelar);
@@ -1115,7 +1119,7 @@ window.abrirAjustes = function() {
         Logger.info("Abriendo panel de ajustes...");
         window.manejarNavegacionMovil?.('study');
 
-        const isLocal  = !!localStorage.getItem('estudiador_groq_key');
+        const isLocal  = !!Perfil.local.getItem('estudiador_groq_key');
         const apiKey   = State.get('groqApiKey')  || "";
         const proxyUrl = State.get('groqProxyUrl') || "";
         const fbConfig = localStorage.getItem('firebase_config') || "";
@@ -1140,7 +1144,7 @@ window.cambiarPestanaAjustes = (...args) => { if (typeof UI !== 'undefined' && U
 
 // Cargar modelos OpenRouter al inicio si hay API key guardada
 document.addEventListener('DOMContentLoaded', () => {
-    const openRouterKey = localStorage.getItem('estudiador_openrouter_key');
+    const openRouterKey = Perfil.local.getItem('estudiador_openrouter_key');
     if (openRouterKey && typeof AI !== 'undefined' && AI.cargarModelosOpenRouter) {
         AI.cargarModelosOpenRouter();
     }

@@ -79,7 +79,7 @@ const PDFManager = (() => {
             if (!recursos[asigActual]) recursos[asigActual] = [];
             
             recursos[asigActual].push(nombre.trim());
-            localStorage.setItem('estudiador_recursos', JSON.stringify(recursos));
+            Perfil.local.setItem('estudiador_recursos', JSON.stringify(recursos));
             State.set('recursosPorAsignatura', recursos);
             render();
         }
@@ -94,7 +94,7 @@ const PDFManager = (() => {
 
             // Eliminar metadato
             recursos[asigActual].splice(index, 1);
-            localStorage.setItem('estudiador_recursos', JSON.stringify(recursos));
+            Perfil.local.setItem('estudiador_recursos', JSON.stringify(recursos));
             State.set('recursosPorAsignatura', recursos);
             
             // Limpiar memoria RAM asociada para no dejar basura (Memory Leak prevention)

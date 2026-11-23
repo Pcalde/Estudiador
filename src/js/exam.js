@@ -47,7 +47,7 @@ const EXAM = (() => {
 
     function _show(id) {
         ['examen-config', 'examen-flash', 'examen-real', 'examen-correccion', 'examen-resultados', 'examen-feynman',
-            'quiz-config', 'quiz-pregunta', 'quiz-resultados']
+            'quiz-config', 'quiz-pregunta', 'quiz-resultados', 'graph-exam-screen']
             .forEach(s => {
                 const el = document.getElementById(s);
                 if (el) el.style.display = (s === id) ? 'block' : 'none';
@@ -66,6 +66,7 @@ const EXAM = (() => {
     // ── CONFIG ────────────────────────────────────────────────────
     const DESCRIPCIONES = {
         flash: ['Repaso Flash', 'Recuperación rápida: piensa la respuesta, revélala y evalúate. Ideal para afianzar definiciones y resultados breves.'],
+        graph: ['Examen de relaciones', 'Recuerda cómo se conectan dos conceptos del mapa. Se incluyen relaciones verificadas con etiqueta cuando ambos conceptos cumplen los filtros.'],
         real: ['Examen Real', 'Responde por escrito sin ver la solución. Puedes saltar preguntas, revisarlas y entregar cuando quieras. Después compararás tus respuestas con los apuntes.'],
         feynman: ['Método Feynman', 'Explica un concepto a un personaje que hace preguntas y señala lagunas. Recomendado para profundizar en pocos conceptos.'],
         quiz: ['Tipo Test con IA', 'La IA crea preguntas de cuatro opciones a partir del contenido seleccionado. Elige dificultad y creatividad, navega libremente y revisa tus resultados.']
@@ -120,7 +121,7 @@ const EXAM = (() => {
         const colorTipo = t => State.get('tiposTarjeta')?.[t]?.color || TIPOS_COLORES[t] || 'var(--accent)';
         const cb = (name, value, label, checked, color) => `<label class="exam-quiz-type" style="--type-color:${color || 'var(--accent)'}"><input type="checkbox" name="${name}" value="${escapeHtml(String(value))}" ${checked ? 'checked' : ''}>${escapeHtml(String(label))}</label>`;
         document.getElementById('ex-tipos-grid').innerHTML = tipos.length ? tipos.map(t => cb('ex-tipo',t,t,true,colorTipo(t))).join('') : '<small>Sin tipos registrados</small>';
-        document.getElementById('ex-contenido').innerHTML = `<div class="exam-setup-filter"><strong>Temas</strong><div class="exam-quiz-type-grid">${temas.map(t => cb('ex-tema',t,`Tema ${t}`,false)).join('') || '<small>Sin temas</small>'}</div></div><div class="exam-setup-filter"><strong>Apartados</strong><div class="exam-quiz-type-grid">${apartados.map(t => cb('ex-apartado',t,t,false,colorTipo(t))).join('') || '<small>Sin apartados</small>'}</div></div>`;
+        document.getElementById('ex-contenido').innerHTML = `<div class="exam-quiz-content-column"><strong>Temas</strong><div class="exam-quiz-content-list">${temas.map(t => cb('ex-tema',t,`Tema ${t}`,false)).join('') || '<small>Sin temas</small>'}</div></div><div class="exam-quiz-content-column"><strong>Apartados</strong><div class="exam-quiz-content-list">${apartados.map(t => cb('ex-apartado',t,t,false,colorTipo(t))).join('') || '<small>Sin apartados</small>'}</div></div>`;
         const tramo = document.getElementById('ex-tramo');
         tramo.hidden = asig === 'ALL';
         const opts = tarjetas.map((c, i) => `<option value="${i}">${i+1}. ${escapeHtml(String(c.Titulo || c.Apartado || 'Sin título'))}</option>`).join('');
@@ -132,7 +133,14 @@ const EXAM = (() => {
     function actualizarDisponibles() {
         const el = document.getElementById('ex-disponibles');
         if (!el) return;
-        const n = _filtrar().length;
+        const tarjetas = _filtrar();
+        if (_modo === 'graph') {
+            const n = GraphExam.candidatas(tarjetas, document.getElementById('ex-asig').value).length;
+            el.textContent = n === 1 ? '1 relación disponible' : n + ' relaciones disponibles';
+            el.classList.toggle('exam-setup-empty', !n);
+            return;
+        }
+        const n = tarjetas.length;
         el.textContent = `${n} concepto${n === 1 ? '' : 's'} disponible${n === 1 ? '' : 's'} con estos filtros`;
         el.classList.toggle('exam-setup-empty', !n);
     }
@@ -173,16 +181,20 @@ const EXAM = (() => {
         });
         document.getElementById('ex-mode-title').textContent = DESCRIPCIONES[m][0];
         document.getElementById('ex-mode-description').textContent = DESCRIPCIONES[m][1];
+        if (m === 'quiz') UI_Quiz.mostrarOpcionesModo();
         document.getElementById('ex-quiz-specific').hidden = m !== 'quiz';
-        document.getElementById('ex-tiempo-wrap').hidden = m === 'quiz' || m === 'feynman';
+        document.getElementById('ex-tiempo-wrap').hidden = m === 'quiz' || m === 'feynman' || m === 'graph';
         document.getElementById('ex-tiempo-label').textContent = m === 'flash' ? 'Tiempo por tarjeta (segundos, 0 = libre)' : 'Tiempo total (minutos, 0 = libre)';
         document.getElementById('ex-num').max = m === 'quiz' ? '20' : '100';
         if (m === 'quiz' && Number(document.getElementById('ex-num').value) > 20) document.getElementById('ex-num').value = 20;
+        document.getElementById('ex-num-label').textContent = m === 'graph' ? 'Número de relaciones' : 'Número de tarjetas';
         if (typeof UIFeynman !== 'undefined') UIFeynman.actualizarConfiguracion(m);
+        actualizarDisponibles();
     }
 
     function iniciarDemo() {
         _clearTimer();
+        if (_modo === 'graph') return GraphExam.demo();
         if (_modo === 'quiz') { Quiz.iniciarDemo(); return; }
         const muestra = [{ Apartado: 'Definición', Tema: 1, Tipo: 'Teoría', Titulo: '¿Qué es una función inyectiva?', Contenido: 'Una función $f:A\\to B$ es inyectiva si $f(x)=f(y)$ implica $x=y$.', Dificultad: 1 },
             { Apartado: 'Teorema', Tema: 1, Tipo: 'Teoría', Titulo: 'Explica el teorema de Pitágoras.', Contenido: 'En un triángulo rectángulo, $a^2+b^2=c^2$.', Dificultad: 1 }];
@@ -206,6 +218,7 @@ const EXAM = (() => {
         const filtros = leerFiltros();
         if (filtros.desde != null && filtros.hasta != null && filtros.desde > filtros.hasta) return alert('El final del tramo debe ser posterior al inicio.');
         const pool = _filtrar();
+        if (_modo === 'graph') return GraphExam.start(GraphExam.candidatas(pool, asig), numMax);
         if (!pool.length) return alert('No hay conceptos que coincidan con los filtros seleccionados.');
 
         _cola       = _shuffle(pool).slice(0, numMax);
@@ -263,6 +276,7 @@ const EXAM = (() => {
         if (siguiente) siguiente.textContent = _idx === _cola.length - 1 ? 'Finalizar →' : 'Siguiente →';
         const nav = document.getElementById('ex-f-nav');
         if (nav) nav.innerHTML = _cola.map((_, i) => `<button type="button" class="exam-question-dot ${i === _idx ? 'current' : ''} ${_puntos[i] !== null ? 'answered' : ''}" data-flash-ir="${i}" aria-label="Tarjeta ${i + 1}">${i + 1}</button>`).join('');
+        if (nav) nav.onclick = e => { const btn = e.target.closest('[data-flash-ir]'); if (btn) flashIrA(Number(btn.dataset.flashIr)); };
 
         document.getElementById('ex-f-bar').style.width   = `${((_idx + 1) / _cola.length) * 100}%`;
         document.getElementById('ex-f-label').innerText   = `${_idx + 1}/${_cola.length}`;

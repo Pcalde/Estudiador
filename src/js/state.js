@@ -95,11 +95,11 @@ const State = (() => {
         
         // Audio
         audioMuted: false,
-        ambientTrack: null,  // Se carga lazily desde localStorage
-        rewardTrack: null,   // Se carga lazily desde localStorage
+        ambientTrack: null,  // Se carga lazily desde Perfil.local
+        rewardTrack: null,   // Se carga lazily desde Perfil.local
         hardTrack: null,
-        alarmTrack: null,    // Se carga lazily desde localStorage
-        soundSettings: null,  // Se carga lazily desde localStorage via _lazyInits
+        alarmTrack: null,    // Se carga lazily desde Perfil.local
+        soundSettings: null,  // Se carga lazily desde Perfil.local via _lazyInits
 
         examenesProgramados: [],
         planificador: {
@@ -127,21 +127,21 @@ const State = (() => {
             },
     };
 
-    // ── Getters con lazy-init para valores de localStorage ────────
+    // ── Getters con lazy-init para valores de Perfil.local ────────
     const _lazyInits = {
-        bibliotecaConfig: () => JSON.parse(localStorage.getItem('estudiador_biblioteca_config') || '{"carpetas":{},"archivadas":[]}'),
-        fechasClave:  () => JSON.parse(localStorage.getItem('estudiador_fechas_clave') || '[]'),
-        groqApiKey:   () => sessionStorage.getItem('estudiador_groq_key_session')
-                            || localStorage.getItem('estudiador_groq_key') || '',
-        groqProxyUrl: () => localStorage.getItem('estudiador_groq_proxy_url') || '',
-        openRouterApiKey: () => localStorage.getItem('estudiador_openrouter_key') || '',
-        iaProveedor:  () => localStorage.getItem('estudiador_ia_proveedor') || 'groq',
-        widgetConfig: () => JSON.parse(localStorage.getItem('estudiador_widget_config') || 'null'),
-        ambientTrack: () => localStorage.getItem('estudiador_ambient_track') || 'brownian',
-        rewardTrack:  () => localStorage.getItem('estudiador_reward_track') || 'warning',
-        hardTrack:    () => localStorage.getItem('estudiador_hard_track') || 'bump',
-        alarmTrack:   () => localStorage.getItem('estudiador_alarm_track') || 'custom',
-        soundSettings: () => JSON.parse(localStorage.getItem('estudiador_sound_settings') || '{"alarm":{"enabled":true,"volume":100,"pitch":0},"reward":{"enabled":true,"volume":100,"pitch":0},"ambient":{"enabled":true,"volume":80,"pitch":0,"continuous":false},"study":{"enabled":false,"volume":100,"pitch":0}}'),
+        bibliotecaConfig: () => JSON.parse(Perfil.local.getItem('estudiador_biblioteca_config') || '{"carpetas":{},"archivadas":[]}'),
+        fechasClave:  () => JSON.parse(Perfil.local.getItem('estudiador_fechas_clave') || '[]'),
+        groqApiKey:   () => Perfil.sesion.getItem('estudiador_groq_key_session')
+                            || Perfil.local.getItem('estudiador_groq_key') || '',
+        groqProxyUrl: () => Perfil.local.getItem('estudiador_groq_proxy_url') || '',
+        openRouterApiKey: () => Perfil.local.getItem('estudiador_openrouter_key') || '',
+        iaProveedor:  () => Perfil.local.getItem('estudiador_ia_proveedor') || 'groq',
+        widgetConfig: () => JSON.parse(Perfil.local.getItem('estudiador_widget_config') || 'null'),
+        ambientTrack: () => Perfil.local.getItem('estudiador_ambient_track') || 'brownian',
+        rewardTrack:  () => Perfil.local.getItem('estudiador_reward_track') || 'warning',
+        hardTrack:    () => Perfil.local.getItem('estudiador_hard_track') || 'bump',
+        alarmTrack:   () => Perfil.local.getItem('estudiador_alarm_track') || 'custom',
+        soundSettings: () => JSON.parse(Perfil.local.getItem('estudiador_sound_settings') || '{"alarm":{"enabled":true,"volume":100,"pitch":0},"reward":{"enabled":true,"volume":100,"pitch":0},"ambient":{"enabled":true,"volume":80,"pitch":0,"continuous":false},"study":{"enabled":false,"volume":100,"pitch":0}}'),
     };
 
     // ── API pública de State ──────────────────────────────────────

@@ -66,9 +66,9 @@ const EXAM = (() => {
     // ── CONFIG ────────────────────────────────────────────────────
     const DESCRIPCIONES = {
         flash: ['Repaso Flash', 'Recuperación rápida: piensa la respuesta, revélala y evalúate. Ideal para afianzar definiciones y resultados breves.'],
-        graph: ['Examen de relaciones', 'Recuerda cómo se conectan dos conceptos del mapa. Se incluyen relaciones verificadas con etiqueta cuando ambos conceptos cumplen los filtros.'],
         real: ['Examen Real', 'Responde por escrito sin ver la solución. Puedes saltar preguntas, revisarlas y entregar cuando quieras. Después compararás tus respuestas con los apuntes.'],
         feynman: ['Método Feynman', 'Explica un concepto a un personaje que hace preguntas y señala lagunas. Recomendado para profundizar en pocos conceptos.'],
+        graph: ['Relaciones', 'Explica las conexiones del mapa, reconstruye cadenas y compara tu respuesta con las tarjetas.'],
         quiz: ['Tipo Test con IA', 'La IA crea preguntas de cuatro opciones a partir del contenido seleccionado. Elige dificultad y creatividad, navega libremente y revisa tus resultados.']
     };
 
@@ -121,7 +121,7 @@ const EXAM = (() => {
         const colorTipo = t => State.get('tiposTarjeta')?.[t]?.color || TIPOS_COLORES[t] || 'var(--accent)';
         const cb = (name, value, label, checked, color) => `<label class="exam-quiz-type" style="--type-color:${color || 'var(--accent)'}"><input type="checkbox" name="${name}" value="${escapeHtml(String(value))}" ${checked ? 'checked' : ''}>${escapeHtml(String(label))}</label>`;
         document.getElementById('ex-tipos-grid').innerHTML = tipos.length ? tipos.map(t => cb('ex-tipo',t,t,true,colorTipo(t))).join('') : '<small>Sin tipos registrados</small>';
-        document.getElementById('ex-contenido').innerHTML = `<div class="exam-quiz-content-column"><strong>Temas</strong><div class="exam-quiz-content-list">${temas.map(t => cb('ex-tema',t,`Tema ${t}`,false)).join('') || '<small>Sin temas</small>'}</div></div><div class="exam-quiz-content-column"><strong>Apartados</strong><div class="exam-quiz-content-list">${apartados.map(t => cb('ex-apartado',t,t,false,colorTipo(t))).join('') || '<small>Sin apartados</small>'}</div></div>`;
+        document.getElementById('ex-contenido').innerHTML = `<div class="exam-setup-filter"><strong>Temas</strong><div class="exam-quiz-content-list exam-filtros-contenido">${temas.map(t => cb('ex-tema',t,`Tema ${t}`,false)).join('') || '<small>Sin temas</small>'}</div></div><div class="exam-setup-filter"><strong>Apartados</strong><div class="exam-quiz-content-list exam-filtros-contenido">${apartados.map(t => cb('ex-apartado',t,t,false,colorTipo(t))).join('') || '<small>Sin apartados</small>'}</div></div>`;
         const tramo = document.getElementById('ex-tramo');
         tramo.hidden = asig === 'ALL';
         const opts = tarjetas.map((c, i) => `<option value="${i}">${i+1}. ${escapeHtml(String(c.Titulo || c.Apartado || 'Sin título'))}</option>`).join('');
@@ -133,14 +133,7 @@ const EXAM = (() => {
     function actualizarDisponibles() {
         const el = document.getElementById('ex-disponibles');
         if (!el) return;
-        const tarjetas = _filtrar();
-        if (_modo === 'graph') {
-            const n = GraphExam.candidatas(tarjetas, document.getElementById('ex-asig').value).length;
-            el.textContent = n === 1 ? '1 relación disponible' : n + ' relaciones disponibles';
-            el.classList.toggle('exam-setup-empty', !n);
-            return;
-        }
-        const n = tarjetas.length;
+        const n = _filtrar().length;
         el.textContent = `${n} concepto${n === 1 ? '' : 's'} disponible${n === 1 ? '' : 's'} con estos filtros`;
         el.classList.toggle('exam-setup-empty', !n);
     }
@@ -159,7 +152,7 @@ const EXAM = (() => {
         sel.innerHTML = '<option value="ALL">Todas las asignaturas</option>' + Object.keys(biblioteca).map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
         if (actual && biblioteca[actual]) sel.value = actual;
         if (!sel.dataset.configurado) {
-            sel.addEventListener('change', actualizarContenido);
+            sel.addEventListener('change', () => { actualizarContenido(); if (_modo === 'graph') GraphExam.open(); });
             document.getElementById('examen-config').addEventListener('change', e => {
                 if (e.target.matches('#ex-asig')) return;
                 actualizarDisponibles();
@@ -182,20 +175,22 @@ const EXAM = (() => {
         document.getElementById('ex-mode-title').textContent = DESCRIPCIONES[m][0];
         document.getElementById('ex-mode-description').textContent = DESCRIPCIONES[m][1];
         if (m === 'quiz') UI_Quiz.mostrarOpcionesModo();
+        const graph = m === 'graph';
+        document.getElementById('ex-graph-slot').hidden = !graph;
+        document.querySelectorAll('.exam-graph-incompatible').forEach(el => el.hidden = graph);
+        if (graph && typeof GraphExam !== 'undefined') GraphExam.open();
         document.getElementById('ex-quiz-specific').hidden = m !== 'quiz';
-        document.getElementById('ex-tiempo-wrap').hidden = m === 'quiz' || m === 'feynman' || m === 'graph';
+        document.getElementById('ex-tiempo-wrap').hidden = m === 'quiz' || m === 'feynman' || graph;
         document.getElementById('ex-tiempo-label').textContent = m === 'flash' ? 'Tiempo por tarjeta (segundos, 0 = libre)' : 'Tiempo total (minutos, 0 = libre)';
         document.getElementById('ex-num').max = m === 'quiz' ? '20' : '100';
         if (m === 'quiz' && Number(document.getElementById('ex-num').value) > 20) document.getElementById('ex-num').value = 20;
-        document.getElementById('ex-num-label').textContent = m === 'graph' ? 'Número de relaciones' : 'Número de tarjetas';
         if (typeof UIFeynman !== 'undefined') UIFeynman.actualizarConfiguracion(m);
-        actualizarDisponibles();
     }
 
     function iniciarDemo() {
         _clearTimer();
-        if (_modo === 'graph') return GraphExam.demo();
         if (_modo === 'quiz') { Quiz.iniciarDemo(); return; }
+        if (_modo === 'graph') { GraphExam.start(); return; }
         const muestra = [{ Apartado: 'Definición', Tema: 1, Tipo: 'Teoría', Titulo: '¿Qué es una función inyectiva?', Contenido: 'Una función $f:A\\to B$ es inyectiva si $f(x)=f(y)$ implica $x=y$.', Dificultad: 1 },
             { Apartado: 'Teorema', Tema: 1, Tipo: 'Teoría', Titulo: 'Explica el teorema de Pitágoras.', Contenido: 'En un triángulo rectángulo, $a^2+b^2=c^2$.', Dificultad: 1 }];
         _cola = muestra;
@@ -212,13 +207,13 @@ const EXAM = (() => {
     function iniciar() {
         _clearTimer();
         if (_modo === 'quiz') { Quiz.iniciar(); return; }
+        if (_modo === 'graph') { GraphExam.start(); return; }
         const asig = document.getElementById('ex-asig').value;
         const numMax = Math.max(1, Number(document.getElementById('ex-num').value) || 10);
         const tiempo = Math.max(0, Number(document.getElementById('ex-tiempo').value) || 0);
         const filtros = leerFiltros();
         if (filtros.desde != null && filtros.hasta != null && filtros.desde > filtros.hasta) return alert('El final del tramo debe ser posterior al inicio.');
         const pool = _filtrar();
-        if (_modo === 'graph') return GraphExam.start(GraphExam.candidatas(pool, asig), numMax);
         if (!pool.length) return alert('No hay conceptos que coincidan con los filtros seleccionados.');
 
         _cola       = _shuffle(pool).slice(0, numMax);
@@ -621,6 +616,7 @@ window.probarExamen               = () => EXAM.iniciarDemo();
 window.cerrarExamen               = () => {
     EXAM.cerrar();
     if (typeof actualizarMenuLateral === 'function') actualizarMenuLateral();
+    const nombreAsignaturaActual = State.get('nombreAsignaturaActual');
     if (nombreAsignaturaActual && typeof cargarAsignatura === 'function') cargarAsignatura(nombreAsignaturaActual);
 };
 window.repetirExamen              = () => EXAM.repetir();

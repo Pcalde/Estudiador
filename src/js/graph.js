@@ -75,13 +75,24 @@ const Graph = (() => {
         data.nodes.push({ id: String(cardId), x: 0, y: 0 });
         return true;
     }
-    function _insertEdge(data, src, tgt, label = '', origin = 'manual', reviewed = true) {
+    // Campos semánticos opcionales: no afectan a mapas antiguos ni a su disposición.
+    const TIPOS_RELACION = new Set(['asociacion', 'implicacion', 'equivalencia', 'construccion', 'dependencia']);
+    function _semantica(meta = {}) {
+        const extra = {};
+        if (TIPOS_RELACION.has(meta.tipo)) extra.tipo = meta.tipo;
+        if (extra.tipo === 'equivalencia') extra.reversible = true;
+        else if (typeof meta.reversible === 'boolean') extra.reversible = meta.reversible;
+        if (meta.explicacion != null && String(meta.explicacion).trim())
+            extra.explicacion = String(meta.explicacion).trim().slice(0, 3000);
+        return extra;
+    }
+    function _insertEdge(data, src, tgt, label = '', origin = 'manual', reviewed = true, meta = {}) {
         src = String(src); tgt = String(tgt);
         if (src === tgt || !_contains(data, src) || !_contains(data, tgt)) return false;
         label = String(label ?? '').trim().slice(0, 180);
         const existing = data.edges.find(e => String(e.source) === src && String(e.target) === tgt && (e.label || '') === label);
         if (existing) return false;
-        data.edges.push({ id: _id(), source: src, target: tgt, label, origin, reviewed });
+        data.edges.push({ id: _id(), source: src, target: tgt, label, origin, reviewed, ..._semantica(meta) });
         return true;
     }
     function _attachDemonstrations(card, data, cards, asig) {
@@ -155,6 +166,20 @@ const Graph = (() => {
         if (!e) return false;
         if (change.label !== undefined) e.label = String(change.label).trim().slice(0, 180);
         if (change.reviewed !== undefined) e.reviewed = !!change.reviewed;
+        if (change.tipo !== undefined) {
+            if (TIPOS_RELACION.has(change.tipo)) e.tipo = change.tipo;
+            else delete e.tipo;
+        }
+        if (change.reversible !== undefined) {
+            if (typeof change.reversible === 'boolean') e.reversible = change.reversible;
+            else delete e.reversible;
+        }
+        if (e.tipo === 'equivalencia') e.reversible = true; // equivalencia implica reciprocidad
+        if (change.explicacion !== undefined) {
+            const explanation = String(change.explicacion || '').trim().slice(0, 3000);
+            if (explanation) e.explicacion = explanation;
+            else delete e.explicacion;
+        }
         if (change.source !== undefined && _contains(data, change.source)) e.source = String(change.source);
         if (change.target !== undefined && _contains(data, change.target)) e.target = String(change.target);
     }); }
@@ -374,7 +399,7 @@ const Graph = (() => {
         const ids = new Set(data.nodes.map(n => String(n.id)));
         for (const e of data.edges) if (ids.has(String(e.source)) && ids.has(String(e.target))) {
             lines.push('RELACION ' + JSON.stringify({ desde: String(e.source), hasta: String(e.target),
-                etiqueta: e.label || '', revisada: e.reviewed !== false }));
+                etiqueta: e.label || '', revisada: e.reviewed !== false, ..._semantica(e) }));
         }
         return lines.join('\n') + '\n';
     }
@@ -423,7 +448,7 @@ const Graph = (() => {
         for (const e of edges) {
             const source = mapped.get(String(e.desde)), target = mapped.get(String(e.hasta));
             if (!source || !target) { errors.push(`Relación sin extremos válidos: ${e.desde} → ${e.hasta}`); continue; }
-            readyEdges.push({ source, target, label: String(e.etiqueta || ''), reviewed: e.revisada === true });
+            readyEdges.push({ source, target, label: String(e.etiqueta || ''), reviewed: e.revisada === true, ..._semantica(e) });
         }
         return { meta, nodes: readyNodes, edges: readyEdges, errors };
     }
@@ -435,7 +460,7 @@ const Graph = (() => {
             if (reemplazar) { data.nodes = []; data.edges = []; }
             const before=new Set(data.nodes.map(n=>String(n.id)));
             for (const id of parsed.nodes) _insertNode(data, id, asig);
-            for (const e of parsed.edges) _insertEdge(data, e.source, e.target, e.label, 'import', e.reviewed);
+            for (const e of parsed.edges) _insertEdge(data, e.source, e.target, e.label, 'import', e.reviewed, e);
             _positionNew(data,before);
         });
         return { ok: true, ...parsed };

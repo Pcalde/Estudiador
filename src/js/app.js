@@ -8,7 +8,7 @@
 //   → ui.js → app.js  ← este archivo
 // ════════════════════════════════════════════════════════════════
 
-const APP_VERSION = "2.6.7";
+const APP_VERSION = "2.8.3";
 
 // ────────────────────────────────────────────────────────────────
 // UTIL — helpers privados reutilizables
@@ -87,11 +87,9 @@ async function guardarEstadoLocal() {
     const bibliotecaConfig = State.get('bibliotecaConfig');
     const asigActual = State.get('nombreAsignaturaActual');
     const graphData  = State.get('graphData');
-    const planificador = State.get('planificador');
     try {
-        await DB.setVars({ biblioteca, bibliotecaConfig, graphData, ...(planificador && { planificador_pro: planificador }) });
+        await DB.setVars({ biblioteca, bibliotecaConfig, graphData });
         if (intento !== ultimoGuardado) return;
-        if (planificador) Perfil.local.setItem('estudiador_planificador_pro', JSON.stringify(planificador));
         if (asigActual) Perfil.local.setItem('estudiador_asig_actual', asigActual);
         Perfil.local.removeItem('estudiador_biblioteca');
         if (reintentar && !reintentar.hidden) {
@@ -268,8 +266,8 @@ async function arrancarAplicacion() {
         State.set('graphData', graphData);
         State.set('bibliotecaConfig', Util.loadLS('estudiador_biblioteca_config', null)
             ?? await DB.getVar('bibliotecaConfig') ?? { carpetas: {}, archivadas: [] });
-        State.set('planificador', Util.loadLS('estudiador_planificador_pro', null)
-            ?? await DB.getVar('planificador_pro') ?? {});   
+        State.set('planificador', await DB.getVar('planificador_pro')
+            ?? Util.loadLS('estudiador_planificador_pro', null) ?? {});   
 
         const ultimaAsig = Perfil.local.getItem('estudiador_asig_actual');
         if (ultimaAsig && biblioDB[ultimaAsig]) {

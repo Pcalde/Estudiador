@@ -12,204 +12,14 @@ const UIExamPlanner = (() => {
 
     // CACHE LOCAL para evitar desincronización - SOU la fuente de verdad en runtime
     let planCache = null;
+    let borradorRecuperable = null;
 
-    const DEFAULT_STUDY_TYPES = [
-        { id: 'st_read',  name: 'Lectura',   icon: 'fa-book-open',     color: 'var(--status-blue)' },
-        { id: 'st_study', name: 'Estudio',   icon: 'fa-brain',         color: 'var(--status-yellow)' },
-        { id: 'st_prac',  name: 'Práctica',  icon: 'fa-pen-to-square', color: 'var(--accent)' },
-        { id: 'st_rev',   name: 'Repaso',    icon: 'fa-rotate-right',  color: 'var(--status-green)' }
-    ];
-    const DEFAULT_DAILY_CAPACITIES = { regularCourse: 4, examSeason: 8, weekend: 6 };
-    const DEFAULT_EXAM_WEIGHTS = [
-        { id: 'minor',  label: 'Prueba Menor',  multiplier: 0.5 },
-        { id: 'mid',    label: 'Parcial',       multiplier: 1.0 },
-        { id: 'final',  label: 'Examen Final',  multiplier: 2.0 },
-        { id: 'proj',   label: 'Entrega Final', multiplier: 1.5 }
-    ];
-
-    // ── GESTIÓN DE ESTADO CENTRALIZADO ──
-    // NOTA: getPlan ahora es async y debe ser await'd en contextos async
-    // Para contextos síncronos, usar getPlanSync() que lee de State cache
+    const { getTaskId, getTaskStatus } = PlannerModel;
     async function getPlan() {
-        let plan = null;
-                
-        // INTENTAR 1: Leer de IndexedDB (fuente de verdad)
-        try {
-            if (typeof DB !== 'undefined' && DB.getVar) {
-                plan = await DB.getVar('planificador_pro');
-            }
-        } catch(e) {
-            Logger.warn('[UIExamPlanner] getPlan: error leyendo IndexedDB:', e);
-        }
-        
-        // INTENTAR 2: Fallback a Perfil.local
-        if (!plan) {
-            try {
-                const planGuardado = Perfil.local.getItem('estudiador_planificador_pro');
-                if (planGuardado) {
-                    plan = JSON.parse(planGuardado);
-                }
-            } catch(e) {
-                Logger.warn('[UIExamPlanner] getPlan: error leyendo Perfil.local:', e);
-            }
-        }
-        
-        // INTENTAR 3: Fallback a State
-        if (!plan) {
-            plan = typeof State !== 'undefined' ? State.get('planificador') : null;
-        }
-        
-        if (!plan || !plan.asignaturasPlanificadas) {
-            plan = {
-                studyTypes: [
-                    { id: 'st_read',  name: 'Lectura',   icon: 'fa-book-open',     color: 'var(--status-blue)' },
-                    { id: 'st_study', name: 'Estudio',   icon: 'fa-brain',         color: 'var(--status-yellow)' },
-                    { id: 'st_prac',  name: 'Práctica',  icon: 'fa-pen-to-square', color: 'var(--accent)' },
-                    { id: 'st_rev',   name: 'Repaso',    icon: 'fa-rotate-right',  color: 'var(--status-green)' }
-                ],
-                dailyCapacities: { regularCourse: 4, examSeason: 8, weekend: 6 },
-                asignaturasPlanificadas: [],
-                examenes: [],
-                schedule: {}
-            };
-        }
-        if (!Array.isArray(plan.studyTypes) || plan.studyTypes.length === 0) {
-            plan.studyTypes = DEFAULT_STUDY_TYPES.map(t => ({ ...t }));
-        }
-        if (!plan.dailyCapacities || typeof plan.dailyCapacities !== 'object') {
-            plan.dailyCapacities = { ...DEFAULT_DAILY_CAPACITIES };
-        }
-        if (!Array.isArray(plan.examWeights) || plan.examWeights.length === 0) {
-            plan.examWeights = DEFAULT_EXAM_WEIGHTS.map(w => ({ ...w }));
-        }
-        if (!Array.isArray(plan.asignaturasPlanificadas)) plan.asignaturasPlanificadas = [];
-        if (!Array.isArray(plan.examenes)) plan.examenes = [];
-        if (!plan.schedule || typeof plan.schedule !== 'object') plan.schedule = {};
-
-        // AÑADIR: reconstruir asignaturas desde el schedule si la lista está vacía
-        if (plan.asignaturasPlanificadas.length === 0 && Object.keys(plan.schedule).length > 0) {
-            const asigMap = {};
-            Object.values(plan.schedule).forEach(tareas => {
-                tareas.forEach(t => {
-                    if (t.asigId && !asigMap[t.asigId]) {
-                        asigMap[t.asigId] = {
-                            id: t.asigId,
-                            nombre: t.asigNombre || t.asigId,
-                            acronimo: t.acronimo || '',
-                            color: t.color || 'var(--accent)',
-                            temas: []
-                        };
-                    }
-                    if (t.asigId && t.temaId && asigMap[t.asigId]) {
-                        const yaExiste = asigMap[t.asigId].temas.some(tm => tm.id === t.temaId);
-                        if (!yaExiste) {
-                            asigMap[t.asigId].temas.push({
-                                id: t.temaId,
-                                nombre: t.temaNombre || t.temaId,
-                                pomosEstimados: t.pomosAsignados || 2,
-                                tipoEstudioId: t.studyTypeId || 'st_read'
-                            });
-                        }
-                    }
-                });
-            });
-            plan.asignaturasPlanificadas = Object.values(asigMap);
-        }
-
-        normalizarSchedulePlan(plan);
-        return plan;
+        return PlannerRepository.abrir();
     }
-
-    // Versión síncrona para contextos que no pueden ser async
-    // Lee del cache local que es la fuente de verdad en runtime
     function getPlanSync() {
-        // Si no hay cache, rellenar de State
-        if (!planCache) {
-            planCache = State.get('planificador');
-        }
-        
-        if (!planCache || !planCache.asignaturasPlanificadas) {
-            // Crear plan vacío en caché
-            planCache = {
-                studyTypes: DEFAULT_STUDY_TYPES.map(t => ({ ...t })),
-                dailyCapacities: { ...DEFAULT_DAILY_CAPACITIES },
-                asignaturasPlanificadas: [],
-                examenes: [],
-                schedule: {}
-            };
-        }
-        
-        return planCache;
-    }
-
-    function getTaskId(task, fallback = '') {
-        return String(task?.idTarea ?? task?.id ?? fallback);
-    }
-
-    function getTaskStatus(task) {
-        if (task?.status === 'completed' || task?.status === 'failed' || task?.status === 'pending') {
-            return task.status;
-        }
-        return task?.completada ? 'completed' : 'pending';
-    }
-
-    function getTaskPomos(task) {
-        const pomos = Number(task?.pomosAsignados ?? task?.pomos ?? 0);
-        return Number.isFinite(pomos) ? pomos : 0;
-    }
-
-    function resolveLegacyStudyTypeId(task) {
-        if (task?.studyTypeId) return task.studyTypeId;
-        const typeName = String(task?.typeName || '').toLowerCase();
-        if (typeName.includes('repaso')) return 'st_rev';
-        if (typeName.includes('práct') || typeName.includes('pract')) return 'st_prac';
-        if (typeName.includes('lectura')) return 'st_read';
-        return 'st_study';
-    }
-
-    function resolveTaskColor(plan, task) {
-        if (task?.color) return task.color;
-        const asig = (plan.asignaturasPlanificadas || []).find(a =>
-            a.id === task?.asigId || a.nombre === task?.asigNombre
-        );
-        if (asig?.color) return asig.color;
-        if (typeof window.getColorAsignatura === 'function' && task?.asigNombre) {
-            const color = window.getColorAsignatura(task.asigNombre);
-            if (color) return color;
-        }
-        return 'var(--accent)';
-    }
-
-    function normalizarTareaPlan(plan, task, fecha, index) {
-        if (!task || typeof task !== 'object') return null;
-
-        const taskId = getTaskId(task, `legacy_${fecha}_${index}`);
-        const pomosAsignados = getTaskPomos(task);
-        const status = getTaskStatus(task);
-        const temaNombre = String(task.temaNombre || task.typeName || 'Estudio planificado').trim() || 'Estudio planificado';
-
-        return {
-            ...task,
-            id: task.id || taskId,
-            idTarea: taskId,
-            temaNombre,
-            studyTypeId: resolveLegacyStudyTypeId(task),
-            typeName: task.typeName || temaNombre,
-            pomos: pomosAsignados,
-            pomosAsignados,
-            status,
-            completada: status === 'completed',
-            color: resolveTaskColor(plan, task)
-        };
-    }
-
-    function normalizarSchedulePlan(plan) {
-        Object.keys(plan.schedule || {}).forEach(fecha => {
-            const tareas = Array.isArray(plan.schedule[fecha]) ? plan.schedule[fecha] : [];
-            plan.schedule[fecha] = tareas
-                .map((task, index) => normalizarTareaPlan(plan, task, fecha, index))
-                .filter(Boolean);
-        });
+        return structuredClone(borradorRecuperable || planCache);
     }
 
     function aplicarEstadoTarea(task, status) {
@@ -217,40 +27,100 @@ const UIExamPlanner = (() => {
         task.completada = status === 'completed';
     }
 
-    function savePlan(plan) {
-        normalizarSchedulePlan(plan);
-        
-        // PRIMERO: actualizar cache local CON CLON PROFUNDO (fuente de verdad en runtime)
-        planCache = JSON.parse(JSON.stringify(plan));
-        
-        // SEGUNDO: actualizar State para otros handlers
-        State.set('planificador', planCache);
-        
-        // TERCERO: guardar en persisten storage en background (no bloqueante)
-        
-        // Guardar en IndexedDB
-        if (typeof DB !== 'undefined' && DB.setVar) {
-            DB.setVar('planificador_pro', planCache)
-                .then(() => Logger.info('[UIExamPlanner] Plan guardado en IndexedDB'))
-                .catch(e => Logger.error('[UIExamPlanner] Error guardando en IndexedDB:', e));
-        }
-        
-        // Guardar también en Perfil.local como fallback
+    let errorBorrador = '';
+    let guardando = 0;
+    const claveBorrador = 'estudiador_planner_borrador';
+
+    function conservarBorrador() {
         try {
-            Perfil.local.setItem('estudiador_planificador_pro', JSON.stringify(planCache));
-        } catch(e) {
-            Logger.error('[UIExamPlanner] savePlan: error al guardar en Perfil.local:', e);
+            if (borradorRecuperable) Perfil.local.setItem(claveBorrador, JSON.stringify(borradorRecuperable));
+            else Perfil.local.removeItem(claveBorrador);
+        } catch {
+            errorBorrador += ' El respaldo local no está disponible. Descarga el borrador antes de cerrar la página.';
         }
-        
-        // Emitir evento para que otros handlers se enteren
-        if (typeof EventBus !== 'undefined') EventBus.emit('DATA_REQUIRES_SAVE');
-        
-        // Actualizar heatmap si existe
+    }
+
+    function renderRecuperacion() {
+        const ws = document.getElementById('examplanner-workspace');
+        if (!ws) return;
+        ws.querySelector('#ep-recovery')?.remove();
+        if (!borradorRecuperable) return;
+        const panel = document.createElement('div');
+        panel.id = 'ep-recovery';
+        panel.className = 'ep-card ep-recovery';
+        panel.setAttribute('role', 'status');
+        panel.innerHTML = `
+            <p>${guardando ? 'Guardando cambios…' : 'Borrador pendiente de guardar. La revisión confirmada sigue protegida.'} ${escapeHtml(errorBorrador)}</p>
+            <button class="ep-btn" id="ep-retry" ${guardando ? 'disabled' : ''}>Reintentar guardado</button>
+            <button class="ep-btn" id="ep-resolve" ${guardando ? 'disabled' : ''}>Guardar borrador sobre revisión actual…</button>
+            <button class="ep-btn" id="ep-recuperar-borrador">Descargar borrador</button>
+            <button class="ep-btn" id="ep-discard" ${guardando ? 'disabled' : ''}>Descartar borrador y cargar revisión confirmada</button>`;
+        ws.querySelector('.ep-header').after(panel);
+        panel.querySelector('#ep-retry').onclick = () => savePlan(borradorRecuperable, 'Borrador recuperado.');
+        panel.querySelector('#ep-resolve').onclick = async () => {
+            try {
+                const actual = await getPlan();
+                if (!confirm('¿Sustituir la revisión ' + actual.revision + ' por este borrador? Los cambios de otras pestañas serán reemplazados. La revisión anterior queda archivada.')) return;
+                const recuperado = structuredClone(borradorRecuperable);
+                recuperado.revision = actual.revision;
+                recuperado.commitId = actual.commitId;
+                await savePlan(recuperado, 'Borrador recuperado sobre la revisión actual.');
+            } catch (error) { Toast.show(error.message, 'error'); }
+        };
+        panel.querySelector('#ep-recuperar-borrador').onclick = () => {
+            const url = URL.createObjectURL(new Blob([JSON.stringify(borradorRecuperable, null, 2)], {type:'application/json'}));
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'planificador-borrador.json';
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        };
+        panel.querySelector('#ep-discard').onclick = async () => {
+            if (!confirm('¿Descartar el borrador pendiente y cargar el último plan guardado? Puedes descargarlo antes.')) return;
+            try {
+                const actual = await getPlan();
+                planCache = actual;
+                State.set('planificador', structuredClone(actual));
+                borradorRecuperable = null;
+                errorBorrador = '';
+                conservarBorrador();
+                document.getElementById('ep-dia-overlay')?.remove();
+                renderWorkspace();
+            } catch (error) { Toast.show(error.message, 'error'); }
+        };
+    }
+
+    function savePlan(plan, mensaje) {
+        const borrador = structuredClone(plan);
+        borradorRecuperable = borrador;
+        errorBorrador = '';
+        conservarBorrador();
+        guardando++;
+        renderRecuperacion();
+        let escritura;
+        let confirmacion;
         try {
-            if (typeof window.updateCalendarHeatmap === 'function') window.updateCalendarHeatmap();
-        } catch(e) {
-            Logger.warn('[UIExamPlanner] updateCalendarHeatmap falló (no crítico):', e);
-        }
+            escritura = PlannerRepository.guardar(borrador);
+            confirmacion = escritura.confirmacion;
+        } catch (error) { confirmacion = Promise.reject(error); }
+        const resultado = confirmacion.then(() => {
+            planCache = escritura.plan;
+            if (borradorRecuperable === borrador) borradorRecuperable = null;
+            conservarBorrador();
+            if (mensaje) Toast.show(mensaje, 'success');
+            window.updateCalendarHeatmap?.();
+        }, error => {
+            errorBorrador = error.message;
+            conservarBorrador();
+            Toast.show('El borrador sigue disponible. ' + error.message, 'error');
+            throw error;
+        }).finally(() => {
+            guardando--;
+            if (document.getElementById('examplanner-workspace')) renderWorkspace();
+        });
+        // Los manejadores síncronos delegan la notificación aquí.
+        resultado.catch(() => {});
+        return resultado;
     }
 
     // ── RENDERIZADOR PRINCIPAL ──
@@ -260,34 +130,7 @@ const UIExamPlanner = (() => {
             ws = document.createElement('div');
             ws.id = 'examplanner-workspace';
             ws.innerHTML = `
-                <style>
-                    #examplanner-workspace { position: fixed; inset: 0; z-index: 999999; background: var(--bg-color, #121212); color: var(--text-main, #e0e0e0); display: flex; flex-direction: column; font-family: 'JetBrains Mono', monospace, sans-serif; font-size: 13px; }
-                    .ep-btn { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 500; border: 1px solid var(--border); background: var(--card-bg, #1e1e1e); color: var(--text-main); cursor: pointer; transition: opacity .2s; }
-                    .ep-btn:hover { opacity: .75; }
-                    .ep-btn.acc { background: var(--accent); color: #000; border: none; }
-                    .ep-btn.dnr { background: var(--status-red); color: #fff; border: none; }
-                    .ep-inp { background: var(--bg-color); color: var(--text-main); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; outline: none; width: 100%; transition: border-color .2s; }
-                    .ep-inp:focus { border-color: var(--accent); }
-                    .ep-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 14px; }
-                    .ep-header { display: flex; align-items: center; gap: 4px; padding: 7px 14px; flex-shrink: 0; background: var(--menu-color, #181818); border-bottom: 1px solid var(--border); justify-content: space-between; }
-                    .ep-navb { display: flex; align-items: center; gap: 5px; padding: 5px 11px; border-radius: 8px; border: none; font-size: 12px; font-weight: 500; cursor: pointer; background: transparent; color: var(--text-main); opacity: .6; }
-                    .ep-navb.on { background: var(--accent); color: #000; opacity: 1; }
-                    #ep-body { display: flex; flex: 1; overflow: hidden; }
-                    #ep-sb { width: 250px; flex-shrink: 0; display: flex; flex-direction: column; border-right: 1px solid var(--border); background: var(--menu-color); }
-                    #ep-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-                    .ep-dc { border-radius: 9px; padding: 5px; border: 1px solid var(--border); background: var(--card-bg); overflow: hidden; display: flex; flex-direction: column; min-height: 80px; cursor: pointer; transition: border-color 0.2s; }
-                    .ep-dc:hover { border-color: var(--accent); }
-                    .ep-dc.exday { background: rgba(244,67,54,.08); border-color: var(--status-red); }
-                    .ep-dc.today { border-color: var(--accent); box-shadow: 0 0 10px rgba(0,255,204,.15); }
-                    
-                    /* Estados de tareas */
-                    .t-st-btn { padding: 4px 6px; border-radius: 4px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); cursor: pointer; }
-                    .t-st-btn.on-sg { background: var(--status-green); color: #fff; border-color: var(--status-green); }
-                    .t-st-btn.on-sr { background: var(--status-red); color: #fff; border-color: var(--status-red); }
-                    .t-item.done { border-color: var(--status-green); opacity: 0.7; }
-                    .t-item.done .t-nom { text-decoration: line-through; }
-                    .t-item.failed { border-color: var(--status-red); }
-                </style>
+
                 <div class="ep-header">
                     <div style="display:flex; gap:10px;" id="ep-nav-container"></div>
                     <button class="ep-btn dnr" id="ep-btn-close-ws"><i class="fa-solid fa-xmark"></i> Cerrar Planificador</button>
@@ -304,6 +147,7 @@ const UIExamPlanner = (() => {
             document.getElementById('ep-btn-close-ws').addEventListener('click', () => ws.remove());
         }
 
+        renderRecuperacion();
         renderNavegacion();
         renderSidebar();
         
@@ -379,25 +223,14 @@ function renderNavegacion() {
         const monthName  = new Date(y, m, 1).toLocaleString('es', { month: 'long', year: 'numeric' });
 
         // ── helper local: capacidad bruta del día ──────────────────────
-        function _capDia(fechaStr) {
-            const ov = (plan.dayOverrides || {})[fechaStr];
-            if (ov !== undefined) return ov;
-            const d = new Date(fechaStr + 'T00:00:00');
-            const esFinde   = [0, 6].includes(d.getDay());
-            const esTemp    = (plan.examenes || []).some(e => {
-                const diff = (new Date(e.fecha + 'T00:00:00') - d) / 86400000;
-                return diff >= 0 && diff <= 7;
-            });
-            const caps = plan.dailyCapacities || { regularCourse: 4, examSeason: 8, weekend: 6 };
-            return esFinde ? caps.weekend : (esTemp ? caps.examSeason : caps.regularCourse);
-        }
+        const _capDia = fecha => PlannerEngine.capacidad(plan, fecha);
 
         let celdas = '';
         for (let i = 0; i < primerDia; i++) celdas += `<div style="opacity:0; min-height:110px;"></div>`;
 
         for (let d = 1; d <= totalDias; d++) {
             const fechaStr  = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-            const esHoy     = fechaStr === new Date().toISOString().split('T')[0];
+            const esHoy     = fechaStr === Domain.getFechaHoy();
             const tareas    = plan.schedule[fechaStr] || [];
             const examDia   = plan.examenes.filter(e => e.fecha === fechaStr);
             const esExamen  = examDia.length > 0;
@@ -445,7 +278,8 @@ function renderNavegacion() {
                         </div>
                     `;
                 }).join('');
-            } else if (tareas.length > 0) {
+            }
+            if (tareas.length > 0) {
                 const visibles    = tareas.slice(0, 6);
                 const restantes   = tareas.length - 6;
                 const completadas = tareas.filter(t => t.status === 'completed').length;
@@ -482,14 +316,14 @@ function renderNavegacion() {
                     ? `<div style="display:flex; align-items:center; justify-content:center; font-size:7px; color:var(--text-muted); border:1px dashed var(--border); border-radius:4px;">+${restantes}</div>`
                     : '';
 
-                chipsHTML = `
+                chipsHTML += `
                     <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:2px; margin-top:2px;">
                         ${chips}
                         ${overflowBadge}
                     </div>
                     ${estadoDot ? `<div style="margin-top:3px; text-align:right;">${estadoDot}</div>` : ''}
                 `;
-            } else if (bloqueado) {
+            } else if (bloqueado && !esExamen) {
                 chipsHTML = `<div style="font-size:8px; color:var(--text-muted); opacity:0.5; margin-top:4px; text-align:center;">
                     <i class="fa-solid fa-ban"></i>
                 </div>`;
@@ -547,15 +381,8 @@ function renderNavegacion() {
         document.getElementById('ep-btn-export-pdf').onclick = () => exportarPlanPDF();
         document.getElementById('ep-btn-export-cal').onclick = () => exportarCalendarioPDF();
 
-        // Delegación de clics en celdas
-        main.querySelector('.ep-dc')?.closest('div')?.addEventListener('click', (e) => {
-            const cell = e.target.closest('[data-action="open-day"]');
-            if (cell) abrirEditorDia(cell.dataset.fecha);
-        });
-        // Fallback: delegación directa sobre el grid
-        main.querySelectorAll('.ep-dc').forEach(cel => {
-            cel.addEventListener('click', () => abrirEditorDia(cel.dataset.fecha));
-        });
+        // open-day se gestiona exclusivamente mediante CommandRegistry.
+
     }
 
     function renderSetup() {
@@ -665,15 +492,15 @@ function renderNavegacion() {
                     <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:15px;">
                         <div>
                             <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:5px;"><i class="fa-solid fa-book"></i> Días Normales</label>
-                            <input type="number" id="ep-cap-regular" class="ep-inp" min="1" value="${plan.dailyCapacities?.regularCourse || 4}" style="text-align:center;">
+                            <input type="number" id="ep-cap-regular" class="ep-inp" min="0" value="${plan.dailyCapacities?.regularCourse ?? 4}" style="text-align:center;">
                         </div>
                         <div>
                             <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:5px;"><i class="fa-solid fa-fire"></i> Temporada de Exámenes</label>
-                            <input type="number" id="ep-cap-exam" class="ep-inp" min="1" value="${plan.dailyCapacities?.examSeason || 8}" style="text-align:center;">
+                            <input type="number" id="ep-cap-exam" class="ep-inp" min="0" value="${plan.dailyCapacities?.examSeason ?? 8}" style="text-align:center;">
                         </div>
                         <div>
                             <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:5px;"><i class="fa-solid fa-sun"></i> Fines de Semana</label>
-                            <input type="number" id="ep-cap-weekend" class="ep-inp" min="1" value="${plan.dailyCapacities?.weekend || 6}" style="text-align:center;">
+                            <input type="number" id="ep-cap-weekend" class="ep-inp" min="0" value="${plan.dailyCapacities?.weekend ?? 6}" style="text-align:center;">
                         </div>
                     </div>
                     <button class="ep-btn acc" id="ep-btn-guardar-cap" style="width:100%; margin-top:15px; justify-content:center;"><i class="fa-solid fa-floppy-disk"></i> Guardar Configuraciones</button>
@@ -768,12 +595,11 @@ function renderNavegacion() {
         document.getElementById('ep-btn-guardar-cap')?.addEventListener('click', () => {
             const currentPlan = getPlanSync();
             currentPlan.dailyCapacities = {
-                regularCourse: parseInt(document.getElementById('ep-cap-regular').value, 10) || 4,
-                examSeason: parseInt(document.getElementById('ep-cap-exam').value, 10) || 8,
-                weekend: parseInt(document.getElementById('ep-cap-weekend').value, 10) || 6
+                regularCourse: document.getElementById('ep-cap-regular').value,
+                examSeason: document.getElementById('ep-cap-exam').value,
+                weekend: document.getElementById('ep-cap-weekend').value
             };
-            savePlan(currentPlan);
-            alert('✅ Capacidades actualizadas correctamente en caché persistente.');
+            savePlan(currentPlan, 'Capacidades actualizadas correctamente en caché persistente.');
         });
 
         document.getElementById('ep-btn-guardar-tipos')?.addEventListener('click', () => {
@@ -786,8 +612,7 @@ function renderNavegacion() {
                 const tipo = currentPlan.studyTypes.find(t => t.id === inp.dataset.id);
                 if (tipo && inp.value.trim()) tipo.icon = inp.value.trim();
             });
-            savePlan(currentPlan);
-            alert('✅ Tipos de sesión sincronizados.');
+            savePlan(currentPlan, 'Tipos de sesión sincronizados.');
         });
 
         document.getElementById('ep-btn-add-tipo')?.addEventListener('click', () => {
@@ -798,7 +623,7 @@ function renderNavegacion() {
             
             const currentPlan = getPlanSync();
             currentPlan.studyTypes.push({
-                id: 'st_' + Date.now(),
+                id: 'st_' + DataIO.nuevoId(),
                 name: nombre.trim(),
                 icon: icono.trim(),
                 color: 'var(--accent)'
@@ -824,8 +649,7 @@ function renderNavegacion() {
                 from: document.getElementById('ep-exam-season-from').value, 
                 to: document.getElementById('ep-exam-season-to').value 
             };
-            savePlan(currentPlan);
-            alert('✅ Ventana de temporada de exámenes actualizada.');
+            savePlan(currentPlan, 'Ventana de temporada de exámenes actualizada.');
         });
     }
     function editarTemas(asig) {
@@ -853,7 +677,7 @@ function renderNavegacion() {
                     <input type="text" class="ep-inp ep-tema-nombre" data-id="${t.id}" value="${escapeHtml(t.nombre)}" placeholder="Nombre del tema" style="flex:2; font-size:12px;">
                     <div style="display:flex; flex-direction:column; align-items:center; gap:2px; flex:1;">
                         <span style="font-size:9px; color:var(--text-muted);">Pomodoros Estimados</span>
-                        <input type="number" class="ep-inp ep-tema-pomos" data-id="${t.id}" value="${t.pomosEstimados}" min="1" style="width:100px; text-align:center; font-size:12px;">
+                        <input type="number" class="ep-inp ep-tema-pomos" data-id="${t.id}" value="${t.pomosEstimados}" min="0" style="width:100px; text-align:center; font-size:12px;">
                     </div>
                     <button class="ep-btn dnr ep-btn-del-tema" data-id="${t.id}" style="padding:6px; margin-top:14px;"><i class="fa-solid fa-trash"></i></button>
                 </div>
@@ -890,7 +714,7 @@ function renderNavegacion() {
             overlay.querySelector('#ep-btn-add-tema').addEventListener('click', () => {
                 const idCounter = draftTemas.length + 1;
                 draftTemas.push({
-                    id: 'tm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                    id: 'tm_' + DataIO.nuevoId(),
                     nombre: `Tema ${idCounter}`,
                     pomosEstimados: 2,
                     tipoEstudioId: 'st_study' // Parámetro silencioso para satisfacer el contrato de la DB heredado
@@ -915,7 +739,7 @@ function renderNavegacion() {
                 });
                 overlay.querySelectorAll('.ep-tema-pomos').forEach(inp => {
                     const t = draftTemas.find(x => x.id === inp.dataset.id);
-                    if (t) t.pomosEstimados = parseInt(inp.value, 10) || 1;
+                    if (t) { t.pomosEstimados = inp.value; t.estimacionDesconocida = false; }
                 });
             };
 
@@ -972,7 +796,7 @@ function renderNavegacion() {
                     <div style="display:flex; gap:10px; margin-bottom:10px;">
                         <div style="flex:1;">
                             <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;">% de Nota</label>
-                            <input type="number" id="ep-edit-peso" class="ep-inp" min="0" max="100" value="${exam.notaPercentaje || 100}">
+                            <input type="number" id="ep-edit-peso" class="ep-inp" min="0" max="100" value="${exam.notaPercentaje ?? 100}">
                         </div>
                     </div>
                 </div>
@@ -991,7 +815,7 @@ function renderNavegacion() {
             exam.fecha = document.getElementById('ep-edit-fecha').value;
             exam.hora = document.getElementById('ep-edit-hora').value;
             exam.lugar = document.getElementById('ep-edit-lugar').value.trim();
-            exam.notaPercentaje = parseInt(document.getElementById('ep-edit-peso').value, 10) || 100;
+            exam.notaPercentaje = Number(document.getElementById('ep-edit-peso').value || 100);
             
             savePlan(plan);
             overlay.remove();
@@ -1002,72 +826,21 @@ function renderNavegacion() {
     function renderMetrics() {
         const main = document.getElementById('ep-main');
         if (!main) return;
-        const plan = getPlanSync();
-
-        let totalPomos = 0, donePomos = 0, failPomos = 0;
-        let totalSes = 0, doneSes = 0, failSes = 0;
-        const asigStats = {};
-
-        Object.values(plan.schedule).forEach(dia => {
-            dia.forEach(t => {
-                totalSes++;
-                totalPomos += t.pomosAsignados;
-                
-                if (!asigStats[t.asigId]) asigStats[t.asigId] = { nombre: t.asigNombre, color: t.color, tSes:0, dSes:0, tPom:0, dPom:0 };
-                asigStats[t.asigId].tSes++;
-                asigStats[t.asigId].tPom += t.pomosAsignados;
-
-                if (t.status === 'completed') {
-                    doneSes++; donePomos += t.pomosAsignados;
-                    asigStats[t.asigId].dSes++; asigStats[t.asigId].dPom += t.pomosAsignados;
-                } else if (t.status === 'failed') {
-                    failSes++; failPomos += t.pomosAsignados;
-                }
-            });
-        });
-
-        const exitoGlobal = totalSes > 0 ? Math.round((doneSes / totalSes) * 100) : 0;
-        const pcoPomos    = totalPomos > 0 ? Math.round((donePomos / totalPomos) * 100) : 0;
-
-        const barrasAsig = Object.values(asigStats).map(st => {
-            const pct = st.tPom > 0 ? Math.round((st.dPom / st.tPom) * 100) : 0;
-            return `
-                <div class="ep-card" style="margin-bottom:10px;">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-                        <strong><span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:${st.color}; margin-right:5px;"></span>${escapeHtml(st.nombre)}</strong>
-                        <span style="font-weight:bold;">${pct}% completado</span>
-                    </div>
-                    <div style="height:6px; background:var(--bg-color); border-radius:3px; overflow:hidden;">
-                        <div style="height:100%; width:${pct}%; background:${st.color}; transition:width 0.4s ease;"></div>
-                    </div>
-                    <div style="font-size:11px; color:var(--text-muted); margin-top:5px; text-align:right;">
-                        ${st.dPom} / ${st.tPom} Pomodoros
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-        main.innerHTML = `
-            <div style="flex:1; overflow-y:auto; padding:20px;">
-                <h2 style="margin-top:0;"><i class="fa-solid fa-chart-pie"></i> Progreso y Rendimiento</h2>
-                <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:15px; margin-bottom:20px;">
-                    <div class="ep-card" style="text-align:center;">
-                        <div style="font-size:24px; font-weight:bold; color:var(--status-green);">${exitoGlobal}%</div>
-                        <div style="font-size:11px; color:var(--text-muted);">Cumplimiento de Tareas</div>
-                    </div>
-                    <div class="ep-card" style="text-align:center;">
-                        <div style="font-size:24px; font-weight:bold; color:var(--accent);">${donePomos} <span style="font-size:14px;">/ ${totalPomos}</span></div>
-                        <div style="font-size:11px; color:var(--text-muted);">Pomodoros Realizados</div>
-                    </div>
-                    <div class="ep-card" style="text-align:center;">
-                        <div style="font-size:24px; font-weight:bold; color:var(--status-red);">${failSes}</div>
-                        <div style="font-size:11px; color:var(--text-muted);">Sesiones Fallidas</div>
-                    </div>
-                </div>
-                <h3 style="margin-top:0; font-size:13px; color:var(--text-muted);">DESGLOSE POR ASIGNATURA</h3>
-                ${barrasAsig || '<div style="color:gray; font-size:12px;">No hay planificaciones activas.</div>'}
-            </div>
-        `;
+        const filas = PlannerModel.metricasPorConvocatoria(planCache, Domain.getFechaHoy());
+        main.innerHTML = `<div class="ep-metrics">
+            <h2>Progreso por convocatoria</h2>
+            <p>Revisión confirmada ${planCache.revision}. Cumplimiento de sesiones hasta hoy. El trabajo pendiente descuenta únicamente tareas completadas del tema y convocatoria correspondientes.</p>
+            ${filas.map(f => `<section class="ep-card" data-examen-metrics="${escapeHtml(f.examenId || 'sin-convocatoria')}">
+                <h3>${escapeHtml(f.nombre)}</h3>
+                <p>Estimado · ${f.estimado == null ? 'Sin estimación asociada' : f.estimado} pomodoros</p>
+                <p>Planificado pendiente · ${f.planificado} pomodoros</p>
+                <p>Completado hasta hoy · ${f.completado} pomodoros</p>
+                <p>Trabajo pendiente · ${f.pendiente == null ? 'Sin estimación asociada' : f.pendiente} pomodoros</p>
+                <p>Cumplimiento · ${f.sesiones ? Math.round(100 * f.realizadas / f.sesiones) + '%' : 'Sin sesiones vencidas'}</p>
+                <p>Sesiones fallidas · ${f.fallidas}</p>
+                ${f.sinEstimacion ? '<p>Hay temas cuya estimación total requiere confirmación.</p>' : ''}
+            </section>`).join('')}
+        </div>`;
     }
 
     function abrirEditorDia(fecha) {
@@ -1123,6 +896,7 @@ function renderNavegacion() {
                             ${optsTipos}
                         </select>
                     </div>
+                    <label for="ep-dia-examen">Convocatoria</label><select id="ep-dia-examen" class="ep-inp"><option value="">Sin convocatoria</option></select>
                     <select id="ep-dia-tema" style="width:100%; background:var(--bg-color); color:var(--text-main); border:1px solid var(--border); border-radius:6px; padding:8px; margin-bottom:10px;">
                         <option value="">Selecciona asignatura primero</option>
                     </select>
@@ -1202,6 +976,11 @@ function renderNavegacion() {
         if (!selectTema) return;
         const plan = getPlanSync();
         const asig = plan.asignaturasPlanificadas.find(a => a.id === asigId);
+        const examenes = plan.examenes.filter(e => e.asigId === asigId);
+        document.getElementById('ep-dia-examen').innerHTML = '<option value="">Sin convocatoria</option>' +
+            examenes.map(e => '<option value="' + escapeHtml(e.id) + '">' + escapeHtml(e.fecha + ' · ' + (e.nombre || e.id)) + '</option>').join('');
+        if (examenes.length === 1) document.getElementById('ep-dia-examen').value = examenes[0].id;
+
         
         if (!asig || asig.temas.length === 0) {
             selectTema.innerHTML = '<option value="">Sin temas disponibles</option>';
@@ -1235,10 +1014,11 @@ function renderNavegacion() {
 
         State.batch(() => {
             if (!plan.schedule[fecha]) plan.schedule[fecha] = [];
-            const idTarea = 'tk_' + Date.now();
+            const idTarea = 'tk_' + DataIO.nuevoId();
             const nuevaTarea = {
                 id: idTarea,
                 idTarea,
+                examenId: document.getElementById('ep-dia-examen').value || null,
                 asigId: asig.id,
                 asigNombre: asig.nombre,
                 temaId: tema.id,
@@ -1293,25 +1073,17 @@ function renderNavegacion() {
 
 
 
-    async function lanzarAutoplan() {
-        if (typeof Domain === 'undefined' || !Domain.generarHorarioPlanificador) return;
-        const plan = await getPlan();
-        planCache = JSON.parse(JSON.stringify(plan));
-        const resultado = Domain.generarHorarioPlanificador(planCache);
+    async function lanzarAutoplan(plan) {
+        if (typeof PlannerEngine === 'undefined') return;
+        const resultado = PlannerEngine.generar(PlannerModel.migrar(plan), Domain.getFechaHoy());
         
-        if (resultado.excedido) {
-            alert(`⚠️ DÉFICIT DETECTADO\n\n${resultado.log}\n\nSe ha autocompletado lo posible hasta la fecha de los exámenes.`);
-        } else {
-            alert(`✅ PLANIFICACIÓN EXITOSA\n\n${resultado.log}`);
+        plan.schedule = resultado.scheduleGenerado;
+        try {
+            await savePlan(plan);
+        } catch {
+            return; // savePlan ya comunica el fallo de escritura.
         }
-
-        State.batch(() => {
-            // FIX ARQUITECTURA: planCache.schedule es quien debe recibir el resultado ya que
-            // savePlan procesa explícitamente planCache como fuente de verdad.
-            planCache.schedule = resultado.scheduleGenerado;
-            savePlan(planCache);
-        });
-        
+        Toast.show(resultado.log, resultado.excedido ? 'warning' : 'success', resultado.excedido ? 12000 : 3000);
         UIState.view = 'calendar'; // Forzamos el salto a la vista calendario por UX
         renderWorkspace();
     }
@@ -1324,7 +1096,7 @@ function renderNavegacion() {
     const numTemas = parseInt(document.getElementById('ep-new-temas').value, 10);
     const hora = document.getElementById('ep-new-hora').value;
     const lugar = document.getElementById('ep-new-lugar').value.trim();
-    const notaPercentaje = parseInt(document.getElementById('ep-new-peso').value, 10) || 100;
+    const notaPercentaje = Number(document.getElementById('ep-new-peso').value || 100);
 
     if (!nombre || !fecha || isNaN(numTemas)) { 
         alert("Completa el nombre, la fecha y el número de temas."); 
@@ -1343,11 +1115,11 @@ function renderNavegacion() {
 
     // 3. Preparación del modelo de datos
     const plan = getPlanSync();
-    const idAsig = 'asig_' + Date.now();
+    const idAsig = 'asig_' + DataIO.nuevoId();
     const temas = [];
     for (let i = 1; i <= numTemas; i++) {
         temas.push({ 
-            id: 'tm_' + Date.now() + '_' + i, 
+            id: 'tm_' + DataIO.nuevoId(), 
             nombre: `Tema ${i}`, 
             pomosEstimados: 2, 
             tipoEstudioId: 'st_read' 
@@ -1365,7 +1137,7 @@ function renderNavegacion() {
         });
         
         plan.examenes.push({ 
-            id: 'ex_' + Date.now(), 
+            id: 'ex_' + DataIO.nuevoId(), 
             asigId: idAsig, 
             asigNombre: nombre, 
             fecha, 
@@ -1406,16 +1178,21 @@ function renderNavegacion() {
 
     // ── REGISTRO DE COMANDOS EN EL ORQUESTADOR GLOBAL ──
     if (typeof CommandRegistry !== 'undefined') {
-        CommandRegistry.register('open-day',  (data) => abrirEditorDia(data.fecha));
+        CommandRegistry.register('open-day', async data => {
+            planCache ??= await getPlan();
+            abrirEditorDia(data.fecha);
+        });
     }
 
     // ── FUNCIONES PÚBLICAS (expuestas al scope global) ──
-    function toggleCompletarTareaPlanner(fechaId, tareaId, estado) {
+    async function toggleCompletarTareaPlanner(fechaId, tareaId, estado) {
+        planCache ??= await getPlan();
         cambiarEstadoTarea(fechaId, tareaId, estado || 'completed');
         if (typeof window.updateDashboard === 'function') window.updateDashboard();
     }
 
-    function eliminarTareaPlanner(fechaId, tareaId) {
+    async function eliminarTareaPlanner(fechaId, tareaId) {
+        planCache ??= await getPlan();
         borrarTareaDia(fechaId, tareaId);
     }
 
@@ -1495,7 +1272,7 @@ function bindWizardHelpers(ws) {
             const plan = getPlanSync();
             const examenes = plan.examenes || [];
             if (examenes.length === 0) return;
-            const limite = new Date(Math.max(...examenes.map(e => new Date(e.fecha))));
+            const limite = new Date(Math.max(...examenes.map(e => Domain.parseDateSafe(e.fecha))));
             let d = new Date(); 
             d.setHours(0,0,0,0);
             while (d <= limite) {
@@ -1519,8 +1296,8 @@ function bindWizardHelpers(ws) {
     } else if (ws.step === 2) {
         window._wizAddOverride = () => {
             const dateInput = document.getElementById('wiz-override-date').value;
-            const capInput = parseInt(document.getElementById('wiz-override-cap').value, 10);
-            if (!dateInput || isNaN(capInput)) return;
+            const capInput = document.getElementById('wiz-override-cap').valueAsNumber;
+            if (!dateInput || !Number.isSafeInteger(capInput) || capInput < 0) return;
             ws.dayOverrides[dateInput] = capInput;
             renderWizard(ws);
         };
@@ -1550,15 +1327,14 @@ function avanzarWizard(ws) {
         ws.step++;
         renderWizard(ws);
     } else {
-        const plan = getPlanSync();
+        const plan = structuredClone(getPlanSync());
         plan.blockedDays = Array.from(ws.blockedDays);
         plan.dayOverrides = ws.dayOverrides;
         if (ws.asignaturas) plan.asignaturasPlanificadas = ws.asignaturas;
-        savePlan(plan);
 
         document.getElementById('ep-wizard-overlay')?.remove();
         limpiarHelpersWizard();
-        lanzarAutoplan();
+        lanzarAutoplan(plan).catch(error => Toast.show(error.message, 'error'));
     }
 }
 
@@ -1576,7 +1352,7 @@ function renderWizardStep1(ws) {
         const fechaStr = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
         const isBlocked = ws.blockedDays.has(fechaStr);
         const isExamen  = plan.examenes.some(e => e.fecha === fechaStr);
-        const isHoy     = fechaStr === new Date().toISOString().split('T')[0];
+        const isHoy     = fechaStr === Domain.getFechaHoy();
         const esFinde   = [0,6].includes(new Date(y,m,d).getDay());
 
         celdas += `
@@ -1674,7 +1450,7 @@ function renderWizardStep3(ws) {
 
     return `
         <h3 style="margin-top:0;"><i class="fa-solid fa-sort" style="color:var(--accent);"></i> Prioridad de Asignaturas</h3>
-        <p style="color:var(--text-muted); font-size:12px; margin-bottom:15px;">Las asignaturas superiores tendrán prioridad en la cola del algoritmo y consumirán los primeros pomodoros disponibles. Ordena según cercanía de exámenes.</p>
+        <p style="color:var(--text-muted); font-size:12px; margin-bottom:15px;">El reparto es heurístico. Se prioriza el plazo, después el orden de las asignaturas y el trabajo pendiente, alternando sesiones entre materias.</p>
         <div style="margin-top:10px; max-height:280px; overflow-y:auto;">
             ${lista}
         </div>
@@ -1729,7 +1505,7 @@ function _tipoEmoji(studyTypeId, studyTypes) {
 }
 
 function exportarPlanPDF() {
-    const plan = getPlanSync();
+    const plan = structuredClone(planCache);
     if (!plan.examenes?.length) { alert('No hay planificación para exportar.'); return; }
 
     const fechasConTareas = Object.keys(plan.schedule)
@@ -1746,7 +1522,7 @@ function exportarPlanPDF() {
         const d    = new Date(fecha + 'T00:00:00');
         const dow  = (d.getDay() + 6) % 7;
         const lunes = new Date(d); lunes.setDate(d.getDate() - dow);
-        const key  = lunes.toISOString().split('T')[0];
+        const key  = Domain.toISODateString(lunes);
         if (!semanas[key]) semanas[key] = [];
         if (!semanas[key].includes(fecha)) semanas[key].push(fecha);
     });
@@ -1774,9 +1550,9 @@ function exportarPlanPDF() {
             const examenesHTML = exDia.map(ex => `
                 <div style="padding:8px 12px; background:${exBg}; border:2px solid ${exColor};
                     border-radius:6px; margin:6px 0; font-weight:bold; color:${exColor};">
-                    ⚠️ EXAMEN: ${ex.asigNombre}
+                    ⚠️ EXAMEN: ${escapeHtml(ex.asigNombre)}
                     ${ex.hora ? `<span style="font-weight:normal; color:#555; margin-left:8px;">🕐 ${ex.hora}</span>` : ''}
-                    ${ex.lugar ? `<span style="font-weight:normal; color:#555; margin-left:8px;">📍 ${ex.lugar}</span>` : ''}
+                    ${ex.lugar ? `<span style="font-weight:normal; color:#555; margin-left:8px;">📍 ${escapeHtml(ex.lugar)}</span>` : ''}
                 </div>
             `).join('');
 
@@ -1802,12 +1578,12 @@ function exportarPlanPDF() {
                             return `
                                 <tr style="border-bottom:1px solid #eee; background:${rowBg};">
                                     <td style="padding:5px 8px; border-left:3px solid ${color};">
-                                        ${t.temaNombre || 'Estudio'}
+                                        ${escapeHtml(t.temaNombre || 'Estudio')}
                                     </td>
                                     <td style="padding:5px 8px;">
                                         <span style="display:inline-block; width:8px; height:8px; border-radius:50%;
                                             background:${color}; margin-right:5px; vertical-align:middle;"></span>
-                                        ${t.asigNombre || ''}
+                                        ${escapeHtml(t.asigNombre || '')}
                                     </td>
                                     <td style="padding:5px 8px; text-align:center;">${emoji} ${tipo?.name || ''}</td>
                                     <td style="padding:5px 8px; text-align:center; font-weight:bold;">${t.pomosAsignados || 0}</td>
@@ -1868,8 +1644,8 @@ function exportarPlanPDF() {
                 <td style="padding:7px 10px;">
                     <span style="display:inline-block; width:10px; height:10px; border-radius:50%;
                         background:${color}; margin-right:6px; vertical-align:middle;"></span>
-                    <strong>${asig.nombre}</strong>
-                    ${asig.acronimo ? `<span style="color:#888; font-size:10px; margin-left:4px;">[${asig.acronimo}]</span>` : ''}
+                    <strong>${escapeHtml(asig.nombre)}</strong>
+                    ${asig.acronimo ? `<span style="color:#888; font-size:10px; margin-left:4px;">[${escapeHtml(asig.acronimo)}]</span>` : ''}
                 </td>
                 <td style="padding:7px 10px; text-align:center;">${ex?.fecha || '—'}</td>
                 <td style="padding:7px 10px; text-align:center;">${ex?.hora || '—'}</td>
@@ -1914,7 +1690,7 @@ function exportarPlanPDF() {
             <div>
                 <h1>📅 Plan de Estudio</h1>
                 <div style="color:#666; font-size:11px; margin-top:4px;">
-                    Generado el ${new Date().toLocaleDateString('es-ES', {weekday:'long', day:'numeric', month:'long', year:'numeric'})}
+                    Revisión ${plan.revision} · Generado el ${new Date().toLocaleDateString('es-ES', {weekday:'long', day:'numeric', month:'long', year:'numeric'})}
                 </div>
             </div>
             <div style="text-align:right; font-size:11px; color:#888;">
@@ -1958,7 +1734,7 @@ function exportarPlanPDF() {
 }
 
 function exportarCalendarioPDF() {
-    const plan = getPlanSync();
+    const plan = structuredClone(planCache);
 
     // Recopilar todos los meses que tienen al menos una tarea o examen
     const mesesConContenido = new Set();
@@ -1977,7 +1753,7 @@ function exportarCalendarioPDF() {
         const totalDias  = new Date(y, m, 0).getDate();
         const monthLabel = new Date(y, m - 1, 1)
             .toLocaleString('es-ES', { month: 'long', year: 'numeric' });
-        const hoyStr = new Date().toISOString().split('T')[0];
+        const hoyStr = Domain.getFechaHoy();
 
         // Celdas vacías de relleno
         let cells = '';
@@ -2012,18 +1788,16 @@ function exportarCalendarioPDF() {
 
             // Chips de sesiones (máx 6, como en la app)
             const chipsHTML = (() => {
-                if (exDia.length > 0) {
-                    return exDia.map(ex => {
+                const examenesHTML = exDia.map(ex => {
                         const c = _cssVarToFallback(ex.color || 'var(--status-red)');
                         return `<div style="font-size:8px; font-weight:bold; color:${c};
                             padding:2px 4px; border-radius:3px; background:${c}22;
                             border:1px solid ${c}88; margin-top:2px; white-space:nowrap;
                             overflow:hidden; text-overflow:ellipsis;">
-                            ⚑ ${ex.asigNombre || 'EXAMEN'}
+                            ⚑ ${escapeHtml(ex.asigNombre || 'EXAMEN')}
                         </div>`;
                     }).join('');
-                }
-                if (tareas.length === 0) return '';
+                if (tareas.length === 0) return examenesHTML;
                 const visibles  = tareas.slice(0, 6);
                 const restantes = tareas.length - 6;
                 const chips = visibles.map(t => {
@@ -2034,7 +1808,7 @@ function exportarCalendarioPDF() {
                     const color = _cssVarToFallback(t.color || asig?.color || '#4CAF50');
                     const done  = t.status === 'completed';
                     const fail  = t.status === 'failed';
-                    return `<div style="font-size:8px; padding:1px 3px; border-radius:3px;
+                    return `<div title="${escapeHtml(t.temaNombre || 'Estudio')}" style="font-size:8px; padding:1px 3px; border-radius:3px;
                         background:${color}18; border:1px solid ${color}88; color:${color};
                         display:flex; align-items:center; gap:2px; overflow:hidden;
                         ${done ? 'opacity:0.5; text-decoration:line-through;' : ''}
@@ -2046,7 +1820,7 @@ function exportarCalendarioPDF() {
                 const overflow = restantes > 0
                     ? `<div style="font-size:7px; color:#aaa; text-align:center;">+${restantes}</div>`
                     : '';
-                return `<div style="display:grid; grid-template-columns:repeat(3,1fr); gap:1px; margin-top:2px;">
+                return `${examenesHTML}<div style="display:grid; grid-template-columns:repeat(3,1fr); gap:1px; margin-top:2px;">
                     ${chips}${overflow}
                 </div>`;
             })();
@@ -2140,7 +1914,7 @@ function exportarCalendarioPDF() {
             <div>
                 <h1 style="font-size:18px; font-weight:bold;">🗓 Calendario de Estudio</h1>
                 <div style="font-size:11px; color:#888; margin-top:3px;">
-                    Generado el ${new Date().toLocaleDateString('es-ES',
+                    Revisión ${plan.revision} · Generado el ${new Date().toLocaleDateString('es-ES',
                         {weekday:'long', day:'numeric', month:'long', year:'numeric'})}
                     · ${meses.length} ${meses.length === 1 ? 'mes' : 'meses'}
                 </div>
@@ -2178,10 +1952,18 @@ function exportarCalendarioPDF() {
             // Cargar el plan de IndexedDB antes de renderizar y guardarlo en cache
             try {
                 const plan = await getPlan();
-                planCache = { ...plan };  // Sincronizar cache local
+                planCache = structuredClone(plan);  // Sincronizar cache local
                 State.set('planificador', plan);
+                if (!borradorRecuperable) {
+                    const recuperado = Perfil.local.getItem(claveBorrador);
+                    if (recuperado) {
+                        borradorRecuperable = JSON.parse(recuperado);
+                        errorBorrador = 'Se ha recuperado un borrador de una sesión anterior.';
+                    }
+                }
             } catch(e) {
-                Logger.error('[UIExamPlanner] Error al cargar plan:', e);
+                Toast.show('No se pudo abrir el plan: ' + e.message, 'error');
+                return;
             }
             renderWorkspace(); 
         },

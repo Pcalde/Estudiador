@@ -51,6 +51,9 @@ const UIPlannerAcademic = (() => {
                     <label>Objetivo<input class="ep-inp" name="target" type="number" min="0" max="1440" value="${plan.availability.weekly[i]?.targetMinutes ?? ''}"></label>
                     <label>Máximo<input class="ep-inp" name="max" type="number" min="0" max="1440" value="${plan.availability.weekly[i]?.maxMinutes ?? ''}"></label>
                 </fieldset>`).join('')}
+                <label>Peso de disponibilidad declarada (%)<input class="ep-inp" name="declaredWeight" type="number" min="0" max="100" value="${plan.preferences.declaredWeight*100}"></label>
+                <p>100 % utiliza tu declaración. Con un peso menor se consideran días comparables registrados por completo; se requieren al menos tres. El máximo declarado sigue siendo el techo.</p>
+                <label><input name="autoReplan" type="checkbox" ${plan.preferences.autoReplan ? 'checked' : ''}>Replanificar automáticamente al abrir, cambiar de día o registrar trabajo</label>
                 <label>Reserva orientativa (%)<input class="ep-inp" name="reserve" type="number" min="0" max="80" value="${plan.preferences.reserveFraction*100}"></label>
             </section>
             <p id="ep-academic-error" role="alert"></p>
@@ -92,6 +95,8 @@ const UIPlannerAcademic = (() => {
                     draft.availability.weekly[field.dataset.weekday]={targetMinutes:Number(target),maxMinutes:Number(max)};
                 }
             }
+            draft.preferences.declaredWeight=Number(form.querySelector('[name=declaredWeight]').value)/100;
+            draft.preferences.autoReplan=form.querySelector('[name=autoReplan]').checked;
             draft.preferences.reserveFraction=Number(form.querySelector('[name=reserve]').value)/100;
             return PlannerModel.migrar(draft);
         }

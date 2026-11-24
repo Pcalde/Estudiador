@@ -22,6 +22,12 @@ const UIExamPlanner = (() => {
         return structuredClone(borradorRecuperable || planCache);
     }
 
+    EventBus.on('PLANNER_UPDATED', ({plan}) => {
+        if (!plan || borradorRecuperable) return;
+        planCache=structuredClone(plan);
+        if (document.getElementById('examplanner-workspace')) renderWorkspace();
+    });
+
     function aplicarEstadoTarea(task, status) {
         task.status = status;
         task.completada = status === 'completed';
@@ -107,10 +113,14 @@ const UIExamPlanner = (() => {
             escritura = PlannerRepository.guardar(borrador);
             confirmacion = escritura.confirmacion;
         } catch (error) { confirmacion = Promise.reject(error); }
-        const resultado = confirmacion.then(() => {
-            planCache = escritura.plan;
+        const resultado = confirmacion.then(async guardado => {
+            planCache = guardado;
             if (borradorRecuperable === borrador) borradorRecuperable = null;
             conservarBorrador();
+            if (!borradorRecuperable) {
+                try { planCache = await PlannerRepository.replanificar(Domain.getFechaHoy(),'Cambio confirmado del plan') || guardado; }
+                catch(error) { Toast.show('El cambio está guardado. Replanificación pendiente: '+error.message,'warning'); }
+            }
             if (mensaje) Toast.show(mensaje, 'success');
             window.updateCalendarHeatmap?.();
         }, error => {
@@ -158,6 +168,10 @@ const UIExamPlanner = (() => {
         if (UIState.view === 'calendar') renderCalendar();
         else if (UIState.view === 'setup') renderSetup();
         else if (UIState.view === 'metrics') renderMetrics();
+        else if (UIState.view === 'sessions') UIPlannerSessions.render(document.getElementById('ep-main'),planCache,async()=>{
+            planCache=await getPlan();
+            renderWorkspace();
+        });
         else if (UIState.view === 'academic') UIPlannerAcademic.render(document.getElementById('ep-main'), getPlanSync(), savePlan);
         else renderAgendaCorta();
     }
@@ -176,6 +190,7 @@ function renderNavegacion() {
         <button class="ep-navb ${UIState.view === 'calendar' ? 'on' : ''}" data-view="calendar"><i class="fa-solid fa-calendar-days"></i> Calendario</button>
         <button class="ep-navb ${UIState.view === 'week' ? 'on' : ''}" data-view="week">Semana</button>
         <button class="ep-navb ${UIState.view === 'today' ? 'on' : ''}" data-view="today">Hoy</button>
+        <button class="ep-navb ${UIState.view === 'sessions' ? 'on' : ''}" data-view="sessions">Registros</button>
         <button class="ep-navb ${UIState.view === 'academic' ? 'on' : ''}" data-view="academic">Académico</button>
         <button class="ep-navb ${UIState.view === 'setup' ? 'on' : ''}" data-view="setup"><i class="fa-solid fa-gear"></i> Configuración</button>
         <button class="ep-navb ${UIState.view === 'metrics' ? 'on' : ''}" data-view="metrics"><i class="fa-solid fa-chart-pie"></i> Métricas</button>
@@ -875,11 +890,11 @@ function renderNavegacion() {
             <p>Revisión confirmada ${planCache.revision}. El historial y su cumplimiento incluyen las sesiones hasta hoy. La preparación descuenta únicamente trabajo del tema y convocatoria realizado en fechas anteriores al examen. Las sesiones del mismo día se conservan en el historial.</p>
             ${filas.map(f => `<section class="ep-card" data-examen-metrics="${escapeHtml(f.examenId || 'sin-convocatoria')}">
                 <h3>${escapeHtml(f.nombre)}</h3>
-                <p>Estimado · ${f.estimado == null ? 'Sin estimación asociada' : f.estimado} pomodoros</p>
-                <p>Planificado pendiente · ${f.planificado} pomodoros</p>
-                <p>Historial completado hasta hoy · ${f.completado} pomodoros</p>
-                <p>Preparación completada antes del examen · ${f.preparacionCompletada} pomodoros</p>
-                <p>Trabajo pendiente · ${f.pendiente == null ? 'Sin estimación asociada' : f.pendiente} pomodoros</p>
+                <p>Estimado · ${f.estimado == null ? 'Sin estimación asociada' : Number(f.estimado.toFixed(2))} pomodoros</p>
+                <p>Planificado pendiente · ${Number(f.planificado.toFixed(2))} pomodoros</p>
+                <p>Historial completado hasta hoy · ${Number(f.completado.toFixed(2))} pomodoros</p>
+                <p>Preparación acreditada antes del examen · ${Number(f.preparacionCompletada.toFixed(2))} pomodoros</p>
+                <p>Trabajo pendiente · ${f.pendiente == null ? 'Sin estimación asociada' : Number(f.pendiente.toFixed(2))} pomodoros</p>
                 <p>Cumplimiento histórico · ${f.sesiones ? Math.round(100 * f.realizadas / f.sesiones) + '%' : 'Sin sesiones vencidas'}</p>
                 <p>Sesiones fallidas · ${f.fallidas}</p>
                 ${f.sinEstimacion ? '<p>Hay temas cuya estimación total requiere confirmación.</p>' : ''}
@@ -1635,8 +1650,8 @@ function exportarPlanPDF() {
                 <div style="padding:8px 12px; background:${exBg}; border:2px solid ${exColor};
                     border-radius:6px; margin:6px 0; font-weight:bold; color:${exColor};">
                     ⚠️ EXAMEN: ${escapeHtml(ex.asigNombre)}
-                    ${ex.hora ? `<span style="font-weight:normal; color:#555; margin-left:8px;">🕐 ${ex.hora}</span>` : ''}
-                    ${ex.lugar ? `<span style="font-weight:normal; color:#555; margin-left:8px;">📍 ${escapeHtml(ex.lugar)}</span>` : ''}
+                    ${ex.hora ? `<span style="font-weight:normal; color:var(--surface-4); margin-left:8px;">🕐 ${ex.hora}</span>` : ''}
+                    ${ex.lugar ? `<span style="font-weight:normal; color:var(--surface-4); margin-left:8px;">📍 ${escapeHtml(ex.lugar)}</span>` : ''}
                 </div>
             `).join('');
 
@@ -1644,11 +1659,11 @@ function exportarPlanPDF() {
                 <table style="width:100%; border-collapse:collapse; font-size:11px; margin-top:4px;">
                     <thead>
                         <tr style="background:#f5f5f5; border-bottom:1px solid #ddd;">
-                            <th style="padding:4px 8px; text-align:left; font-weight:600; color:#555;">Sesión</th>
-                            <th style="padding:4px 8px; text-align:left; font-weight:600; color:#555;">Asignatura</th>
-                            <th style="padding:4px 8px; text-align:center; font-weight:600; color:#555;">Tipo</th>
-                            <th style="padding:4px 8px; text-align:center; font-weight:600; color:#555;">🍅</th>
-                            <th style="padding:4px 8px; text-align:center; font-weight:600; color:#555;">Estado</th>
+                            <th style="padding:4px 8px; text-align:left; font-weight:600; color:var(--surface-4);">Sesión</th>
+                            <th style="padding:4px 8px; text-align:left; font-weight:600; color:var(--surface-4);">Asignatura</th>
+                            <th style="padding:4px 8px; text-align:center; font-weight:600; color:var(--surface-4);">Tipo</th>
+                            <th style="padding:4px 8px; text-align:center; font-weight:600; color:var(--surface-4);">🍅</th>
+                            <th style="padding:4px 8px; text-align:center; font-weight:600; color:var(--surface-4);">Estado</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1680,7 +1695,7 @@ function exportarPlanPDF() {
             ` : '<div style="color:#aaa; font-size:11px; font-style:italic; padding:4px 0;">Sin sesiones planificadas</div>';
 
             const totalPomos = tareas.reduce((a, t) => a + (t.pomosAsignados || 0), 0);
-            const dayBg      = isExamen ? `background:${exBg}; border:2px solid ${exBorder};` : 'border:1px solid #e0e0e0;';
+            const dayBg      = isExamen ? `background:${exBg}; border:2px solid ${exBorder};` : 'border:1px solid var(--text-main);';
 
             return `
                 <div style="margin-bottom:10px; border-radius:6px; overflow:hidden; page-break-inside:avoid; ${dayBg}">
@@ -1758,7 +1773,7 @@ function exportarPlanPDF() {
             * { margin:0; padding:0; box-sizing:border-box; }
             body { font-family:'Segoe UI', Arial, sans-serif; font-size:12px; color:#222; background:#fff; padding:24px; }
             h1  { font-size:20px; font-weight:bold; margin-bottom:4px; }
-            h2  { font-size:14px; color:#444; border-bottom:2px solid #e0e0e0; padding-bottom:5px; margin:20px 0 10px; }
+            h2  { font-size:14px; color:#444; border-bottom:2px solid var(--text-main); padding-bottom:5px; margin:20px 0 10px; }
             table { width:100%; border-collapse:collapse; }
             th, td { vertical-align:middle; }
             thead tr { background:#f5f5f5; }
@@ -1785,7 +1800,7 @@ function exportarPlanPDF() {
         </div>
 
         <h2>Resumen por Asignatura</h2>
-        <table style="margin-bottom:20px; font-size:11px; border:1px solid #e0e0e0; border-radius:6px; overflow:hidden;">
+        <table style="margin-bottom:20px; font-size:11px; border:1px solid var(--text-main); border-radius:6px; overflow:hidden;">
             <thead>
                 <tr style="background:#f5f5f5;">
                     <th style="padding:8px 10px; text-align:left;">Asignatura</th>
@@ -1800,7 +1815,7 @@ function exportarPlanPDF() {
         </table>
 
         <div style="font-size:10px; color:#888; margin-bottom:16px; padding:6px 10px;
-            background:#f9f9f9; border-radius:4px; border:1px solid #e0e0e0;">
+            background:#f9f9f9; border-radius:4px; border:1px solid var(--text-main);">
             <strong>Leyenda de tipos:</strong> ${leyendaTipos}
             &nbsp;·&nbsp; ✅ Completada &nbsp; ❌ Fallida &nbsp; ○ Pendiente
         </div>
@@ -1951,7 +1966,7 @@ function exportarCalendarioPDF() {
                         <tr style="background:#f5f5f5;">
                             ${['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'].map((dia, i) =>
                                 `<th style="padding:5px; font-size:10px; font-weight:600;
-                                    color:${i >= 5 ? '#aaa' : '#555'}; border:1px solid #e8e8e8;
+                                    color:${i >= 5 ? '#aaa' : 'var(--surface-4)'}; border:1px solid #e8e8e8;
                                     text-align:center; width:14.28%;">${dia}</th>`
                             ).join('')}
                         </tr>
@@ -2007,13 +2022,13 @@ function exportarCalendarioPDF() {
 
         ${leyendaAsigs ? `
         <div style="margin-bottom:14px; padding:8px 12px; background:#f9f9f9;
-            border:1px solid #e0e0e0; border-radius:6px; font-size:11px;">
-            <strong style="display:block; margin-bottom:5px; color:#555;">Asignaturas:</strong>
+            border:1px solid var(--text-main); border-radius:6px; font-size:11px;">
+            <strong style="display:block; margin-bottom:5px; color:var(--surface-4);">Asignaturas:</strong>
             <div style="display:flex; flex-wrap:wrap;">${leyendaAsigs}</div>
         </div>` : ''}
 
         <div style="margin-bottom:14px; padding:6px 12px; background:#f9f9f9;
-            border:1px solid #e0e0e0; border-radius:6px; font-size:10px; color:#777;">
+            border:1px solid var(--text-main); border-radius:6px; font-size:10px; color:#777;">
             <strong>Tipos de sesión:</strong> ${leyendaTipos}
             &nbsp;·&nbsp;
             ⚑ Día de examen &nbsp;·&nbsp;
@@ -2035,6 +2050,7 @@ function exportarCalendarioPDF() {
         abrirPlanificador: async function() { 
             // Cargar el plan de IndexedDB antes de renderizar y guardarlo en cache
             try {
+                await PlannerTracking.revisar('Apertura del planificador',true);
                 const plan = await getPlan();
                 planCache = structuredClone(plan);  // Sincronizar cache local
                 State.set('planificador', plan);

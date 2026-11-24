@@ -192,9 +192,9 @@ const DataIO = (() => {
         _descargar(URL.createObjectURL(blob), `${asig}_backup.json`);
     }
 
-    const clavesDB = ['biblioteca', 'bibliotecaConfig', 'graphData', 'planificador_pro', 'horarioGlobal', 'fechasClave'];
+    const clavesDB = ['biblioteca', 'bibliotecaConfig', 'graphData', 'planificador_pro', 'horarioGlobal', 'fechasClave', 'planner_sessions'];
     const clavesLocales = [
-        'estudiador_asig_actual', 'estudiador_proyectos', 'pomo_tasks', 'pomo_settings',
+        'estudiador_asig_actual', 'estudiador_proyectos', 'pomo_tasks', 'pomo_settings', 'planner_session_outbox',
         'pomo_history', 'pomo_details_history', 'pomo_hora_history', 'pomo_log_today',
         'estudiador_historial_examenes', 'estudiador_recursos', 'estudiador_biblioteca_config',
         'estudiador_planificador_pro', 'estudiador_colores', 'estudiador_tipos_tarjeta',
@@ -269,8 +269,8 @@ const DataIO = (() => {
             const raw = JSON.parse(await file.text());
             const completa = raw?.formato === 'Estudiador';
             if (completa && (raw.version !== 1 || !Array.isArray(raw.repasos) ||
-                !clavesDB.every(key => Object.hasOwn(raw.datos || {}, key)) ||
-                !clavesLocales.every(key => Object.hasOwn(raw.local || {}, key)))) {
+                !clavesDB.filter(key => key !== 'planner_sessions').every(key => Object.hasOwn(raw.datos || {}, key)) ||
+                !clavesLocales.filter(key => key !== 'planner_session_outbox').every(key => Object.hasOwn(raw.local || {}, key)))) {
                 throw new Error('Formato de copia no compatible.');
             }
             const datos = completa ? Object.fromEntries(clavesDB.map(key => [key, raw.datos[key] ?? null])) : { biblioteca: raw };
@@ -278,7 +278,7 @@ const DataIO = (() => {
             datos.biblioteca = normalizarBiblioteca(original);
 
             const locales = completa ? clavesLocales.map(key => [key, raw.local[key] ?? null]) : [];
-            const listas = ['estudiador_proyectos', 'pomo_tasks', 'estudiador_historial_examenes'];
+            const listas = ['estudiador_proyectos', 'pomo_tasks', 'estudiador_historial_examenes', 'planner_session_outbox'];
             const texto = ['estudiador_asig_actual', 'estudiador_ambient_track', 'estudiador_reward_track',
                 'estudiador_alarm_track', 'estudiador_hard_track', 'estudiador_privacy_stats'];
             for (const [key, value] of locales) {

@@ -9,17 +9,23 @@
 
 const Timer = (() => {
 
+    let venceEn = null;
+    let autoInicio;
+    let contexto = null;
+
     // ── Modo ──────────────────────────────────────────────────────
 
     function setMode(modo) {
         State.set('currentMode', modo);
         _pausar();
+        contexto = null;
         const settings = State.get('pomoSettings') || {};
         const timeLeft = (settings[modo] || 25) * 60;
         State.set('timeLeft', timeLeft);
         UI.renderPomoModo(modo);
         UI.updateTimerDisplay(timeLeft, modo);   // ← añadir
         _renderCycleInfo();
+        if (typeof PlannerTracking !== 'undefined') PlannerTracking.selectorPomodoro();
     }
 
     function _renderCycleInfo() {
@@ -41,14 +47,26 @@ const Timer = (() => {
         const intervalPrevio = State.get('timerInterval');
         if (intervalPrevio) clearInterval(intervalPrevio);
 
+        clearTimeout(autoInicio);
+        const modo = State.get('currentMode');
+        if (modo === 'work' && !contexto) {
+            const tarea = (State.get('taskList') || []).find(t => t.active && !t.done);
+            const asignatura = State.get('nombreAsignaturaActual') || 'General';
+            contexto = { tarea, asignatura: Domain.resolverAsignaturaDeTarea(tarea?.text, asignatura),
+                initialSeconds:State.get('timeLeft'),
+                planner:typeof PlannerTracking !== 'undefined' ? PlannerTracking.contextoPomodoro() : null };
+        }
+        venceEn = Date.now() + State.get('timeLeft') * 1000;
         State.set('isRunning', true);
+        EventBus.emit('POMO_STARTED', { mode: modo });
         UI.renderTimerEstado(true);
+        if (typeof PlannerTracking !== 'undefined') PlannerTracking.selectorPomodoro();
 
         // Sincronización inmediata del pronóstico
         if (typeof window.updateFinishTime === 'function') window.updateFinishTime();
 
         const interval = setInterval(() => {
-            const left = State.get('timeLeft') - 1;
+            const left = Math.max(0, Math.ceil((venceEn - Date.now()) / 1000));
             State.set('timeLeft', left);
             UI.updateTimerDisplay(left, State.get('currentMode'));
             if (typeof window.updateFinishTime === 'function') window.updateFinishTime();
@@ -59,6 +77,9 @@ const Timer = (() => {
     }
 
     function _pausar() {
+        clearTimeout(autoInicio);
+        if (venceEn !== null) State.set('timeLeft', Math.max(0, Math.ceil((venceEn - Date.now()) / 1000)));
+        venceEn = null;
         State.set('isRunning', false);
         const interval = State.get('timerInterval');
         if (interval) clearInterval(interval);
@@ -82,22 +103,11 @@ const Timer = (() => {
     }
 
     function _procesarCicloTrabajo(ciclosMax, settings) {
-        // 1. Resolver contexto de asignatura (solo lectura del estado de tareas)
-        let asignaturaParaRegistro = State.get('nombreAsignaturaActual') || 'General';
-        const list      = State.get('taskList') || [];
-        const activeIdx = list.findIndex(t => t.active);
-
-        if (activeIdx !== -1) {
-            asignaturaParaRegistro = Domain.resolverAsignaturaDeTarea(
-                list[activeIdx].text,
-                asignaturaParaRegistro
-            );
-            // Delegar la mutación y persistencia de la tarea a tasks.js
-            EventBus.emit('TIMER_POMO_WORK_DONE', { activeIdx });
-        }
-
-        // 2. Notificar al orquestador (telemetría, resumen sesión, etc.)
-        EventBus.emit('pomodoro:finished', { asignatura: asignaturaParaRegistro });
+        const activeIdx = (State.get('taskList') || []).indexOf(contexto?.tarea);
+        if (activeIdx !== -1) EventBus.emit('TIMER_POMO_WORK_DONE', { activeIdx });
+        const plannerSession=contexto?.planner ? {...contexto.planner,
+            date:Domain.getFechaHoy(), durationMinutes:Math.max(0,(contexto.initialSeconds-State.get('timeLeft'))/60)} : null;
+        EventBus.emit('pomodoro:finished', { asignatura: contexto?.asignatura || 'General', plannerSession });
 
         // 3. Avanzar ciclos y elegir siguiente modo
         const ciclos = (State.get('pomoCycles') || 0) + 1;
@@ -108,16 +118,20 @@ const Timer = (() => {
         setMode(nextMode);
 
         if (settings.autoStart === true) {
-            setTimeout(() => _iniciar(), 1500);
+            autoInicio = setTimeout(_iniciar, 1500);
         }
     }
 
     // ── API pública ───────────────────────────────────────────────
 
-    return { setMode, toggle, finalizarCiclo: _finalizarCiclo };
+    function saltar() {
+        setMode(State.get('currentMode') === 'work' ? 'short' : 'work');
+    }
+
+    return { setMode, toggle, saltar };
 })();
 
 // Proxies globales
 window.setPomoMode    = (m) => Timer.setMode(m);
 window.toggleTimer    = ()  => Timer.toggle();
-window.finishPomodoro = ()  => Timer.finalizarCiclo();
+window.finishPomodoro = ()  => Timer.saltar();

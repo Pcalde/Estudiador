@@ -8,7 +8,7 @@
 //   → ui.js → app.js  ← este archivo
 // ════════════════════════════════════════════════════════════════
 
-const APP_VERSION = "2.9.5";
+const APP_VERSION = "2.10.0";
 
 // ────────────────────────────────────────────────────────────────
 // UTIL — helpers privados reutilizables
@@ -63,7 +63,7 @@ async function borrarTodoLocal() {
     }
 }
 
-function abrirModalPomodoro()  { Util.toggleModal('pomodoro-modal', true);  renderTasks(); }
+function abrirModalPomodoro()  { Util.toggleModal('pomodoro-modal', true); renderTasks(); PlannerTracking.selectorPomodoro(); }
 function cerrarModalPomodoro() { Util.toggleModal('pomodoro-modal', false); }
 
 // ────────────────────────────────────────────────────────────────
@@ -1334,3 +1334,5 @@ document.addEventListener('DOMContentLoaded', () => {
         AI.cargarModelosOpenRouter();
     }
 });
+
+cargaLocalLista.then(() => PlannerTracking.iniciar());

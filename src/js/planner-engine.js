@@ -14,14 +14,14 @@ const PlannerEngine = (() => {
         if (plan.dayOverrides?.[fecha] != null) return Number(plan.dayOverrides[fecha]) * conversion;
         const dia = Domain.parseDateSafe(fecha).getDay();
         const semanal = plan.availability?.weekly?.[dia];
-        if (semanal) return objetivo ? semanal.targetMinutes : semanal.maxMinutes;
+        if (semanal) return objetivo ? PlannerEstimator.capacidadPrevista(plan,fecha,semanal.targetMinutes,semanal.maxMinutes).minutes : semanal.maxMinutes;
         const rango = plan.examSeason;
         const temporada = rango?.from && rango?.to ? fecha >= rango.from && fecha <= rango.to :
             plan.examenes.some(e => e.fecha >= fecha && e.fecha <= desplazar(fecha, 7));
         const tipo = [0,6].includes(dia) ? 'weekend' : temporada ? 'examSeason' : 'regularCourse';
         const valor = Number(plan.dailyCapacities?.[tipo]);
         if (!Number.isFinite(valor) || valor < 0) throw new Error('Capacidad inválida.');
-        return valor * conversion;
+        return objetivo ? PlannerEstimator.capacidadPrevista(plan,fecha,valor*conversion,valor*conversion).minutes : valor*conversion;
     }
     function capacidad(plan, fecha) {
         return capacidadMinutos(plan, fecha) / (plan.pomodoroConversion?.minutes || 25);
@@ -66,7 +66,8 @@ const PlannerEngine = (() => {
             return {a, asig, tema, examenes:examenes.filter(Boolean)};
         });
         function credito(schedule, trabajo, examen, hasta = null) {
-            let total = 0;
+            let total = PlannerObservations.credito(plan,trabajo.a,hoy,examen.fecha,trabajo.a.assessmentIds.includes(examen.id) ? examen.id : null);
+            if (hasta) total = PlannerObservations.credito({...plan,observations:(plan.observations || []).filter(o=>o.date<=hasta)},trabajo.a,hoy,examen.fecha,trabajo.a.assessmentIds.includes(examen.id) ? examen.id : null);
             for (const [fecha,tareas] of Object.entries(schedule)) {
                 if (hasta && fecha > hasta) continue;
                 for (const t of tareas) {
@@ -140,7 +141,7 @@ const PlannerEngine = (() => {
                         while (tareas.some(t => t.idTarea === id)) id += '+';
                         tarea = {idTarea:id, activityId:a.id, asigId:asig.id, asigNombre:asig.nombre,
                             temaId:tema.id,temaNombre:tema.nombre,color:asig.color,examenId:opcion.examen.id,
-                            assessmentIds:[...a.assessmentIds],studyTypeId:a.type,plannedMinutes:0,pomosAsignados:0,status:'pending',isAuto:true};
+                            assessmentIds:[...a.assessmentIds],appliedObservationIds:(plan.observations || []).filter(o=>o.activityId===a.id && o.date<=hoy && o.progress!=='none').map(o=>o.id),studyTypeId:a.type,plannedMinutes:0,pomosAsignados:0,status:'pending',isAuto:true};
                         tareas.push(tarea);
                     }
                     tarea.plannedMinutes += cantidad;
@@ -190,7 +191,7 @@ const PlannerEngine = (() => {
         const deficit = [...porActividad.values()].reduce((n,pomos)=>n+pomos,0);
         // El máximo por actividad resume déficits de fechas distintas; no representa trabajo físico exacto.
         const trabajoUnico = actividades.map(a => {
-            let realizado = 0;
+            let realizado = PlannerObservations.credito(plan,a,hoy);
             for (const [fecha,tareas] of Object.entries(plan.schedule)) {
                 if (fecha > hoy) continue;
                 for (const t of tareas) {
